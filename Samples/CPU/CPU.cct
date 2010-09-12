@@ -1,0 +1,79 @@
+
+#array mem_data_in 8
+#array mem_data_out 8
+#array reg_data_in 8
+#array reg_data_out 8
+#array mem_addr 16
+#array reg_addr 4
+
+; Instruction clock (used to ensure synchronisation)
+; In each 32 cycles, the clock is high for one
+; TODO: Determine how many logic cycles are needed to run the CPU
+;       - Maybe have @stage_state[15] map to reset (or map others via an
+;         AND with $is_*)
+$clock = CLOCK{32}
+
+; Set up the core lines
+$mem_ready, @mem_data_in = MEMORY_SPACE $mem_enable, @mem_addr, $mem_data_write, @mem_data_out
+@reg_data_in = MEMORY_ARRAY16 1, @reg_addr, $reg_write, @reg_data_out
+@reg_pc_in = MEMORY_WORD 1, $reg_pc_write, @reg_pc_out
+; @instr and @val - Temporary "variables" used to hold intermediate values
+; to be moved to other locations
+@instr = LATCH_BYTE 1, $instr_clear, @instr
+@val = LATCH_BYTE 1, $val_clear, @val
+
+; Timing control (stages)
+; 4-bit counter reset by $stage_reset, incremented by $mem_ready
+; Attached to a 4-bit mutexer controlling the state of stages
+@stage_num = COUNTER4 $stage_reset, $next_stage
+@stage_state = DEMUX4 1, @stage_num
+$stage_reset = $clock
+$next_stage = $mem_ready
+
+; Instruction input
+; STAGE0 - Opcode Fetch
+$instr_clear = @stage_state[0]	; Clear the instruction cache
+$val_clar = @stage_state[0]	; Clear the instruction cache
+@mem_addr = MULTIAND @stage_state[0], @reg_pc_in	; Set memory address to PC
+$mem_enable = DELAY @stage_state[0]	; Enable memory for read (delay to line up with the MULTIAND above)
+
+; STAGE1 - Instruction fetched
+@instr = MULTIAND @stage_state[1], @mem_data_in	; Save the opcode byte
+
+@reg_addr[0] = AND (DELAY @stage_state[1]), @instr[0]
+@reg_addr[1] = AND (DELAY @stage_state[1]), @instr[1]
+@reg_addr[2] = AND (DELAY @stage_state[1]), @instr[2]
+@reg_addr[3] = AND (DELAY @stage_state[1]), @instr[3]
+
+$next_stage = DELAY{6} @stage_state[1]	; Go to stage 2 when the register has been read
+
+; MEMORY_ARRAY16 has a delay of 6
+; MEMORY_BYTE has a delay of 5
+
+; OPCODE Decoding
+$is_NOP    = AND (NOT   @instr[7]), (NOT   @instr[6]), (NOT   @instr[5]), (NOT   @instr[4])	; 0000xxxx
+$is_JMPcc  = AND (NOT   @instr[7]), (NOT   @instr[6]), (NOT   @instr[5]), (DELAY @instr[4])	; 0001sccc
+$is_CALLcc = AND (NOT   @instr[7]), (NOT   @instr[6]), (DELAY @instr[5]), (NOT   @instr[4])	; 0010sccc
+$is_RETcc  = AND (NOT   @instr[7]), (NOT   @instr[6]), (DELAY @instr[5]), (DELAY @instr[4])	; 0011xccc
+
+$is_MOVar  = AND (NOT   @instr[7]), (DELAY @instr[6]), (DELAY @instr[5]), (NOT   @instr[4])	; 0110rrrr
+$is_MOVra  = AND (NOT   @instr[7]), (DELAY @instr[6]), (DELAY @instr[5]), (DELAY @instr[4])	; 0111rrrr
+
+; === OPCODES ===
+; --- NOP ---
+; Just Ignored
+$stage_reset = AND $is_NOP, @stage_state[2]
+
+; --- MOVar ---
+; reg_addr should have reverted to zero by now, so we just use the
+; "stored" value from @reg_data_in to write to A
+$reg_write = DELAY (AND $is_MOVar, @stage_state[2])
+@reg_data_out = MULTIAND (AND $is_MOVar, @stage_state[2]), (DELAY @reg_data_in)
+
+; Delay to give the write a chance to complete (or, at least start)
+$stage_reset = DELAY{3} (AND $is_MOVar, @stage_state[2])
+
+
+; --- MOVra ---
+
+

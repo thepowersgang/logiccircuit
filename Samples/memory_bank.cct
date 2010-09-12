@@ -1,0 +1,64 @@
+; MEMORY_BYTE <enable>, <write>, <datain[8]>
+; - 1 byte of memory
+; - Has a delay of MEMORY_CELL
+#defunit MEMORY_BYTE
+#input $enable, $write, @datain[8]
+#output @ret
+
+@ret[0] = MEMORY_CELL $enable, $write, @datain[0]
+@ret[1] = MEMORY_CELL $enable, $write, @datain[1]
+@ret[2] = MEMORY_CELL $enable, $write, @datain[2]
+@ret[3] = MEMORY_CELL $enable, $write, @datain[3]
+@ret[4] = MEMORY_CELL $enable, $write, @datain[4]
+@ret[5] = MEMORY_CELL $enable, $write, @datain[5]
+@ret[6] = MEMORY_CELL $enable, $write, @datain[6]
+@ret[7] = MEMORY_CELL $enable, $write, @datain[7]
+
+#endunit
+
+; LATCH_BYTE <enable>, <clear>, <datain[8]>
+; - 1 byte of latches
+; - Has a delay of LATCH (4)
+#defunit LATCH_BYTE
+#input $enable, $clear, @datain[8]
+#output @ret
+
+@ret[0] = LATCH $enable, $clear, @datain[0]
+@ret[1] = LATCH $enable, $clear, @datain[1]
+@ret[2] = LATCH $enable, $clear, @datain[2]
+@ret[3] = LATCH $enable, $clear, @datain[3]
+@ret[4] = LATCH $enable, $clear, @datain[4]
+@ret[5] = LATCH $enable, $clear, @datain[5]
+@ret[6] = LATCH $enable, $clear, @datain[6]
+@ret[7] = LATCH $enable, $clear, @datain[7]
+
+#endunit
+
+; MEMORY_ARRAY16 <enable>, <write>, <datain[8]>, <address[4]>
+; - 16 bytes of memory
+; - Has a delay of 1+MEMORY_BYTE = 
+#defunit MEMORY_ARRAY16
+#input $enable, $write, @datain[8], @addr[4]
+#output @ret[8]
+
+@select = DEMUX4 $enable, @addr[0], @addr[1], @addr[2], @addr[3]
+
+@ret = MEMORY_BYTE @select[0], $write, @datain
+@ret = MEMORY_BYTE @select[1], $write, @datain
+@ret = MEMORY_BYTE @select[2], $write, @datain
+@ret = MEMORY_BYTE @select[3], $write, @datain
+@ret = MEMORY_BYTE @select[4], $write, @datain
+@ret = MEMORY_BYTE @select[5], $write, @datain
+@ret = MEMORY_BYTE @select[6], $write, @datain
+@ret = MEMORY_BYTE @select[7], $write, @datain
+@ret = MEMORY_BYTE @select[8], $write, @datain
+@ret = MEMORY_BYTE @select[9], $write, @datain
+@ret = MEMORY_BYTE @select[10], $write, @datain
+@ret = MEMORY_BYTE @select[11], $write, @datain
+@ret = MEMORY_BYTE @select[12], $write, @datain
+@ret = MEMORY_BYTE @select[13], $write, @datain
+@ret = MEMORY_BYTE @select[14], $write, @datain
+@ret = MEMORY_BYTE @select[15], $write, @datain
+
+#enddef
+

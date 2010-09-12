@@ -1,0 +1,36 @@
+; Half Adder
+; - Delay of 2
+#defunit HALF_ADDER
+#input $val1, $val2, $carry_in
+#output $ret, $carry_out
+
+$_ret = XOR $val1, $val2, $carry_in
+$carry_out = OR (AND $val1, $val2), (AND $val1, $carry_in), (AND $val2, $carry_in)
+
+$ret = DELAY $_ret	; Synchronise outputs
+
+#endunit
+
+; 8-Bit Adder
+; - Delay of 16
+#defunit ADDER_8BIT
+#input @val1[8], @val2[8], $carry_in
+#output @ret[8], $carry_out
+
+@_ret[0], $carry0 = HALF_ADDER @val1[0], @val2[0], $carry_in
+@ret[0] = DELAY{14} @_ret[0]
+@_ret[1], $carry1 = HALF_ADDER @val1[1], @val2[1], $carry0
+@ret[1] = DELAY{12} @_ret[1]
+@_ret[2], $carry2 = HALF_ADDER @val1[2], @val2[2], $carry1
+@ret[2] = DELAY{10} @_ret[2]
+@_ret[3], $carry3 = HALF_ADDER @val1[3], @val2[3], $carry2
+@ret[3] = DELAY{8} @_ret[3]
+@_ret[4], $carry4 = HALF_ADDER @val1[4], @val2[4], $carry3
+@ret[4] = DELAY{6} @_ret[4]
+@_ret[5], $carry5 = HALF_ADDER @val1[5], @val2[5], $carry4
+@ret[5] = DELAY{4} @_ret[5]
+@_ret[6], $carry6 = HALF_ADDER @val1[6], @val2[6], $carry5
+@ret[6] = DELAY{2} @_ret[6]
+@ret[7], $carry_out = HALF_ADDER @val1[7], @val2[7], $carry6
+
+#endunit

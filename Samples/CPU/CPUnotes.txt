@@ -1,0 +1,30 @@
+An attempt at designing a CPU to be built using virtual logic gates
+
+4 bit opcodes
+
+0000xxxx - NOP
+0001sccc - JMPcc .+imm8/16 (depending on s)
+0010sccc - CALLcc .+imm8/16 (depending on s)
+0011xccc - RETcc
+0100rrrr - LOAD r, [X]
+0101rrrr - STORE [X], r
+0110rrrr - MOV A, r
+0111rrrr - MOV r, A
+1000rrrr - ADD A, r
+1001rrrr - SUB A, r
+1010rrrr - AND A, r
+1011rrrr - OR A, r
+1100rrrr - ????
+1101rrrr - ????
+1110rrrr - ????
+1111rrrr - ????
+
+16 registers
+R15:R14 - Z pseudo register
+R13:R12 - Y pseudo register
+R11:R10 - X pseudo register
+R1 - Accumulator (A)
+R0 - Zero
+
+First 4 bits select the "unit"
+last 4 bits select a register input for the unit

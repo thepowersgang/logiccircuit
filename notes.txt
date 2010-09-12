@@ -1,0 +1,42 @@
+Timestepped
+
+Components interlinked by virtual wires with a one timeslice delay
+
+Component List:
+- Fixed Value: Constants (1 and 0), Button, Switch
+- Gates: AND, OR, XOR, NAND, NOR, NXOR, NOT
+- Output: OUTPUT, 7SEGLCD, LED
+
+Input from a composite file
+
+[$<label>[,$<label>[,...] = ]<operation>,[<operation>[,...]]
+OR
+[@label = ]<operation>,[<operation>[,...]]
+- Each operation can return 0 or more values that are stored into the
+  label list (or the list variable)
+
+List variables act as groups of comma separated values
+
+An array can be indexed by "@label[<index>]" to get a single value
+ or by "@label[<start>-<stop>]" to get a range
+
+Converted internally into a component list and links
+
+Hence, a "variable" does not have a linear sequence of values, and the
+ order of statements in a circuit file does not matter.
+
+
+=== BUILTIN MODULES ===
+AND - Logical AND of 2+ lines
+OR - Logical OR of 2+ lines
+NAND - Logical AND of 2+ lines
+NOR - Logical NOR of 2+ lines
+XOR - Logical XOR of 2+ lines
+
+MULTIAND - Logical AND of 1 line on 1+ others
+
+DELAY - Delay signal(s) for a cycle
+DELAY{n} - Delay signal(s) for n cycles
+
+DEMUX4 - 4 to 16 demuxer
+COUNTER4 - 4 bit counter

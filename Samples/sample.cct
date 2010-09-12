@@ -1,0 +1,12 @@
+$inA = PUSHTOMAKE
+$inB = PUSHTOMAKE
+
+$val = AND $inA, $inB
+
+OUTPUT "Val after AND" $val
+
+@in = PUSHTOMAKE, PUSHTOMAKE
+
+$val2 = AND $val, @in[0]
+
+OUTPUT "Val after second AND " $val

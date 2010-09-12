@@ -1,0 +1,54 @@
+; Latch
+; Usage: LATCH <enable>, <clear>, <set>
+; - enable: Enables the latch IO
+; - clear:	Set to 1 to reset the latch to 0
+; - set:	Set to 1 to set the latch to 1
+; Delay: 4
+#defunit LATCH
+#input $enable, $clear, $set
+#output $ret
+
+$_clear = AND $enable, $clear
+$_set = AND $enable, $set
+
+$value = AND (NOT $_clear), (OR $value, $_set)
+
+$ret = AND $enable, $value
+
+#endif
+
+; Memory Cell
+; Usage: MEMORY_CELL <enable>, <write>, <value>
+; - enable:	Set to 1 to read/write from the cell
+; - write:	Set to 1 to set the cell
+; - value:	New cell contents (ignored if <write> is not set)
+; Delays:
+; - Reading: 5
+; - Writing, 5
+
+#defunit MEMORY_CELL
+#input $enable, $write, $datain	; set input lines
+#output $ret	; Set output lines
+
+$reset = AND (DELAY $enable), (DELAY $write), (NOT $datain)
+$set = AND (DELAY $enable), (DELAY $write), (DELAY $datain)
+
+; Feedback loop! for storage
+$value = AND (NOT $reset), (OR (DELAY{2} $value), $set)
+
+; State: 0
+; W V | Out
+; 0 0 | 0
+; 0 1 | 0
+; 1 0 | 0
+; 1 1 | 1
+; State: 1
+; W V | Out
+; 0 0 | 1
+; 0 1 | 1
+; 1 0 | 0
+; 1 1 | 1
+
+$ret = AND (DELAY{4} $enable), $value
+
+#endunit

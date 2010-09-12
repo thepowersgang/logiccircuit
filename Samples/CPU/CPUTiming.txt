@@ -1,0 +1,9 @@
+CLOCK	Actions
+   0	Send read signal for [PC]
+   3	Read data from memory bus
+   4	Send read signal for register
+
+Strike That:
+	On each clock, a counter is reset
+	Each raise of memory increments the counter
+	Counter is attached to a demux selecting "stages"
