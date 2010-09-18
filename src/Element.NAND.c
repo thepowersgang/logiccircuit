@@ -31,8 +31,8 @@ static void _Update(tElement *Ele)
 	{
 		out = out && Ele->Inputs[i]->Value;
 	}
-	if( Ele->NOutputs )
-		Ele->Outputs[0]->Value = !out;
+	if( !out )
+		Ele->Outputs[0]->NDrivers ++;
 }
 
 tElementDef gElement_NAND = {

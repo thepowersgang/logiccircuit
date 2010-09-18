@@ -9,6 +9,7 @@ struct sLink
 {
 	tLink	*Next;
 	 int	Value;
+	 int	NDrivers;	//!< Number of elements raising the line
 	tLink	*Link;	//!< Allows aliasing (1 deep only)
 	tLink	*Backlink;	//!< Used by #defunit when importing
 	char	Name[];

@@ -4,11 +4,19 @@
 #include <link.h>
 
 typedef struct sList	tList;
+typedef struct sDisplayItem	tDisplayItem;
 
 struct sList
 {
 	 int	NItems;
 	tLink	**Items;
+};
+
+struct sDisplayItem
+{
+	tDisplayItem	*Next;
+	tLink	*Condition;
+	tList	Values;
 };
 
 extern int	Unit_DefineUnit(const char *Name);
@@ -24,6 +32,10 @@ extern int	Unit_IsInUnit(void);
  */
 extern void	CreateGroup(const char *Name, int Size);
 
+/**
+ * \brief Free an allocated list
+ */
+extern void	List_Free(tList *List);
 /**
  * \brief Append one list to another
  */

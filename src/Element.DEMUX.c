@@ -42,10 +42,12 @@ static void _Update(tElement *Ele)
 			val |= 1 << (i-1);
 	}
 	
-	for( i = 0; i < Ele->NOutputs; i ++ )
-		Ele->Outputs[i]->Value = 0;
+	//for( i = 0; i < Ele->NOutputs; i ++ )
+	//	Ele->Outputs[i]->Value = 0;
 	
-	Ele->Outputs[1]->Value = 1;
+	// If ENABLE, drive output
+	if( Ele->Inputs[0]->Value )
+		Ele->Outputs[val]->NDrivers ++;
 }
 
 tElementDef gElement_DEMUX = {

@@ -34,6 +34,7 @@ typedef struct sUnitTemplate
 tLink	*gpLinks = NULL;
 tGroupDef	*gpGroups = NULL;
 tElement	*gpElements;
+tElement	*gpLastElement = (tElement*)&gpElements;
 tElementDef	*gpElementDefs;
 tUnitTemplate	*gpUnits;
 tUnitTemplate	*gpCurUnit;
@@ -279,7 +280,9 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 		newLink = malloc( sizeof(tLink) + len + 1 );
 		if( link->Name[0] ) {
 			strcpy(newLink->Name, namePrefix);
-			strcpy(newLink->Name + prefixLen, link->Name);
+			strcat(newLink->Name, link->Name);
+			//printf("newLink->Name = '%s' ('%s' + '%s')\n",
+			//	newLink->Name, namePrefix, link->Name);
 		}
 		else
 			newLink->Name[0] = '\0';
@@ -323,8 +326,9 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 	for( ele = Unit->Elements; ele; ele = ele->Next )
 	{
 		tElement	*newele;
-		printf("%p %p %i inputs\n", ele, ele->Type, ele->NInputs);
+		//printf("%p %p %i inputs\n", ele, ele->Type, ele->NInputs);
 		newele = ele->Type->Create( ele->Param, ele->NInputs, ele->Inputs );
+		newele->Type = ele->Type;
 		newele->Param = ele->Param;
 		newele->NInputs = ele->NInputs;
 		for( i = 0; i < ele->NInputs; i ++ ) {
@@ -339,8 +343,8 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 			gpCurUnit->Elements = newele;
 		}
 		else {
-			newele->Next = gpElements;
-			gpElements = newele;
+			gpLastElement->Next = newele;
+			gpLastElement = newele;
 		}
 	}
 	
@@ -383,6 +387,15 @@ tList *CreateUnit(const char *Name, int Param, tList *Inputs)
 	}
 	if(!def)	return NULL;
 	
+	if( Inputs->NItems < def->MinInput ) {
+		printf("%s requires at least %i input lines\n", def->Name, def->MinInput);
+		return NULL;
+	}
+	if( def->MaxInput != -1 && Inputs->NItems > def->MaxInput ) {
+		printf("%s takes at most %i input lines\n", def->Name, def->MaxInput);
+		return NULL;
+	}
+	
 	// Create an instance
 	ele = def->Create(Param, Inputs->NItems, Inputs->Items);
 	if(!ele)	return NULL;
@@ -399,8 +412,8 @@ tList *CreateUnit(const char *Name, int Param, tList *Inputs)
 		gpCurUnit->Elements = ele;
 	}
 	else {
-		ele->Next = gpElements;
-		gpElements = ele;
+		gpLastElement->Next = ele;
+		gpLastElement = ele;
 	}
 	
 	// Create return list

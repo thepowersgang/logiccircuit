@@ -29,10 +29,11 @@ Hence, a "variable" does not have a linear sequence of values, and the
 === BUILTIN MODULES ===
 -- Trivial/Atomic Gates --
 AND - Logical AND of 2+ lines
+XOR - Logical XOR of 2+ lines
 OR - Logical OR of 2+ lines
 NAND - Logical AND of 2+ lines
 NOR - Logical NOR of 2+ lines
-XOR - Logical XOR of 2+ lines
+NXOR - Logical XOR of 2+ lines
 
 -- Timing Helpers --
 DELAY - Delay signal(s) for a cycle

@@ -1,0 +1,14 @@
+// 8-bit RISC CPU
+// - Memory Bus
+// By John Hodge (thePowersGang)
+// Designed in LogicCircuit
+
+%include "../memory_bank.cct"
+
+#defunit MEMORY_SPACE
+#input $enable, @addr[16], $data_write, @data_input[8]
+#output $ready, @data_output[8]
+
+$ready = DELAY $enable
+
+#endunit

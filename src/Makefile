@@ -7,7 +7,8 @@ CFLAGS = -Wall -g
 OBJ := main.o parse.o build.o
 OBJ += Element.AND.o Element.OR.o Element.XOR.o Element.NOT.o
 OBJ += Element.NAND.o Element.NOR.o Element.NXOR.o
-OBJ += Element.CLOCK.o Element.DELAY.o Element.DEMUX.o
+OBJ += Element.CLOCK.o Element.COUNTER.o Element.DELAY.o Element.DEMUX.o
+OBJ += Element.PULSE.o
 BIN = ../logic_cct
 
 .PHONY: all clean

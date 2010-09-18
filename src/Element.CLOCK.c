@@ -31,7 +31,7 @@ static tElement *_Create(int Param, int NInputs, tLink **Inputs)
 static void _Update(tElement *Ele)
 {
 	t_element	*this = (t_element *)Ele;
-	Ele->Outputs[0]->Value = (this->Pos == 0);
+	if(this->Pos == 0)	Ele->Outputs[0]->NDrivers ++;
 	this->Pos ++;
 	if(this->Pos == this->Period)	this->Pos = 0;
 }

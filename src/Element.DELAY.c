@@ -40,10 +40,12 @@ static void _Update(tElement *Ele)
 	t_element	*this = (t_element *)Ele;
 	
 	if( this->Delay == 0 ) {
-		Ele->Outputs[0]->Value = Ele->Inputs[0]->Value;
+		if(Ele->Inputs[0]->Value)
+			Ele->Outputs[0]->NDrivers ++;
 	}
 	else {
-		Ele->Outputs[0]->Value = this->Cache[ (this->Pos - 1 + this->Delay) % this->Delay ];
+		if( this->Cache[ (this->Pos - 1 + this->Delay) % this->Delay ] )
+			Ele->Outputs[0]->NDrivers ++;
 	
 		this->Cache[ this->Pos ] = Ele->Inputs[0]->Value;
 		this->Pos ++;

@@ -6,6 +6,7 @@
 #include <ctype.h>
 #include <string.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <setjmp.h>
 #include <common.h>
 
@@ -17,7 +18,7 @@ typedef struct
 
 	jmp_buf	jmpbuf;
 
-	const char	*File;
+	char	*File;
 	 int	Line;
 	
 	const char	*CurPos;
@@ -77,6 +78,7 @@ void	*ParseOperation(tParser *Parser);
  int	GetToken(tParser *Parser);
 void	PutBack(tParser *Parser);
 void	SyntaxError(tParser *Parser, const char *Fmt, ...);
+void	SyntaxWarning(tParser *Parser, const char *Fmt, ...);
 void	SyntaxAssert(tParser *Parser, int Got, int Expected);
 
 // === CODE ===
@@ -90,7 +92,46 @@ void *ParseOperation(tParser *Parser)
 	 int	param = -1;
 	
 	// Get Name
-	SyntaxAssert( Parser, GetToken(Parser), TOK_IDENT );
+	GetToken(Parser);
+	#if 0
+	if( Parser->Token == TOK_LINE )
+	{
+		tList *ret = calloc(1, sizeof(tList));
+		AppendLine(ret, Parser->TokenStr);
+		return ret;
+	}
+	if( Parser->Token == TOK_GROUP )
+	{
+		tList *ret = calloc(1, sizeof(tList));
+		char	tmpName[Parser->TokenLength+1];
+		strcpy(tmpName, Parser->TokenStr);
+		
+		// Single line? (@group[i])
+		if( GetToken(Parser) == TOK_SQUARE_OPEN ) {
+			SyntaxAssert(Parser, GetToken(Parser), TOK_NUMBER);
+			if( AppendGroupItem(ret, tmpName, atoi(Parser->TokenStr)) )
+				SyntaxError(Parser, "Error referencing group");
+			SyntaxAssert(Parser, GetToken(Parser), TOK_SQUARE_CLOSE);
+		}
+		// Entire group.
+		else {
+			PutBack(Parser);
+			if( AppendGroup(ret, tmpName) )
+				SyntaxError(Parser, "Error referencing group");
+		}
+		
+		return ret;
+	}
+	#endif
+	
+	if( Parser->Token != TOK_IDENT )
+	{
+		SyntaxError(Parser,
+			"Unexpected %s, expected TOK_IDENT/TOK_LINE/TOK_GROUP",
+			casTOKEN_NAMES[ Parser->Token ]
+			);
+	}
+	
 	name = strdup( Parser->TokenStr );
 	
 	// Static Paramater (e.g. DELAY{4})
@@ -143,6 +184,22 @@ void *ParseOperation(tParser *Parser)
 				}
 				free(tmpName);
 				break;
+			
+			// Constant
+			// TODO: Implement
+			case TOK_NUMBER:
+				{
+				 int	num = atoi(Parser->TokenStr);
+				if( num < 0 || num > 1 ) {
+					SyntaxWarning(Parser, "Non-boolean constant value (%i) used\n", num);
+				}
+				if( num == 0 )
+					AppendLine( &inputs, "0" );
+				else
+					AppendLine( &inputs, "1" );
+				}
+				break;
+			
 			// Unknown: ERROR!
 			default:
 				SyntaxError(Parser,
@@ -157,6 +214,7 @@ void *ParseOperation(tParser *Parser)
 		PutBack(Parser);
 	}
 	
+	// Create output
 	{
 		tList	*ret = CreateUnit( name, param, &inputs );
 		if(!ret) {
@@ -186,7 +244,10 @@ int ParseLine(tParser *Parser)
 	case TOK_EOF:	return 1;
 	
 	// Meta statement
-	case TOK_META_STATEMENT:		
+	case TOK_META_STATEMENT:
+		// #array <name> <size>
+		// - Define a group of lines with <size> lines in them
+		// (Defines @<name>[0] to @<name>[<size>-1])
 		if( strcmp(Parser->TokenStr, "#array") == 0 ) {
 			char	*name;
 			 int	len;
@@ -323,9 +384,6 @@ int ParseLine(tParser *Parser)
 	// Get gate (or gate chain)
 	outputs = ParseOperation( Parser );
 	
-	// Ensure a newline
-	SyntaxAssert( Parser, GetToken(Parser), TOK_NEWLINE );
-	
 	// Assign
 	if( MergeLinks( &destArray, outputs ) )
 		SyntaxError(Parser,
@@ -333,11 +391,32 @@ int ParseLine(tParser *Parser)
 			destArray.NItems, outputs->NItems
 			);
 	
+	// Ensure a newline
+	SyntaxAssert( Parser, GetToken(Parser), TOK_NEWLINE );
+	
 	// Clean up
 	List_Free(outputs);
 	free(destArray.Items);
 	
 	return 0;
+}
+
+char *MakeFmtStr( const char *fmt, ... )
+{
+	 int	len;
+	va_list	args, args2;
+	char	*ret;
+	
+	va_start(args, fmt);
+	
+	va_copy(args2, args);
+	len = vsnprintf(NULL, 0, fmt, args2);
+	
+	ret = malloc( len + 1 );
+	vsnprintf(ret, len+1, fmt, args);
+	
+	va_end(args);
+	return ret;
 }
 
 /**
@@ -350,7 +429,35 @@ int ParseFile(const char *Filename)
 	FILE	*fp;
 	char	*buf;
 	
+	#if 1
+	{
+	char	tmpFileName[] = "/tmp/logic_cct.cct.XXXXXX";
+	char	*cmdString;
+	
+	char	*fname = strrchr(Filename, '/');
+	 int	pathLen = (intptr_t)fname - (intptr_t)Filename + 1;
+	char	*path = malloc( pathLen + 1 );
+	memcpy(path, Filename, pathLen);
+	path[pathLen] = '\0';
+	
+	close( mkstemp(tmpFileName) );
+	
+	//cmdString = MakeFmtStr( "nasm -e \"%s\" -i \"%s\" | grep -v \"^%\" > \"%s\"", Filename, path, tmpFileName );
+	//cmdString = MakeFmtStr( "yasm -e \"%s\" | grep -v \"^%%\" > \"%s\"", Filename, tmpFileName );
+	cmdString = MakeFmtStr( "yasm -e \"%s\" > \"%s\"", Filename, tmpFileName );
+	printf("%s\n", cmdString);
+	fflush(stdout);
+	
+	system(cmdString);
+	free(cmdString);
+	free(path);
+	fp = fopen(tmpFileName, "r");
+	unlink( tmpFileName );
+	}
+	#else
 	fp = fopen(Filename, "r");
+	#endif
+	
 	if(!fp) {
 		perror("Unable to open file");
 		return 0;
@@ -365,8 +472,10 @@ int ParseFile(const char *Filename)
 	
 	fclose(fp);
 	
-	parser.File = Filename;
-	parser.Line = 0;
+	//printf("\n----\n%s\n----\n", buf);
+	
+	parser.File = strdup(Filename);
+	parser.Line = 1;
 	parser.TokenStr = parser._static;
 	parser.DataStart = buf;
 	parser.CurPos = parser.DataStart;
@@ -378,6 +487,7 @@ int ParseFile(const char *Filename)
 	
 	while( ParseLine( &parser ) == 0 );
 	
+	free( (char*)parser.File );
 	free( buf );
 	return 0;
 }
@@ -402,6 +512,27 @@ int GetToken(tParser *Parser)
 		if( *Parser->CurPos == ';' ) {
 			while( *Parser->CurPos != '\n' )
 				Parser->CurPos ++;
+			continue ;
+		}
+		#endif
+		
+		#if 1
+		// Preprocessor Comments
+		if( *Parser->CurPos == '%' ) {
+			Parser->CurPos ++;
+			if( strncmp("line ", Parser->CurPos, 5) == 0 ) {
+				char	newFile[128];
+				 int	line, unk;
+				sscanf(Parser->CurPos, "line %i+%i %s\n", &line, &unk, newFile);
+				printf("line = %i, unk = %i, newFile='%s'\n", line, unk, newFile);
+				free( Parser->File );
+				Parser->File = strdup(newFile);
+				Parser->Line = line;
+			}
+			
+			while( *Parser->CurPos != '\n' )
+				Parser->CurPos ++;
+			Parser->CurPos ++;
 			continue ;
 		}
 		#endif
@@ -581,6 +712,19 @@ void SyntaxError(tParser *Parser, const char *Fmt, ...)
 	fprintf(stderr, "\n");
 	va_end(args);
 	longjmp(Parser->jmpbuf, 1);
+}
+
+/**
+ * \brief Print a warning message
+ */
+void SyntaxWarning(tParser *Parser, const char *Fmt, ...)
+{
+	va_list	args;
+	va_start(args, Fmt);
+	fprintf(stderr, "%s:%i: warning: ", Parser->File, Parser->Line);
+	vfprintf(stderr, Fmt, args);
+	fprintf(stderr, "\n");
+	va_end(args);
 }
 
 /**

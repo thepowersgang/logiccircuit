@@ -1,6 +1,9 @@
 // 8-bit RISC CPU
 // By John Hodge (thePowersGang)
 // Designed in LogicCircuit
+%include "memory.cct"
+%include "../adder_8bit.cct"
+//%include "../memory_bank.cct"
 
 #array mem_data_in 8
 #array mem_data_out 8
@@ -9,11 +12,20 @@
 #array mem_addr 16
 #array reg_addr 4
 
+#array reg_pc_in	16
+#array reg_pc_out	16
+
+#array stage_num	4
+#array stage_state	16
+
 #array add_temp	8
 
 #array addr	16
 #array instr	8
 #array val	8
+
+#display 1	@stage_state
+#display 1	@instr
 
 // Instruction clock (used to ensure synchronisation)
 // In each 128 cycles, the clock is high for one
@@ -36,16 +48,16 @@ $NULL, @reg_pc_in = MEMORY_WORD 1, $reg_pc_write, @reg_pc_out
 @addr  = LATCH_WORD 1, $addr_clear, @addr
 
 // FLAGS Pseudo-Register
-$flags_C = LATCH 1, $flags_C_clear, $flags_C
+$NULL, $flags_C = LATCH 1, $flags_C_clear, $flags_C
 
 // Timing control (stages)
 // 4-bit counter reset by $stage_reset, incremented by $mem_ready
 // Attached to a 4-bit mutexer controlling the state of stages
-@stage_num = COUNTER4 $stage_reset, $next_stage
-@stage_state = DEMUX4 1, @stage_num
-$next_instruction = $clock
-$next_stage = $mem_ready
-$next_stage = $reg_ready
+@stage_num = COUNTER{4} $stage_reset, $next_stage
+@stage_state = DEMUX{4} 1, @stage_num
+$next_instruction = DELAY $clock
+$next_stage = DELAY $mem_ready
+$next_stage = DELAY $reg_ready
 
 
 // Next instruction (TODO: Increment IP)
@@ -54,11 +66,12 @@ $stage_reset = DELAY $next_instruction
 
 // === Instruction input ===
 // Reset all values
-$instr_clear = @stage_state[0]	// Clear the instruction cache
-$val_clar = @stage_state[0]	// Clear the instruction cache
-$addr_clar = @stage_state[0]	// Clear the address cache
+$instr_clear = DELAY @stage_state[0]	// Clear the instruction cache
+$val_clar = DELAY @stage_state[0]	// Clear the instruction cache
+$addr_clar = DELAY @stage_state[0]	// Clear the address cache
 // STAGE0 - Opcode Fetch
-#for i = 0 ... 15
+%assign i 0
+%rep 16
 @mem_addr[i] = AND @stage_state[0], @reg_pc_in[i]	// Set memory address to PC
 %assign i i+1
 %endrep
@@ -92,7 +105,7 @@ $is_XOR    = AND (DELAY @instr[7]), (DELAY @instr[6]), (NOT   @instr[5]), (NOT  
 // === OPCODES ===
 // --- NOP ---
 // Just Ignored
-$next_instruction = AND $is_NOP, DELAY @stage_state[1]
+$next_instruction = AND $is_NOP, (DELAY @stage_state[1])
 
 // --- JMPcc ---
 // TODO
@@ -124,7 +137,8 @@ $reg_enable  = DELAY (AND $is_LOAD, (PULSE @stage_state[1]))
 @addr[0] = AND $is_LOAD, @stage_state[3], @reg_data_in[0]
 $next_stage = AND $is_LOAD, @stage_state[3]	// Stage 4 when LATCH is set (stage_state[3] is only high for 1 cycle)
 // > Set address & enable
-#for i = 0 ... 15
+%assign i 0
+%rep 16
 @mem_addr[i] = AND $is_LOAD, @stage_state[4], @addr[i]
 %assign i i+1
 %endrep
@@ -305,7 +319,7 @@ $reg_write = PULSE (AND $is_OR, @stage_state[3])
 $reg_enable = PULSE (AND $is_OR, @stage_state[3])
 %assign	i 0
 %rep 8
-@reg_data_out[i] = AND (AND $is_OR, @stage_state[3]), (OR @val[i], @reg_data_in[i]))
+@reg_data_out[i] = AND (AND $is_OR, @stage_state[3]), (OR @val[i], @reg_data_in[i])
 %assign i i+1
 %endrep
 $next_instruction = PULSE @stage_state[4]
@@ -329,7 +343,7 @@ $reg_write = PULSE (AND $is_OR, @stage_state[3])
 $reg_enable = PULSE (AND $is_OR, @stage_state[3])
 %assign	i 0
 %rep 8
-@reg_data_out[i] = AND (AND $is_OR, @stage_state[3]), (XOR @val[i], @reg_data_in[i]))
+@reg_data_out[i] = AND (AND $is_OR, @stage_state[3]), (XOR @val[i], @reg_data_in[i])
 %assign i i+1
 %endrep
 $next_instruction = PULSE @stage_state[4]
