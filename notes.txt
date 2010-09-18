@@ -27,16 +27,18 @@ Hence, a "variable" does not have a linear sequence of values, and the
 
 
 === BUILTIN MODULES ===
+-- Trivial/Atomic Gates --
 AND - Logical AND of 2+ lines
 OR - Logical OR of 2+ lines
 NAND - Logical AND of 2+ lines
 NOR - Logical NOR of 2+ lines
 XOR - Logical XOR of 2+ lines
 
-MULTIAND - Logical AND of 1 line on 1+ others
-
+-- Timing Helpers --
 DELAY - Delay signal(s) for a cycle
 DELAY{n} - Delay signal(s) for n cycles
+PULSE - Hold output high for 1 cycle when input becomes high
 
+-- Speed helpers (could be implemented using #defunit, but cbf)
 DEMUX4 - 4 to 16 demuxer
 COUNTER4 - 4 bit counter

@@ -1,3 +1,6 @@
+// 8-bit RISC CPU
+// By John Hodge (thePowersGang)
+// Designed in LogicCircuit
 
 #array mem_data_in 8
 #array mem_data_out 8
@@ -6,74 +9,327 @@
 #array mem_addr 16
 #array reg_addr 4
 
-; Instruction clock (used to ensure synchronisation)
-; In each 32 cycles, the clock is high for one
-; TODO: Determine how many logic cycles are needed to run the CPU
-;       - Maybe have @stage_state[15] map to reset (or map others via an
-;         AND with $is_*)
-$clock = CLOCK{32}
+#array add_temp	8
 
-; Set up the core lines
+#array addr	16
+#array instr	8
+#array val	8
+
+// Instruction clock (used to ensure synchronisation)
+// In each 128 cycles, the clock is high for one
+// TODO: Determine how many logic cycles are needed to run the CPU
+//       - Maybe have @stage_state[15] map to reset (or map others via an
+//         AND with $is_*)
+$clock = CLOCK{128}
+
+// Set up the core lines
+// TODO: Maybe have these lines be arguments of some form
 $mem_ready, @mem_data_in = MEMORY_SPACE $mem_enable, @mem_addr, $mem_data_write, @mem_data_out
-@reg_data_in = MEMORY_ARRAY16 1, @reg_addr, $reg_write, @reg_data_out
-@reg_pc_in = MEMORY_WORD 1, $reg_pc_write, @reg_pc_out
-; @instr and @val - Temporary "variables" used to hold intermediate values
-; to be moved to other locations
-@instr = LATCH_BYTE 1, $instr_clear, @instr
-@val = LATCH_BYTE 1, $val_clear, @val
 
-; Timing control (stages)
-; 4-bit counter reset by $stage_reset, incremented by $mem_ready
-; Attached to a 4-bit mutexer controlling the state of stages
+// Registers
+$reg_ready, @reg_data_in = MEMORY_ARRAY16 $reg_enable, @reg_addr, $reg_write, @reg_data_out
+$NULL, @reg_pc_in = MEMORY_WORD 1, $reg_pc_write, @reg_pc_out
+// @instr, @val and @addr - Temporary "variables" used to hold intermediate values
+// to be moved to other locations
+@instr = LATCH_BYTE 1, $instr_clear, @instr
+@val   = LATCH_BYTE 1, $val_clear, @val
+@addr  = LATCH_WORD 1, $addr_clear, @addr
+
+// FLAGS Pseudo-Register
+$flags_C = LATCH 1, $flags_C_clear, $flags_C
+
+// Timing control (stages)
+// 4-bit counter reset by $stage_reset, incremented by $mem_ready
+// Attached to a 4-bit mutexer controlling the state of stages
 @stage_num = COUNTER4 $stage_reset, $next_stage
 @stage_state = DEMUX4 1, @stage_num
-$stage_reset = $clock
+$next_instruction = $clock
 $next_stage = $mem_ready
-
-; Instruction input
-; STAGE0 - Opcode Fetch
-$instr_clear = @stage_state[0]	; Clear the instruction cache
-$val_clar = @stage_state[0]	; Clear the instruction cache
-@mem_addr = MULTIAND @stage_state[0], @reg_pc_in	; Set memory address to PC
-$mem_enable = DELAY @stage_state[0]	; Enable memory for read (delay to line up with the MULTIAND above)
-
-; STAGE1 - Instruction fetched
-@instr = MULTIAND @stage_state[1], @mem_data_in	; Save the opcode byte
-
-@reg_addr[0] = AND (DELAY @stage_state[1]), @instr[0]
-@reg_addr[1] = AND (DELAY @stage_state[1]), @instr[1]
-@reg_addr[2] = AND (DELAY @stage_state[1]), @instr[2]
-@reg_addr[3] = AND (DELAY @stage_state[1]), @instr[3]
-
-$next_stage = DELAY{6} @stage_state[1]	; Go to stage 2 when the register has been read
-
-; MEMORY_ARRAY16 has a delay of 6
-; MEMORY_BYTE has a delay of 5
-
-; OPCODE Decoding
-$is_NOP    = AND (NOT   @instr[7]), (NOT   @instr[6]), (NOT   @instr[5]), (NOT   @instr[4])	; 0000xxxx
-$is_JMPcc  = AND (NOT   @instr[7]), (NOT   @instr[6]), (NOT   @instr[5]), (DELAY @instr[4])	; 0001sccc
-$is_CALLcc = AND (NOT   @instr[7]), (NOT   @instr[6]), (DELAY @instr[5]), (NOT   @instr[4])	; 0010sccc
-$is_RETcc  = AND (NOT   @instr[7]), (NOT   @instr[6]), (DELAY @instr[5]), (DELAY @instr[4])	; 0011xccc
-
-$is_MOVar  = AND (NOT   @instr[7]), (DELAY @instr[6]), (DELAY @instr[5]), (NOT   @instr[4])	; 0110rrrr
-$is_MOVra  = AND (NOT   @instr[7]), (DELAY @instr[6]), (DELAY @instr[5]), (DELAY @instr[4])	; 0111rrrr
-
-; === OPCODES ===
-; --- NOP ---
-; Just Ignored
-$stage_reset = AND $is_NOP, @stage_state[2]
-
-; --- MOVar ---
-; reg_addr should have reverted to zero by now, so we just use the
-; "stored" value from @reg_data_in to write to A
-$reg_write = DELAY (AND $is_MOVar, @stage_state[2])
-@reg_data_out = MULTIAND (AND $is_MOVar, @stage_state[2]), (DELAY @reg_data_in)
-
-; Delay to give the write a chance to complete (or, at least start)
-$stage_reset = DELAY{3} (AND $is_MOVar, @stage_state[2])
+$next_stage = $reg_ready
 
 
-; --- MOVra ---
+// Next instruction (TODO: Increment IP)
+$stage_reset = DELAY $next_instruction
 
 
+// === Instruction input ===
+// Reset all values
+$instr_clear = @stage_state[0]	// Clear the instruction cache
+$val_clar = @stage_state[0]	// Clear the instruction cache
+$addr_clar = @stage_state[0]	// Clear the address cache
+// STAGE0 - Opcode Fetch
+#for i = 0 ... 15
+@mem_addr[i] = AND @stage_state[0], @reg_pc_in[i]	// Set memory address to PC
+%assign i i+1
+%endrep
+$mem_enable = DELAY @stage_state[0]	// Enable memory for read (delay to line up with the AND above)
+
+// STAGE1 - Instruction fetched
+%assign	i 0
+%rep 8
+@instr[i] = AND @stage_state[1], @mem_data_in[i]	// Save the opcode byte
+%assign i i+1
+%endrep
+
+// Opcode Decoding
+$is_NOP    = AND (NOT   @instr[7]), (NOT   @instr[6]), (NOT   @instr[5]), (NOT   @instr[4])	// 0000xxxx
+$is_JMPcc  = AND (NOT   @instr[7]), (NOT   @instr[6]), (NOT   @instr[5]), (DELAY @instr[4])	// 0001sccc
+$is_CALLcc = AND (NOT   @instr[7]), (NOT   @instr[6]), (DELAY @instr[5]), (NOT   @instr[4])	// 0010sccc
+$is_RETcc  = AND (NOT   @instr[7]), (NOT   @instr[6]), (DELAY @instr[5]), (DELAY @instr[4])	// 0011xccc
+
+$is_LOAD   = AND (NOT   @instr[7]), (DELAY @instr[6]), (NOT   @instr[5]), (NOT   @instr[4])	// 0100rrrr
+$is_STORE  = AND (NOT   @instr[7]), (DELAY @instr[6]), (NOT   @instr[5]), (DELAY @instr[4])	// 0101rrrr
+
+$is_MOVar  = AND (NOT   @instr[7]), (DELAY @instr[6]), (DELAY @instr[5]), (NOT   @instr[4])	// 0110rrrr
+$is_MOVra  = AND (NOT   @instr[7]), (DELAY @instr[6]), (DELAY @instr[5]), (DELAY @instr[4])	// 0111rrrr
+
+$is_ADD    = AND (DELAY @instr[7]), (NOT   @instr[6]), (NOT   @instr[5]), (NOT   @instr[4])	// 1000rrrr
+$is_SUB    = AND (DELAY @instr[7]), (NOT   @instr[6]), (NOT   @instr[5]), (DELAY @instr[4])	// 1001rrrr
+$is_AND    = AND (DELAY @instr[7]), (NOT   @instr[6]), (DELAY @instr[5]), (NOT   @instr[4])	// 1010rrrr
+$is_OR     = AND (DELAY @instr[7]), (NOT   @instr[6]), (DELAY @instr[5]), (DELAY @instr[4])	// 1011rrrr
+$is_XOR    = AND (DELAY @instr[7]), (DELAY @instr[6]), (NOT   @instr[5]), (NOT   @instr[4])	// 1100rrrr
+
+// === OPCODES ===
+// --- NOP ---
+// Just Ignored
+$next_instruction = AND $is_NOP, DELAY @stage_state[1]
+
+// --- JMPcc ---
+// TODO
+// --- CALLcc ---
+// TODO
+// --- RETcc ---
+// TODO
+
+// --- LOAD ---
+// > Read X (R13:R12)
+$reg_enable  = AND $is_LOAD, (PULSE @stage_state[1])
+@reg_addr[0] = AND $is_LOAD, (DELAY @stage_state[1]), 1	// R13
+@reg_addr[1] = AND $is_LOAD, (DELAY @stage_state[1]), 0
+@reg_addr[2] = AND $is_LOAD, (DELAY @stage_state[1]), 1
+@reg_addr[3] = AND $is_LOAD, (DELAY @stage_state[1]), 1
+$reg_enable  = DELAY (AND $is_LOAD, (PULSE @stage_state[1]))
+@reg_addr[0] = DELAY (AND $is_LOAD, (DELAY @stage_state[1]), 0)	// R12
+@reg_addr[1] = DELAY (AND $is_LOAD, (DELAY @stage_state[1]), 0)
+@reg_addr[2] = DELAY (AND $is_LOAD, (DELAY @stage_state[1]), 1)
+@reg_addr[3] = DELAY (AND $is_LOAD, (DELAY @stage_state[1]), 1)
+// > Store in the @addr LATCH (Takes 3 cycles to fully complete)
+@addr[7] = AND $is_LOAD, @stage_state[2], @reg_data_in[3]	// R15
+@addr[6] = AND $is_LOAD, @stage_state[2], @reg_data_in[2]
+@addr[5] = AND $is_LOAD, @stage_state[2], @reg_data_in[1]
+@addr[4] = AND $is_LOAD, @stage_state[2], @reg_data_in[0]
+@addr[3] = AND $is_LOAD, @stage_state[3], @reg_data_in[3]	// R14
+@addr[2] = AND $is_LOAD, @stage_state[3], @reg_data_in[2]
+@addr[1] = AND $is_LOAD, @stage_state[3], @reg_data_in[1]
+@addr[0] = AND $is_LOAD, @stage_state[3], @reg_data_in[0]
+$next_stage = AND $is_LOAD, @stage_state[3]	// Stage 4 when LATCH is set (stage_state[3] is only high for 1 cycle)
+// > Set address & enable
+#for i = 0 ... 15
+@mem_addr[i] = AND $is_LOAD, @stage_state[4], @addr[i]
+%assign i i+1
+%endrep
+$mem_enable = PULSE (AND $is_LOAD, @stage_state[4])
+// > Write to register Rr
+$reg_enable = AND $is_LOAD, @stage_state[5]
+@reg_addr[0] = AND $is_LOAD, @stage_state[5], @instr[0]
+@reg_addr[1] = AND $is_LOAD, @stage_state[5], @instr[1]
+@reg_addr[2] = AND $is_LOAD, @stage_state[5], @instr[2]
+@reg_addr[3] = AND $is_LOAD, @stage_state[5], @instr[3]
+%assign	i 0
+%rep 8
+@reg_data_in[i] = AND $is_LOAD, @stage_state[5], @mem_data_out[i]
+%assign i i+1
+%endrep
+
+// --- STORE ---
+// > Read register Rr
+$reg_enable = AND $is_STORE, @stage_state[1]
+@reg_addr[0] = AND $is_STORE, @stage_state[1], @instr[0]
+@reg_addr[1] = AND $is_STORE, @stage_state[1], @instr[1]
+@reg_addr[2] = AND $is_STORE, @stage_state[1], @instr[2]
+@reg_addr[3] = AND $is_STORE, @stage_state[1], @instr[3]
+// > Store read value in the @val LATCH
+%assign	i 0
+%rep 8
+@val[i] = AND $is_STORE, @stage_state[2], @reg_data_in[i]
+%assign i i+1
+%endrep
+
+// > Read X (R13:R12)
+$reg_enable = AND $is_STORE, (PULSE @stage_state[2])
+@reg_addr[0] = AND $is_STORE, (DELAY @stage_state[2]), 1	// R13
+@reg_addr[1] = AND $is_STORE, (DELAY @stage_state[2]), 0
+@reg_addr[2] = AND $is_STORE, (DELAY @stage_state[2]), 1
+@reg_addr[3] = AND $is_STORE, (DELAY @stage_state[2]), 1
+$reg_enable = DELAY (AND $is_STORE, (PULSE @stage_state[2]))
+@reg_addr[0] = DELAY (AND $is_STORE, (DELAY @stage_state[2]), 0)	// R12
+@reg_addr[1] = DELAY (AND $is_STORE, (DELAY @stage_state[2]), 0)
+@reg_addr[2] = DELAY (AND $is_STORE, (DELAY @stage_state[2]), 1)
+@reg_addr[3] = DELAY (AND $is_STORE, (DELAY @stage_state[2]), 1)
+
+// > Store in the @addr LATCH (Takes 3 cycles to fully complete)
+@addr[7] = AND $is_STORE, @stage_state[3], @reg_data_in[3]	// R15
+@addr[6] = AND $is_STORE, @stage_state[3], @reg_data_in[2]
+@addr[5] = AND $is_STORE, @stage_state[3], @reg_data_in[1]
+@addr[4] = AND $is_STORE, @stage_state[3], @reg_data_in[0]
+@addr[3] = AND $is_STORE, @stage_state[4], @reg_data_in[3]	// R14
+@addr[2] = AND $is_STORE, @stage_state[4], @reg_data_in[2]
+@addr[1] = AND $is_STORE, @stage_state[4], @reg_data_in[1]
+@addr[0] = AND $is_STORE, @stage_state[4], @reg_data_in[0]
+$next_stage = AND $is_STORE, @stage_state[4]	// Stage 4 when LATCH is set (stage_state[3] is only high for 1 cycle)
+// > Set address
+%assign	i 0
+%rep 16
+@mem_addr[i] = AND $is_STORE, @stage_state[5], @addr[i]
+%assign i i+1
+%endrep
+// > Enable, Write and Data
+$mem_enable = PULSE (AND $is_STORE, @stage_state[5])
+$mem_write = PULSE (AND $is_STORE, @stage_state[5])
+%assign	i 0
+%rep 8
+@mem_data_out[i] = PULSE (AND $is_STORE, @stage_state[5], @val[i])
+%assign i i+1
+%endrep
+// > Reset when the write succeeds
+$next_instruction = AND $is_STORE, @stage_state[6]
+
+
+// --- MOVar ---
+// > Read register Rr
+@reg_addr[0] = AND $is_MOVar, (PULSE @stage_state[1]), @instr[0]
+@reg_addr[1] = AND $is_MOVar, (PULSE @stage_state[1]), @instr[1]
+@reg_addr[2] = AND $is_MOVar, (PULSE @stage_state[1]), @instr[2]
+@reg_addr[3] = AND $is_MOVar, (PULSE @stage_state[1]), @instr[3]
+// reg_addr should have reverted to zero by now (stage 2), so we just use the
+// "stored" value from @reg_data_in to write to A
+$reg_enable = PULSE (AND $is_MOVar, @stage_state[2])
+$reg_write = PULSE (AND $is_MOVar, @stage_state[2])
+%assign	i 0
+%rep 8
+@reg_data_out[i] = PULSE (AND $is_MOVar, @stage_state[2], @reg_data_in[i])
+%assign i i+1
+%endrep
+// Reset when write completes
+$next_instruction = AND $is_MOVar, @stage_state[3]
+
+
+// --- MOVra ---
+// > Read from R0 (A)
+// > Set register address again
+@reg_addr[0] = AND $is_MOVra, (DELAY @stage_state[1]), @instr[0]
+@reg_addr[1] = AND $is_MOVra, (DELAY @stage_state[1]), @instr[1]
+@reg_addr[2] = AND $is_MOVra, (DELAY @stage_state[1]), @instr[2]
+@reg_addr[3] = AND $is_MOVra, (DELAY @stage_state[1]), @instr[3]
+// > Write data from R0 to Rr
+$reg_enable = PULSE (AND $is_MOVar, @stage_state[1])
+$reg_write = PULSE (AND $is_MOVar, @stage_state[1])
+%assign	i 0
+%rep 8
+@reg_data_out[i] = PULSE (AND $is_MOVar, @stage_state[1], @reg_data_in[i])
+%assign i i+1
+%endrep
+// Reset when write completes
+$next_instruction = AND $is_MOVar, @stage_state[2]
+
+// --- ADD A, Rr ---
+// > Read to @val
+@reg_addr[0] = AND $is_ADD, (DELAY @stage_state[1]), @instr[0]
+@reg_addr[1] = AND $is_ADD, (DELAY @stage_state[1]), @instr[1]
+@reg_addr[2] = AND $is_ADD, (DELAY @stage_state[1]), @instr[2]
+@reg_addr[3] = AND $is_ADD, (DELAY @stage_state[1]), @instr[3]
+$reg_enable = PULSE (AND $is_ADD, @stage_state[1])
+%assign	i 0
+%rep 8
+@val[i] = AND $is_ADD, @stage_state[2], @reg_data_in[i]
+%assign i i+1
+%endrep
+// > Read A
+$reg_enable = PULSE (AND $is_ADD, @stage_state[2])
+// > Get A + Rr
+$flags_C_clear = PULSE (AND $is_ADD, @stage_state[3])	// Clear Carry Flag
+$next_stage, @add_temp, $flags_C = ADDER_8BIT (AND $is_ADD, @stage_state[3]), @val, @reg_data_in, $flags_C
+// > Write Back
+$reg_write = PULSE (AND $is_ADD, @stage_state[4])
+$reg_enable = PULSE (AND $is_ADD, @stage_state[4])
+%assign	i 0
+%rep 8
+@reg_data_out[i] = DELAY (AND $is_ADD, @stage_state[4], @add_temp[i])
+%assign i i+1
+%endrep
+$next_instruction = PULSE @stage_state[4]
+
+// --- SUB A, Rr ---
+// TODO
+
+// --- AND A, Rr ---
+// > Read to @val
+@reg_addr[0] = AND $is_OR, (DELAY @stage_state[1]), @instr[0]
+@reg_addr[1] = AND $is_OR, (DELAY @stage_state[1]), @instr[1]
+@reg_addr[2] = AND $is_OR, (DELAY @stage_state[1]), @instr[2]
+@reg_addr[3] = AND $is_OR, (DELAY @stage_state[1]), @instr[3]
+$reg_enable = PULSE (AND $is_OR, @stage_state[1])
+%assign	i 0
+%rep 8
+@val[i] = AND $is_OR, @stage_state[2], @reg_data_in[i]
+%assign i i+1
+%endrep
+// > Read A
+$reg_enable = PULSE (AND $is_OR, @stage_state[2])
+// > Write back A & Rr
+$reg_write = PULSE (AND $is_OR, @stage_state[3])
+$reg_enable = PULSE (AND $is_OR, @stage_state[3])
+%assign	i 0
+%rep 8
+@reg_data_out[i] = DELAY (AND $is_OR, @stage_state[3], @val[i], @reg_data_in[i])
+%assign i i+1
+%endrep
+$next_instruction = PULSE @stage_state[4]
+
+// --- OR A, Rr ---
+// > Read to @val
+@reg_addr[0] = AND $is_OR, (DELAY @stage_state[1]), @instr[0]
+@reg_addr[1] = AND $is_OR, (DELAY @stage_state[1]), @instr[1]
+@reg_addr[2] = AND $is_OR, (DELAY @stage_state[1]), @instr[2]
+@reg_addr[3] = AND $is_OR, (DELAY @stage_state[1]), @instr[3]
+$reg_enable = PULSE (AND $is_OR, @stage_state[1])
+%assign	i 0
+%rep 8
+@val[i] = AND $is_OR, @stage_state[2], @reg_data_in[i]
+%assign i i+1
+%endrep
+// > Read A
+$reg_enable = PULSE (AND $is_OR, @stage_state[2])
+// > Write back A | Rr
+$reg_write = PULSE (AND $is_OR, @stage_state[3])
+$reg_enable = PULSE (AND $is_OR, @stage_state[3])
+%assign	i 0
+%rep 8
+@reg_data_out[i] = AND (AND $is_OR, @stage_state[3]), (OR @val[i], @reg_data_in[i]))
+%assign i i+1
+%endrep
+$next_instruction = PULSE @stage_state[4]
+
+// --- XOR A, Rr ---
+// > Read to @val
+@reg_addr[0] = AND $is_OR, (DELAY @stage_state[1]), @instr[0]
+@reg_addr[1] = AND $is_OR, (DELAY @stage_state[1]), @instr[1]
+@reg_addr[2] = AND $is_OR, (DELAY @stage_state[1]), @instr[2]
+@reg_addr[3] = AND $is_OR, (DELAY @stage_state[1]), @instr[3]
+$reg_enable = PULSE (AND $is_OR, @stage_state[1])
+%assign	i 0
+%rep 8
+@val[i] = AND $is_OR, @stage_state[2], @reg_data_in[i]
+%assign i i+1
+%endrep
+// > Read A
+$reg_enable = PULSE (AND $is_OR, @stage_state[2])
+// > Write back A ^ Rr
+$reg_write = PULSE (AND $is_OR, @stage_state[3])
+$reg_enable = PULSE (AND $is_OR, @stage_state[3])
+%assign	i 0
+%rep 8
+@reg_data_out[i] = AND (AND $is_OR, @stage_state[3]), (XOR @val[i], @reg_data_in[i]))
+%assign i i+1
+%endrep
+$next_instruction = PULSE @stage_state[4]

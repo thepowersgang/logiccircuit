@@ -2,10 +2,10 @@ An attempt at designing a CPU to be built using virtual logic gates
 
 4 bit opcodes
 
-0000xxxx - NOP
-0001sccc - JMPcc .+imm8/16 (depending on s)
-0010sccc - CALLcc .+imm8/16 (depending on s)
-0011xccc - RETcc
+0000xxxx - NOP (TODO: Have only 0x00 be NOP?, Do I need an explicit NOP - MOV A, A is one)
+0001sccc - JMPcc .+rel8/abs16 (depending on s)
+0010sccc - CALLcc .+rel8/abs16 (depending on s)
+0011xccc - RETcc (TODO: Maybe overload the unused bit to give more opcode space)
 0100rrrr - LOAD r, [X]
 0101rrrr - STORE [X], r
 0110rrrr - MOV A, r
@@ -14,17 +14,23 @@ An attempt at designing a CPU to be built using virtual logic gates
 1001rrrr - SUB A, r
 1010rrrr - AND A, r
 1011rrrr - OR A, r
-1100rrrr - ????
-1101rrrr - ????
-1110rrrr - ????
-1111rrrr - ????
+1100rrrr - XOR A, r
+1101rrrr - MISC (NOT A; NEG A; CLC; STC; LDI A, imm8; LAI X, imm16)
+1110rrrr - PUSH r
+1111rrrr - POP r
+
+IDEAS:
+	Mabe make LOAD/STORE both use 0100lrrr and load/store (determined by l)
+	from/to R15:14, R13:12, ... depending on rrr
+
+NOTES:
+	LDI - Load Data Immediate - Load Immediate Byte into A
+	LAI - Load Address Immediate - Load Immediate Word into X
 
 16 registers
-R15:R14 - Z pseudo register
-R13:R12 - Y pseudo register
-R11:R10 - X pseudo register
-R1 - Accumulator (A)
-R0 - Zero
+R15:R14 - SP pseudo register
+R13:R12 - X pseudo register
+R0 - Accumulator (A)
 
 First 4 bits select the "unit"
 last 4 bits select a register input for the unit

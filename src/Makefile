@@ -2,11 +2,12 @@
 #
 
 CPPFLAGS = -I ./include/
+CFLAGS = -Wall -g
 
-
-OBJ := main.o
-OBJ += Element.AND.o Element.NAND.o
-OBJ += Element.NOR.o Element.XOR.o
+OBJ := main.o parse.o build.o
+OBJ += Element.AND.o Element.OR.o Element.XOR.o Element.NOT.o
+OBJ += Element.NAND.o Element.NOR.o Element.NXOR.o
+OBJ += Element.CLOCK.o Element.DELAY.o Element.DEMUX.o
 BIN = ../logic_cct
 
 .PHONY: all clean
@@ -17,8 +18,9 @@ clean:
 	$(RM) $(BIN) $(OBJ)
 
 $(BIN): $(OBJ)
-	$(CXX) -o $(BIN) $(OBJ) $(LDFLAGS)
+	$(CC) -g -o $(BIN) $(OBJ) $(LDFLAGS)
 
-%.o: %.cc
-	$(CXX) -o $@ -c $< $(CXXFLAGS) $(CPPFLAGS)
+%.o: %.c
+	$(CC) -o $@ -c $< $(CFLAGS) $(CPPFLAGS)
+#	$(CC) -M -MF $@ -o $*.d $< $(CPPFLAGS)
 

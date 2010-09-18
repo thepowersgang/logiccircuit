@@ -1,6 +1,6 @@
-; Half Adder
-; - Delay of 2
-#defunit HALF_ADDER
+// Full Adder
+// - Delay of 2
+#defunit ADDER
 #input $val1, $val2, $carry_in
 #output $ret, $carry_out
 
@@ -11,26 +11,33 @@ $ret = DELAY $_ret	; Synchronise outputs
 
 #endunit
 
-; 8-Bit Adder
-; - Delay of 16
+// 8-Bit Adder
+// - Delay of 17 (2 * HALF_ADDER + 1)
 #defunit ADDER_8BIT
-#input @val1[8], @val2[8], $carry_in
-#output @ret[8], $carry_out
+#input $enable, @val1[8], @val2[8], $carry_in
+#output $ready, @ret[8], $carry_out
+#array _ret 8
 
-@_ret[0], $carry0 = HALF_ADDER @val1[0], @val2[0], $carry_in
-@ret[0] = DELAY{14} @_ret[0]
-@_ret[1], $carry1 = HALF_ADDER @val1[1], @val2[1], $carry0
-@ret[1] = DELAY{12} @_ret[1]
-@_ret[2], $carry2 = HALF_ADDER @val1[2], @val2[2], $carry1
-@ret[2] = DELAY{10} @_ret[2]
-@_ret[3], $carry3 = HALF_ADDER @val1[3], @val2[3], $carry2
-@ret[3] = DELAY{8} @_ret[3]
-@_ret[4], $carry4 = HALF_ADDER @val1[4], @val2[4], $carry3
-@ret[4] = DELAY{6} @_ret[4]
-@_ret[5], $carry5 = HALF_ADDER @val1[5], @val2[5], $carry4
-@ret[5] = DELAY{4} @_ret[5]
-@_ret[6], $carry6 = HALF_ADDER @val1[6], @val2[6], $carry5
-@ret[6] = DELAY{2} @_ret[6]
-@ret[7], $carry_out = HALF_ADDER @val1[7], @val2[7], $carry6
+@_ret[0], $carry0 = ADDER @val1[0], @val2[0], $carry_in
+@_ret[1], $carry1 = ADDER @val1[1], @val2[1], $carry0
+@_ret[2], $carry2 = ADDER @val1[2], @val2[2], $carry1
+@_ret[3], $carry3 = ADDER @val1[3], @val2[3], $carry2
+@_ret[4], $carry4 = ADDER @val1[4], @val2[4], $carry3
+@_ret[5], $carry5 = ADDER @val1[5], @val2[5], $carry4
+@_ret[6], $carry6 = ADDER @val1[6], @val2[6], $carry5
+@_ret[7], $carry7 = ADDER @val1[7], @val2[7], $carry6
+
+@ret[0] = AND (DELAY{16} $enable), (DELAY{14} @_ret[0])
+@ret[1] = AND (DELAY{16} $enable), (DELAY{12} @_ret[1])
+@ret[2] = AND (DELAY{16} $enable), (DELAY{10} @_ret[2])
+@ret[3] = AND (DELAY{16} $enable), (DELAY{ 8} @_ret[3])
+@ret[4] = AND (DELAY{16} $enable), (DELAY{ 6} @_ret[4])
+@ret[5] = AND (DELAY{16} $enable), (DELAY{ 4} @_ret[5])
+@ret[6] = AND (DELAY{16} $enable), (DELAY{ 2} @_ret[6])
+@ret[7] = AND (DELAY{16} $enable), @_ret[7]
+
+$carry_out = AND (DELAY{16} $enable), $carry7
+
+$ready = DELAY{17} $enable
 
 #endunit

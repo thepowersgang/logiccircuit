@@ -3,10 +3,12 @@
 ; - enable: Enables the latch IO
 ; - clear:	Set to 1 to reset the latch to 0
 ; - set:	Set to 1 to set the latch to 1
-; Delay: 4
+; Delays:
+; - Writing: 4
+; - Reading: 1
 #defunit LATCH
 #input $enable, $clear, $set
-#output $ret
+#output $ready, $ret
 
 $_clear = AND $enable, $clear
 $_set = AND $enable, $set
@@ -15,20 +17,23 @@ $value = AND (NOT $_clear), (OR $value, $_set)
 
 $ret = AND $enable, $value
 
-#endif
+#endunit
 
 ; Memory Cell
 ; Usage: MEMORY_CELL <enable>, <write>, <value>
 ; - enable:	Set to 1 to read/write from the cell
 ; - write:	Set to 1 to set the cell
 ; - value:	New cell contents (ignored if <write> is not set)
+; Returns:
+; - $ready:	Delayed $enable signal, raised when data is ready
+; - $ret:	Cell value
 ; Delays:
+; - Writing: 5
 ; - Reading: 5
-; - Writing, 5
 
 #defunit MEMORY_CELL
 #input $enable, $write, $datain	; set input lines
-#output $ret	; Set output lines
+#output $ready, $ret	; Set output lines
 
 $reset = AND (DELAY $enable), (DELAY $write), (NOT $datain)
 $set = AND (DELAY $enable), (DELAY $write), (DELAY $datain)
@@ -50,5 +55,6 @@ $value = AND (NOT $reset), (OR (DELAY{2} $value), $set)
 ; 1 1 | 1
 
 $ret = AND (DELAY{4} $enable), $value
+$ready = DELAY{5} $enable
 
 #endunit
