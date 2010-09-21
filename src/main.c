@@ -75,10 +75,10 @@ int main(int argc, char *argv[])
 //		printf("- %p %s\n", link, link->Name);
 	}
 	
-	#if 0
+	#if 1
 	for( ele = gpElements; ele; ele = ele->Next )
 	{
-		printf("%p %s\n", ele, ele->Type->Name);
+	//	printf("%p %s\n", ele, ele->Type->Name);
 		for( i = 0; i < ele->NInputs; i ++ ) {
 			// Expand links
 			if( ele->Inputs[i]->Link ) {
@@ -88,7 +88,7 @@ int main(int argc, char *argv[])
 				//free( ele->Inputs[i] );
 				ele->Inputs[i] = link;
 			}
-			printf("< %s (%p) (%p)\n", ele->Inputs[i]->Name, ele->Inputs[i], ele->Inputs[i]->Link);
+	//		printf("< %s (%p) (%p)\n", ele->Inputs[i]->Name, ele->Inputs[i], ele->Inputs[i]->Link);
 		}
 		for( i = 0; i < ele->NOutputs; i ++ ) {
 			// Expand links
@@ -100,7 +100,7 @@ int main(int argc, char *argv[])
 				ele->Outputs[i] = link;
 			}
 			//fflush(stdout);
-			printf("> %s (%p) (%p)\n", ele->Outputs[i]->Name, ele->Outputs[i], ele->Outputs[i]->Link);
+	//		printf("> %s (%p) (%p)\n", ele->Outputs[i]->Name, ele->Outputs[i], ele->Outputs[i]->Link);
 		}
 	}
 	#endif
@@ -192,6 +192,14 @@ int main(int argc, char *argv[])
 					if( strcmp(link->Name, argBuffer) == 0 ) {
 						printf("%s: %i\n", link->Name, link->Value);
 						break;
+					}
+				}
+			}
+			else if( strcmp(commandBuffer, "dispall") == 0 ) {
+				 int	len = strlen(argBuffer);
+				for( link = gpLinks; link; link = link->Next ) {
+					if( strncmp(link->Name, argBuffer, len) == 0 ) {
+						printf("%s: %i\n", link->Name, link->Value);
 					}
 				}
 			}

@@ -367,6 +367,8 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 		if( link->Link )
 			link->Link->Link = Inputs->Items[i];
 		link->Link = Inputs->Items[i];
+		printf("%s replaced with %s\n",
+			link->Name, Inputs->Items[i]->Name);
 	}
 	
 	// Duplicate elements and replace links
@@ -381,9 +383,14 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 		for( i = 0; i < ele->NInputs; i ++ ) {
 			//printf("%i: %p\n", i, ele->Inputs[i]);
 			newele->Inputs[i] = ele->Inputs[i]->Backlink;
+			if( newele->Inputs[i]->Link )
+				newele->Inputs[i] = newele->Inputs[i]->Link;
 		}
-		for( i = 0; i < ele->NOutputs; i ++ )
+		for( i = 0; i < ele->NOutputs; i ++ ) {
 			newele->Outputs[i] = ele->Outputs[i]->Backlink;
+			if( newele->Outputs[i]->Link )
+				newele->Outputs[i] = newele->Outputs[i]->Link;
+		}
 		
 		if( gpCurUnit ) {
 			newele->Next = gpCurUnit->Elements;

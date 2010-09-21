@@ -48,7 +48,7 @@ $clock = CLOCK{128}
 $mem_ready, @mem_data_in = MEMORY_SPACE $mem_enable, @mem_addr, $mem_data_write, @mem_data_out
 
 // Registers
-$reg_ready, @reg_data_in = MEMORY_ARRAY16 $reg_enable, @reg_addr, $reg_write, @reg_data_out
+$reg_ready, @reg_data_in = MEMORY_ARRAY16 $reg_enable, $reg_write, @reg_addr, @reg_data_out
 $NULL, @reg_pc_in = MEMORY_WORD 1, $reg_pc_write, @reg_pc_out
 // @instr, @val and @addr - Temporary "variables" used to hold intermediate values
 // to be moved to other locations
