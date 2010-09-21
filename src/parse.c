@@ -48,6 +48,7 @@ enum eTokens
 	TOK_META_STATEMENT,
 	TOK_NUMBER,
 	TOK_IDENT,
+	TOK_STRING,
 	
 	TOK_LINE,	// $aaaa
 	TOK_GROUP,	// @aaaa
@@ -63,7 +64,7 @@ enum eTokens
 
 const char * const casTOKEN_NAMES[] = {
 	"TOK_NULL", "TOK_EOF",
-	"TOK_META_STATEMENT", "TOK_NUMBER", "TOK_IDENT",
+	"TOK_META_STATEMENT", "TOK_NUMBER", "TOK_IDENT", "TOK_STRING",
 	"TOK_LINE", "TOK_GROUP", "TOK_NEWLINE", "TOK_COMMA", "TOK_ASSIGN",
 	"TOK_PAREN_OPEN", "TOK_PAREN_CLOSE",
 	"TOK_BRACE_OPEN", "TOK_BRACE_CLOSE",
@@ -82,12 +83,63 @@ void	SyntaxWarning(tParser *Parser, const char *Fmt, ...);
 void	SyntaxAssert(tParser *Parser, int Got, int Expected);
 
 // === CODE ===
+int ParseValue(tList *destList, tParser *Parser)
+{
+	char	*tmpName;
+	
+	GetToken(Parser);
+	switch( Parser->Token )
+	{
+	case TOK_LINE:
+		AppendLine(destList, Parser->TokenStr);
+		break;
+	
+	// Group (@name)
+	case TOK_GROUP:
+		tmpName = strdup(Parser->TokenStr);
+		// Single line? (@group[i])
+		if( GetToken(Parser) == TOK_SQUARE_OPEN ) {
+			SyntaxAssert(Parser, GetToken(Parser), TOK_NUMBER);
+			if( AppendGroupItem(destList, tmpName, atoi(Parser->TokenStr)) )
+				SyntaxError(Parser, "Error referencing group item");
+			SyntaxAssert(Parser, GetToken(Parser), TOK_SQUARE_CLOSE);
+		}
+		// Entire group.
+		else {
+			PutBack(Parser);
+			if( AppendGroup(destList, tmpName) )
+				SyntaxError(Parser, "Error referencing group");
+		}
+		free(tmpName);
+		break;
+	
+	// Constant
+	// TODO: Implement
+	case TOK_NUMBER:
+		{
+			 int	num = atoi(Parser->TokenStr);
+			if( num < 0 || num > 1 ) {
+				SyntaxWarning(Parser, "Non-boolean constant value (%i) used\n", num);
+			}
+			if( num == 0 )
+				AppendLine( destList, "0" );
+			else
+				AppendLine( destList, "1" );
+		}
+		break;
+	default:
+		return 1;
+	}
+	
+	return 0;
+}
+
 /**
  * \brief Parse a gate definition
  */
 void *ParseOperation(tParser *Parser)
 {
-	char	*name, *tmpName;
+	char	*name;
 	tList	inputs = {0};
 	 int	param = -1;
 	
@@ -147,65 +199,21 @@ void *ParseOperation(tParser *Parser)
 	// Input lines
 	if( GetToken(Parser) != TOK_NEWLINE )
 	{
-		tList	*tmplist;
 		PutBack(Parser);
 		do {
-			GetToken(Parser);
-			switch( Parser->Token )
-			{
-			// Chained Gate
-			case TOK_PAREN_OPEN:
+			if( ParseValue(&inputs, Parser) != 0) {
+				tList	*tmplist;
+				if( Parser->Token != TOK_PAREN_OPEN ) {
+					SyntaxError(Parser,
+						"Unexpected %s, expected TOK_NUMBER, TOK_LINE, TOK_GROUP or TOK_PAREN_OPEN",
+						casTOKEN_NAMES[ Parser->Token ]);
+				}
 				tmplist = ParseOperation(Parser);
 				AppendList(&inputs, tmplist);
 				List_Free(tmplist);
 				SyntaxAssert(Parser, GetToken(Parser), TOK_PAREN_CLOSE);
-				break;
-			
-			// Single Line ($name)
-			case TOK_LINE:
-				AppendLine(&inputs, Parser->TokenStr);
-				break;
-			
-			// Group (@name)
-			case TOK_GROUP:
-				tmpName = strdup(Parser->TokenStr);
-				// Single line? (@group[i])
-				if( GetToken(Parser) == TOK_SQUARE_OPEN ) {
-					SyntaxAssert(Parser, GetToken(Parser), TOK_NUMBER);
-					if( AppendGroupItem(&inputs, tmpName, atoi(Parser->TokenStr)) )
-						SyntaxError(Parser, "Error referencing group");
-					SyntaxAssert(Parser, GetToken(Parser), TOK_SQUARE_CLOSE);
-				}
-				// Entire group.
-				else {
-					PutBack(Parser);
-					if( AppendGroup(&inputs, tmpName) )
-						SyntaxError(Parser, "Error referencing group");
-				}
-				free(tmpName);
-				break;
-			
-			// Constant
-			// TODO: Implement
-			case TOK_NUMBER:
-				{
-				 int	num = atoi(Parser->TokenStr);
-				if( num < 0 || num > 1 ) {
-					SyntaxWarning(Parser, "Non-boolean constant value (%i) used\n", num);
-				}
-				if( num == 0 )
-					AppendLine( &inputs, "0" );
-				else
-					AppendLine( &inputs, "1" );
-				}
-				break;
-			
-			// Unknown: ERROR!
-			default:
-				SyntaxError(Parser,
-					"Unexpected %s, expected TOK_LINE, TOK_GROUP or TOK_PAREN_OPEN",
-					casTOKEN_NAMES[ Parser->Token ]);
 			}
+			
 			GetToken(Parser);
 		} while(Parser->Token == TOK_COMMA);
 		PutBack(Parser);
@@ -299,15 +307,21 @@ int ParseLine(tParser *Parser)
 		}
 		// Set output lines
 		else if( strcmp(Parser->TokenStr, "#output") == 0 ) {
+			// Check for unit
 			if( !Unit_IsInUnit() )
 				SyntaxError(Parser, "#output used not in a unit");
+			// Comma separated list of lines
 			do {
 				GetToken(Parser);
 				switch( Parser->Token )
 				{
+				// Single
+				// "$line"
 				case TOK_LINE:
 					Unit_AddSingleOutput( Parser->TokenStr );
 					break;
+				// Group (with size)
+				// "@group[size]"
 				case TOK_GROUP:
 					{
 					char	name[Parser->TokenLength+1];
@@ -321,7 +335,40 @@ int ParseLine(tParser *Parser)
 				}
 				GetToken(Parser);
 			} while(Parser->Token == TOK_COMMA);
-			PutBack(Parser);
+			
+			PutBack(Parser);	// Put back non-comma character
+		}
+		// Set display values
+		else if( strcmp(Parser->TokenStr, "#display") == 0 ) {
+			tList	cond = {0}, values = {0};
+			char	*title;
+			// Condition - Single value (well, should be :)
+			ParseValue(&cond, Parser);
+			// Display Title - String
+			SyntaxAssert(Parser, GetToken(Parser), TOK_STRING);
+			title = strdup(Parser->TokenStr);
+			// Comma separated list of values to print
+			do {
+				if( ParseValue(&values, Parser) ) {
+					SyntaxError(Parser,
+						"Unexpected %s, expected TOK_NUMBER, TOK_LINE or TOK_GROUP",
+						casTOKEN_NAMES[ Parser->Token ]);
+				}
+				GetToken(Parser);
+			} while(Parser->Token == TOK_COMMA);
+			PutBack(Parser);	// Put back non-comma character
+			
+			// Remove quotes
+			title[strlen(title)-1] = '\0';
+			title ++;
+			
+			AddDisplayItem(title, &cond, &values);
+		
+			title --;
+		
+			free(title);
+			List_Free(&cond);
+			List_Free(&values);
 		}
 		else {
 			SyntaxError(Parser, "Unknown meta-statement '%s'",
@@ -401,6 +448,9 @@ int ParseLine(tParser *Parser)
 	return 0;
 }
 
+/**
+ * \brief Create a heap string using \a fmt
+ */
 char *MakeFmtStr( const char *fmt, ... )
 {
 	 int	len;
@@ -524,7 +574,7 @@ int GetToken(tParser *Parser)
 				char	newFile[128];
 				 int	line, unk;
 				sscanf(Parser->CurPos, "line %i+%i %s\n", &line, &unk, newFile);
-				printf("line = %i, unk = %i, newFile='%s'\n", line, unk, newFile);
+				//printf("line = %i, unk = %i, newFile='%s'\n", line, unk, newFile);
 				free( Parser->File );
 				Parser->File = strdup(newFile);
 				Parser->Line = line;
@@ -626,6 +676,14 @@ int GetToken(tParser *Parser)
 		ret = TOK_ASSIGN;
 		break;
 	
+	// String
+	case '"':
+		while( *Parser->CurPos != '"' )	Parser->CurPos ++;
+		Parser->CurPos ++;
+		ret = TOK_STRING;
+		break;
+	
+	// Default
 	default:
 		if( '0' <= ch && ch <= '9' ) {
 			// Numeric (Bin, Oct, Dec, Hex)

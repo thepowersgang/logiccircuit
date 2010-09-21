@@ -24,8 +24,17 @@
 #array instr	8
 #array val	8
 
-#display 1	@stage_state
-#display 1	@instr
+#display 1 "Clock " $clock
+#display 1 "Stage " @stage_state
+#display 1 "Reset " $stage_reset
+#display 1 "NextS " $next_stage
+#display 1 "PC    " @reg_pc_in
+#display 1 "Opcode" @instr
+#display 1 "NextI " $next_instruction
+
+#display 1 "MemEn " $mem_enable
+#display 1 "MemRdy" $mem_ready
+#display 1 "RegRdy" $reg_ready
 
 // Instruction clock (used to ensure synchronisation)
 // In each 128 cycles, the clock is high for one
@@ -55,20 +64,22 @@ $NULL, $flags_C = LATCH 1, $flags_C_clear, $flags_C
 // Attached to a 4-bit mutexer controlling the state of stages
 @stage_num = COUNTER{4} $stage_reset, $next_stage
 @stage_state = DEMUX{4} 1, @stage_num
-$next_instruction = DELAY $clock
+//$next_instruction = DELAY $clock
 $next_stage = DELAY $mem_ready
 $next_stage = DELAY $reg_ready
 
 
 // Next instruction (TODO: Increment IP)
-$stage_reset = DELAY $next_instruction
+$next_stage = PULSE $next_instruction
+$reg_pc_write, @reg_pc_out, $NULL = ADDER_16BIT $next_instruction, @reg_pc_in, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1, 0
+$stage_reset = DELAY{8} $reg_pc_write
 
 
 // === Instruction input ===
 // Reset all values
 $instr_clear = DELAY @stage_state[0]	// Clear the instruction cache
-$val_clar = DELAY @stage_state[0]	// Clear the instruction cache
-$addr_clar = DELAY @stage_state[0]	// Clear the address cache
+$val_clear = DELAY @stage_state[0]	// Clear the instruction cache
+$addr_clear = DELAY @stage_state[0]	// Clear the address cache
 // STAGE0 - Opcode Fetch
 %assign i 0
 %rep 16

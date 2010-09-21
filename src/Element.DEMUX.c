@@ -36,6 +36,7 @@ static void _Update(tElement *Ele)
 {
 	 int	val = 0, i;
 	
+	// Parse inputs as a binary stream
 	for( i = 1; i < Ele->NInputs; i ++ )
 	{
 		if( Ele->Inputs[i]->Value )
@@ -48,6 +49,9 @@ static void _Update(tElement *Ele)
 	// If ENABLE, drive output
 	if( Ele->Inputs[0]->Value )
 		Ele->Outputs[val]->NDrivers ++;
+	
+	//printf("DEMUX val=%i, ENABLE=%i, %s->NDrivers=%i\n",
+	//	val, Ele->Inputs[0]->Value, Ele->Outputs[val]->Name, Ele->Outputs[val]->NDrivers);
 }
 
 tElementDef gElement_DEMUX = {

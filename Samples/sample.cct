@@ -1,12 +1,12 @@
-$inA = PUSHTOMAKE
-$inB = PUSHTOMAKE
+$inA = 1
+$inB = 0
 
 $val = AND $inA, $inB
 
-OUTPUT "Val after AND" $val
+#display 1 "Val after AND" $val
 
 @in = PUSHTOMAKE, PUSHTOMAKE
 
 $val2 = AND $val, @in[0]
 
-OUTPUT "Val after second AND " $val
+#display 2 "Val after second AND " $val

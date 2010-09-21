@@ -12,7 +12,7 @@ $ret = DELAY $_ret	; Synchronise outputs
 #endunit
 
 // 8-Bit Adder
-// - Delay of 17 (2 * HALF_ADDER + 1)
+// - Delay of 17 (8 * HALF_ADDER + 1)
 #defunit ADDER_8BIT
 #input $enable, @val1[8], @val2[8], $carry_in
 #output $ready, @ret[8], $carry_out
@@ -35,6 +35,54 @@ $ret = DELAY $_ret	; Synchronise outputs
 @ret[5] = AND (DELAY{16} $enable), (DELAY{ 4} @_ret[5])
 @ret[6] = AND (DELAY{16} $enable), (DELAY{ 2} @_ret[6])
 @ret[7] = AND (DELAY{16} $enable), @_ret[7]
+
+$carry_out = AND (DELAY{16} $enable), $carry7
+
+$ready = DELAY{17} $enable
+
+#endunit
+
+
+// 16-Bit Adder
+// - Delay of 33 (16 * HALF_ADDER + 1)
+#defunit ADDER_16BIT
+#input $enable, @val1[16], @val2[16], $carry_in
+#output $ready, @ret[16], $carry_out
+#array _ret 16
+
+@_ret[ 0], $carry0  = ADDER @val1[ 0], @val2[ 0], $carry_in
+@_ret[ 1], $carry1  = ADDER @val1[ 1], @val2[ 1], $carry0
+@_ret[ 2], $carry2  = ADDER @val1[ 2], @val2[ 2], $carry1
+@_ret[ 3], $carry3  = ADDER @val1[ 3], @val2[ 3], $carry2
+@_ret[ 4], $carry4  = ADDER @val1[ 4], @val2[ 4], $carry3
+@_ret[ 5], $carry5  = ADDER @val1[ 5], @val2[ 5], $carry4
+@_ret[ 6], $carry6  = ADDER @val1[ 6], @val2[ 6], $carry5
+@_ret[ 7], $carry7  = ADDER @val1[ 7], @val2[ 7], $carry6
+@_ret[ 8], $carry8  = ADDER @val1[ 8], @val2[ 8], $carry7
+@_ret[ 9], $carry9  = ADDER @val1[ 9], @val2[ 9], $carry8
+@_ret[10], $carry10 = ADDER @val1[10], @val2[10], $carry9
+@_ret[11], $carry11 = ADDER @val1[11], @val2[11], $carry10
+@_ret[12], $carry12 = ADDER @val1[12], @val2[12], $carry11
+@_ret[13], $carry13 = ADDER @val1[13], @val2[13], $carry12
+@_ret[14], $carry14 = ADDER @val1[14], @val2[14], $carry13
+@_ret[15], $carry15 = ADDER @val1[15], @val2[15], $carry14
+
+@ret[ 0] = AND (DELAY{32} $enable), (DELAY{30} @_ret[ 0])
+@ret[ 1] = AND (DELAY{32} $enable), (DELAY{28} @_ret[ 1])
+@ret[ 2] = AND (DELAY{32} $enable), (DELAY{26} @_ret[ 2])
+@ret[ 3] = AND (DELAY{32} $enable), (DELAY{24} @_ret[ 3])
+@ret[ 4] = AND (DELAY{32} $enable), (DELAY{22} @_ret[ 4])
+@ret[ 5] = AND (DELAY{32} $enable), (DELAY{20} @_ret[ 5])
+@ret[ 6] = AND (DELAY{32} $enable), (DELAY{18} @_ret[ 6])
+@ret[ 7] = AND (DELAY{32} $enable), (DELAY{16} @_ret[ 7])
+@ret[ 8] = AND (DELAY{32} $enable), (DELAY{14} @_ret[ 8])
+@ret[ 9] = AND (DELAY{32} $enable), (DELAY{12} @_ret[ 9])
+@ret[10] = AND (DELAY{32} $enable), (DELAY{10} @_ret[10])
+@ret[11] = AND (DELAY{32} $enable), (DELAY{ 8} @_ret[11])
+@ret[12] = AND (DELAY{32} $enable), (DELAY{ 6} @_ret[12])
+@ret[13] = AND (DELAY{32} $enable), (DELAY{ 4} @_ret[13])
+@ret[14] = AND (DELAY{32} $enable), (DELAY{ 2} @_ret[14])
+@ret[15] = AND (DELAY{32} $enable), @_ret[15]
 
 $carry_out = AND (DELAY{16} $enable), $carry7
 

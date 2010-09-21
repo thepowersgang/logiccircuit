@@ -15,8 +15,9 @@ struct sList
 struct sDisplayItem
 {
 	tDisplayItem	*Next;
-	tLink	*Condition;
-	tList	Values;
+	tList	Condition;	//!< Condition for the item to be shown
+	tList	Values;	//!< List of values to show
+	char	Label[];	//!< Display label
 };
 
 extern int	Unit_DefineUnit(const char *Name);
@@ -26,6 +27,11 @@ extern int	Unit_AddSingleOutput(const char *Name);
 extern int	Unit_AddGroupOutput(const char *Name, int Size);
 extern int	Unit_CloseUnit(void);
 extern int	Unit_IsInUnit(void);
+
+/**
+ * \brief Add a display item
+ */
+extern int	AddDisplayItem(const char *Name, tList *Condition, tList *Values);
 
 /**
  * \brief Create a line group

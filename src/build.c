@@ -8,13 +8,19 @@
 #include <stdlib.h>
 #include <stdint.h>
 
+/**
+ * \brief Line array (group) definition structure
+ */
 typedef struct sGroupDef
 {
 	struct sGroupDef	*Next;
-	 int	Size;
-	char	Name[];
+	 int	Size;	//!< Size of the group
+	char	Name[];	//!< Name
 } tGroupDef;
 
+/**
+ * \brief #defunit structure
+ */
 typedef struct sUnitTemplate
 {
 	struct sUnitTemplate	*Next;
@@ -22,10 +28,10 @@ typedef struct sUnitTemplate
 	tLink	*Links;
 	tGroupDef	*Groups;
 	tElement	*Elements;
-	tList	Inputs;
-	tList	Outputs;
+	tList	Inputs;	//!< Input links
+	tList	Outputs;	//!< Output links
 	
-	 int	InstanceCount;
+	 int	InstanceCount;	//!< Number of times the unit has been used
 	
 	char	Name[];
 }	tUnitTemplate;
@@ -38,6 +44,7 @@ tElement	*gpLastElement = (tElement*)&gpElements;
 tElementDef	*gpElementDefs;
 tUnitTemplate	*gpUnits;
 tUnitTemplate	*gpCurUnit;
+tDisplayItem	*gpDisplayItems;
 
 // === CODE ===
 /**
@@ -118,6 +125,46 @@ int Unit_CloseUnit(void)
 int Unit_IsInUnit(void)
 {
 	return !!gpCurUnit;
+}
+
+int AddDisplayItem(const char *Name, tList *Condition, tList *Values)
+{
+	tDisplayItem	*dispItem, *prev = NULL;
+	 int	pos, i;
+	
+	for( dispItem = gpDisplayItems; dispItem; prev = dispItem, dispItem = dispItem->Next )
+	{
+		if( strcmp(Name, dispItem->Label) == 0 ) {
+			return -1;
+		}
+	}
+	
+	// Create new
+	pos = strlen(Name)+1;
+	dispItem = malloc( sizeof(tDisplayItem) + pos + (Condition->NItems+Values->NItems)*sizeof(tLink*) );
+	dispItem->Condition.NItems = Condition->NItems;
+	dispItem->Condition.Items = (void*)&dispItem->Label[pos];
+	for( i = 0; i < Condition->NItems; i ++ )
+		dispItem->Condition.Items[i] = Condition->Items[i];
+	pos += Condition->NItems * sizeof(tLink*);
+	
+	dispItem->Values.NItems = Values->NItems;
+	dispItem->Values.Items = (void*)&dispItem->Label[pos];
+	for( i = 0; i < Values->NItems; i ++ )
+		dispItem->Values.Items[i] = Values->Items[i];
+	
+	strcpy(dispItem->Label, Name);
+	
+	if( prev ) {
+		dispItem->Next = prev->Next;
+		prev->Next = dispItem;
+	}
+	else {
+		dispItem->Next = NULL;
+		gpDisplayItems = dispItem;
+	}
+	
+	return 0;
 }
 
 void CreateGroup(const char *Name, int Size)

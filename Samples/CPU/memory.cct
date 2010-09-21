@@ -9,6 +9,24 @@
 #input $enable, @addr[16], $data_write, @data_input[8]
 #output $ready, @data_output[8]
 
-$ready = DELAY $enable
+#array ROM_addr	16
+
+// ROM area
+$is_ROM = AND (DELAY $enable), (NOT   @addr[15]), (NOT   @addr[14]), (NOT   @addr[13]), (NOT   @addr[12])
+@ROM_addr = DEMUX{4} $is_ROM, (DELAY{2} @addr[0]), (DELAY{2} @addr[1]), (DELAY{2} @addr[2]), (DELAY{2} @addr[3])
+
+// 0x00
+@data_output[7] = AND @ROM_addr[0], 1
+@data_output[6] = AND @ROM_addr[0], 1
+@data_output[5] = AND @ROM_addr[0], 0
+@data_output[4] = AND @ROM_addr[0], 0
+@data_output[3] = AND @ROM_addr[0], 0
+@data_output[2] = AND @ROM_addr[0], 0
+@data_output[1] = AND @ROM_addr[0], 0
+@data_output[0] = AND @ROM_addr[0], 0
+
+$ready = DELAY{2} $is_ROM
+
+//$ready = AND (NOT $is_ROM), $enable
 
 #endunit
