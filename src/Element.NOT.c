@@ -2,6 +2,7 @@
  */
 #include <element.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 typedef struct
@@ -25,8 +26,11 @@ static tElement *_Create(int Param, int NInputs, tLink **Inputs)
 
 static void _Update(tElement *Ele)
 {
+	//printf("NOT %i(%s) = ",
+	//	GetLink(Ele->Inputs[0]), Ele->Inputs[0]->Name);
 	if( !GetLink(Ele->Inputs[0]) )
 		RaiseLink(Ele->Outputs[0]);
+	//printf("%i\n", Ele->Outputs[0]->Value->NDrivers);
 }
 
 tElementDef gElement_NOT = {

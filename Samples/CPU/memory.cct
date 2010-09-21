@@ -13,6 +13,7 @@
 
 // ROM area
 $is_ROM = AND (DELAY $enable), (NOT   @addr[15]), (NOT   @addr[14]), (NOT   @addr[13]), (NOT   @addr[12])
+//$is_ROM_addr = AND (NOT   @addr[15]), (NOT   @addr[14]), (NOT   @addr[13]), (NOT   @addr[12])
 @ROM_addr = DEMUX{4} $is_ROM, (DELAY{2} @addr[0]), (DELAY{2} @addr[1]), (DELAY{2} @addr[2]), (DELAY{2} @addr[3])
 
 // 0x00

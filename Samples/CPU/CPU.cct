@@ -2,7 +2,7 @@
 // By John Hodge (thePowersGang)
 // Designed in LogicCircuit
 %include "memory.cct"
-%include "../adder_8bit.cct"
+%include "../adder.cct"
 //%include "../memory_bank.cct"
 
 #array mem_data_in 8

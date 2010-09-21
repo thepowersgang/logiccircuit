@@ -2,6 +2,7 @@
  */
 #include <element.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 typedef struct
@@ -27,12 +28,27 @@ static void _Update(tElement *Ele)
 {
 	 int	out = 1;
 	 int	i;
+	
+	// --- HACK ---
+	#if 0
+	if( Ele->NInputs == 3 ) {
+		printf("%i (%s)", GetLink(Ele->Inputs[0]), Ele->Inputs[0]->Name);
+		for( i = 1; i < Ele->NInputs; i++ )
+		{
+			printf(" && %i (%s)", GetLink(Ele->Inputs[i]), Ele->Inputs[i]->Name);
+		}
+		printf("\n");
+	}
+	#endif
+	// --- / ---
+	
 	for( i = 0; i < Ele->NInputs; i++ )
 	{
 		out = out && GetLink(Ele->Inputs[i]);
 	}
-	if( out )
+	if( out ) {
 		RaiseLink(Ele->Outputs[0]);
+	}
 }
 
 tElementDef gElement_AND = {

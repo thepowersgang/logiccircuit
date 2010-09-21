@@ -8,6 +8,9 @@
 #include <signal.h>
 #include <string.h>
 
+#define PRINT_ELEMENTS	0
+#define PRINT_LINKS	0
+
 // === IMPORTS ===
 extern tElementDef	*gpElementDefs;
 extern tLink	*gpLinks;
@@ -15,6 +18,8 @@ extern tElement	*gpElements;
 extern tDisplayItem	*gpDisplayItems;
 
 extern int ParseFile(const char *Filename);
+extern void	LinkValue_Ref(tLinkValue *Value);
+extern void	LinkValue_Deref(tLinkValue *Value);
 
 // === MACRO! ===
 #define ADD_ELEDEF(name)	do {\
@@ -61,9 +66,18 @@ int main(int argc, char *argv[])
 	// Resolve links
 	for( link = gpLinks; link; link = link->Next )
 	{
+		link->Backlink = NULL;	// Clear the backlink (temp) for later
+		
 		// Expand n-deep linking
-		while( link->Link && link->Link->Link)
+		while( link->Link && link->Link->Link )
 			link->Link = link->Link->Link;
+		
+		if( link->Link )
+		{
+			LinkValue_Ref(link->Link->Value);
+			LinkValue_Deref(link->Value);
+			link->Value = link->Link->Value;
+		}
 		
 		// Zero out
 		link->Value->NDrivers = 0;
@@ -76,33 +90,69 @@ int main(int argc, char *argv[])
 //		printf("- %p %s\n", link, link->Name);
 	}
 	
+	#if PRINT_LINKS
+	// Print links
+	// > Scan all links and find ones that share a value pointer
+	for( link = gpLinks; link; link = link->Next )
+	{
+		tLink	*link2;
+		if(link->Backlink)	continue;	// Skip ones already done
+		printf("%p:", link->Value);
+		for( link2 = gpLinks; link2; link2 = link2->Next )
+		{
+			if(link2->Backlink)	continue;
+			if(link2->Value != link->Value)	continue;
+			printf(" %p(%s)", link2, link2->Name);
+			link2->Backlink = link;	// Make backlink non-zero
+		}
+		printf("\n");
+	}
+	#endif
+	
 	#if 1
 	for( ele = gpElements; ele; ele = ele->Next )
 	{
-	//	printf("%p %s\n", ele, ele->Type->Name);
+		#if PRINT_ELEMENTS
+		printf("%p %s", ele, ele->Type->Name);
+		#endif
 		for( i = 0; i < ele->NInputs; i ++ ) {
+			#if USE_LINKS
 			// Expand links
 			if( ele->Inputs[i]->Link ) {
 				link = ele->Inputs[i]->Link;
-				// Just asking for a memory leak, but this can be in use elsewhere
-				// TODO: Reference counting
-				//free( ele->Inputs[i] );
+				ele->Inputs[i]->ReferenceCount --;
+				if( !ele->Inputs[i]->ReferenceCount )
+					free( ele->Inputs[i] );
 				ele->Inputs[i] = link;
 			}
-	//		printf("< %s (%p) (%p)\n", ele->Inputs[i]->Name, ele->Inputs[i], ele->Inputs[i]->Link);
+			#endif
+			#if PRINT_ELEMENTS
+			printf(" %p(%s)", ele->Inputs[i], ele->Inputs[i]->Name);
+			#endif
 		}
+		#if PRINT_ELEMENTS
+		printf("   ==>");
+		#endif
 		for( i = 0; i < ele->NOutputs; i ++ ) {
+			#if USE_LINKS
 			// Expand links
 			if( ele->Outputs[i]->Link ) {
 				link = ele->Outputs[i]->Link;
 				// Just asking for a memory leak, but this can be in use elsewhere
 				// TODO: Reference counting
-				//free( ele->Outputs[i] );
+				ele->Outputs[i]->ReferenceCount --;
+				if( !ele->Outputs[i]->ReferenceCount )
+					free( ele->Outputs[i] );
 				ele->Outputs[i] = link;
 			}
-			//fflush(stdout);
-	//		printf("> %s (%p) (%p)\n", ele->Outputs[i]->Name, ele->Outputs[i], ele->Outputs[i]->Link);
+			#endif
+			#if PRINT_ELEMENTS
+			printf(" %p(%s)", ele->Outputs[i], ele->Outputs[i]->Name);
+			#endif
 		}
+		#if PRINT_ELEMENTS
+		printf("\n");
+		#endif
 	}
 	#endif
 	
@@ -141,10 +191,6 @@ int main(int argc, char *argv[])
 		// Set values
 		for( link = gpLinks; link; link = link->Next ) {
 			link->Value->Value = !!link->Value->NDrivers;
-			if( link->Link && link->Value->Value ) {
-				link->Link->Value->NDrivers = link->Value->NDrivers;
-				link->Link->Value->Value = link->Value->Value;
-			}
 			//if( link->bDisplay )
 			//if( link->Name[0] == '$' )
 			//	printf("%s = %i\n", link->Name, link->Value);
@@ -173,9 +219,8 @@ int main(int argc, char *argv[])
 			char	commandBuffer[100];
 			char	argBuffer[100];
 			
+			printf("> ");
 			ReadCommand(100, commandBuffer, 100, argBuffer);
-			
-			printf("'%s'\n", commandBuffer);
 			
 			// Quit
 			if( strcmp(commandBuffer, "q") == 0 ) {
@@ -199,7 +244,7 @@ int main(int argc, char *argv[])
 			else if( strcmp(commandBuffer, "dispall") == 0 ) {
 				 int	len = strlen(argBuffer);
 				for( link = gpLinks; link; link = link->Next ) {
-					if( strncmp(link->Name, argBuffer, len) == 0 ) {
+					if( link->Name[0] && strncmp(link->Name, argBuffer, len) == 0 ) {
 						printf("%s: %i\n", link->Name, link->Value->Value);
 					}
 				}
@@ -254,6 +299,7 @@ void ReadCommand(int MaxCmd, char *Command, int MaxArg, char *Argument)
 
 void SigINT_Handler(int Signum)
 {
+	Signum = 0;
 	#if 1
 	// Swap back to main buffer
 	printf("\x1B[?1047l");

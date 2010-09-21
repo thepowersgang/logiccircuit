@@ -13,7 +13,8 @@
 $_clear = AND $enable, $clear
 $_set = AND $enable, $set
 
-$value = AND (NOT $_clear), (OR $value, $_set)
+;$value = AND (NOT $_clear), (OR $value, $_set)
+$value = XOR (XOR $_set, $value), (DELAY $_clear)
 
 $ret = AND $enable, $value
 
@@ -28,8 +29,8 @@ $ret = AND $enable, $value
 ; - $ready:	Delayed $enable signal, raised when data is ready
 ; - $ret:	Cell value
 ; Delays:
-; - Writing: 5
-; - Reading: 5
+; - Writing: 6
+; - Reading: 6
 
 #defunit MEMORY_CELL
 #input $enable, $write, $datain	; set input lines
@@ -39,7 +40,9 @@ $reset = AND (DELAY $enable), (DELAY $write), (NOT $datain)
 $set = AND (DELAY $enable), (DELAY $write), (DELAY $datain)
 
 ; Feedback loop! for storage
-$value = AND (NOT $reset), (OR (DELAY{2} $value), $set)
+;$value = AND (NOT $reset), (OR (DELAY{2} $value), $set)
+;$value = AND (NOT $reset), (OR $value, $set)
+$value = XOR (XOR $set, $value), (DELAY $reset)
 
 ; State: 0
 ; W V | Out
@@ -54,7 +57,7 @@ $value = AND (NOT $reset), (OR (DELAY{2} $value), $set)
 ; 1 0 | 0
 ; 1 1 | 1
 
-$ret = AND (DELAY{4} $enable), $value
-$ready = DELAY{5} $enable
+$ret = AND (DELAY{5} $enable), $value
+$ready = DELAY{6} $enable
 
 #endunit

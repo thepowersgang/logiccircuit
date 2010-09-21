@@ -1,0 +1,41 @@
+// Tester
+
+%if 1
+
+%include "adder.cct"
+
+#array val1	8
+#array val2	8
+#array output	8
+
+#display 1 "Carry Input " $carry_in
+#display 1 "Value 1     " @val1
+#display 1 "Value 2     " @val2
+#display 1 "Adder Done  " $adder_done
+#display 1 "Output      " @output
+#display 1 "Carry Out   " $carry_out
+
+@val1 = DELAY 0, 1, 0, 0, 0, 0, 1, 0	// Low to High (0 - 7)
+@val2 = DELAY 0, 1, 0, 0, 0, 0, 1, 0
+$carry_in = 0
+
+$adder_done, @output, $carry_out = ADDER_8BIT 1, @val1, @val2, $carry_in
+
+%endif
+
+%if 0
+
+%include "memory_cell.cct"
+
+#display 1 "Write  " $write
+#display $write "Datain " $datain
+#display 1 "Ready  " $ready
+#display $ready "Value  " $val
+
+$enable = DELAY 1
+$write = DELAY 1
+$datain = DELAY 1
+
+$ready, $val = MEMORY_CELL $enable, $write, $datain
+
+%endif

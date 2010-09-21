@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <setjmp.h>
 #include <common.h>
+#include <unistd.h>
 
 /**
  */
@@ -72,6 +73,7 @@ const char * const casTOKEN_NAMES[] = {
 };
 
 // === PROTOTYPES ===
+ int	ParseValue(tParser *Parser, tList *destList);
 void	*ParseOperation(tParser *Parser);
  int	ParseLine(tParser *Parser);
  int	ParseFile(const char *Filename);
@@ -83,7 +85,11 @@ void	SyntaxWarning(tParser *Parser, const char *Fmt, ...);
 void	SyntaxAssert(tParser *Parser, int Got, int Expected);
 
 // === CODE ===
-int ParseValue(tList *destList, tParser *Parser)
+/**
+ * \brief Parse a "value" (Constant, Line or Group)
+ * \return Zero on success, 1 if no value is found
+ */
+int ParseValue(tParser *Parser, tList *destList)
 {
 	char	*tmpName;
 	
@@ -144,42 +150,17 @@ void *ParseOperation(tParser *Parser)
 	 int	param = -1;
 	
 	// Get Name
-	GetToken(Parser);
-	#if 0
-	if( Parser->Token == TOK_LINE )
+	if( ParseValue(Parser, &inputs) == 0 )
 	{
 		tList *ret = calloc(1, sizeof(tList));
-		AppendLine(ret, Parser->TokenStr);
+		AppendList(ret, &inputs);
 		return ret;
 	}
-	if( Parser->Token == TOK_GROUP )
-	{
-		tList *ret = calloc(1, sizeof(tList));
-		char	tmpName[Parser->TokenLength+1];
-		strcpy(tmpName, Parser->TokenStr);
-		
-		// Single line? (@group[i])
-		if( GetToken(Parser) == TOK_SQUARE_OPEN ) {
-			SyntaxAssert(Parser, GetToken(Parser), TOK_NUMBER);
-			if( AppendGroupItem(ret, tmpName, atoi(Parser->TokenStr)) )
-				SyntaxError(Parser, "Error referencing group");
-			SyntaxAssert(Parser, GetToken(Parser), TOK_SQUARE_CLOSE);
-		}
-		// Entire group.
-		else {
-			PutBack(Parser);
-			if( AppendGroup(ret, tmpName) )
-				SyntaxError(Parser, "Error referencing group");
-		}
-		
-		return ret;
-	}
-	#endif
 	
 	if( Parser->Token != TOK_IDENT )
 	{
 		SyntaxError(Parser,
-			"Unexpected %s, expected TOK_IDENT/TOK_LINE/TOK_GROUP",
+			"Unexpected %s, expected TOK_IDENT/TOK_NUMBER/TOK_LINE/TOK_GROUP",
 			casTOKEN_NAMES[ Parser->Token ]
 			);
 	}
@@ -201,7 +182,7 @@ void *ParseOperation(tParser *Parser)
 	{
 		PutBack(Parser);
 		do {
-			if( ParseValue(&inputs, Parser) != 0) {
+			if( ParseValue(Parser, &inputs) != 0) {
 				tList	*tmplist;
 				if( Parser->Token != TOK_PAREN_OPEN ) {
 					SyntaxError(Parser,
@@ -343,13 +324,13 @@ int ParseLine(tParser *Parser)
 			tList	cond = {0}, values = {0};
 			char	*title;
 			// Condition - Single value (well, should be :)
-			ParseValue(&cond, Parser);
+			ParseValue(Parser, &cond);
 			// Display Title - String
 			SyntaxAssert(Parser, GetToken(Parser), TOK_STRING);
 			title = strdup(Parser->TokenStr);
 			// Comma separated list of values to print
 			do {
-				if( ParseValue(&values, Parser) ) {
+				if( ParseValue(Parser, &values) ) {
 					SyntaxError(Parser,
 						"Unexpected %s, expected TOK_NUMBER, TOK_LINE or TOK_GROUP",
 						casTOKEN_NAMES[ Parser->Token ]);

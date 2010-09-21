@@ -2,6 +2,7 @@
  */
 #include <element.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <stdint.h>
 
@@ -20,7 +21,7 @@ static tElement *_Create(int Param, int NInputs, tLink **Inputs)
 	t_element *ret;
 	if( Param < 1 )
 		Param = 1;
-	ret = calloc( 1, sizeof(t_element) + 2*sizeof(tLink*) + Param - 1 );
+	ret = calloc( 1, sizeof(t_element) + 2*NInputs*sizeof(tLink*) + NInputs*(Param - 1) );
 	if(!ret)	return NULL;
 	
 	ret->Delay = Param - 1;
@@ -28,26 +29,39 @@ static tElement *_Create(int Param, int NInputs, tLink **Inputs)
 	if(Param > 1)
 		ret->Cache[0] = 0;
 	
-	ret->Ele.NOutputs = 1;
-	ret->Ele.NInputs = 1;
+	//printf("ret->Delay = %i\n", ret->Delay);
+	
+	ret->Ele.NOutputs = NInputs;
+	ret->Ele.NInputs = NInputs;
 	ret->Ele.Outputs = &ret->_links[0];
-	ret->Ele.Inputs = &ret->_links[1];
+	ret->Ele.Inputs = &ret->_links[NInputs];
 	return &ret->Ele;
 }
 
 static void _Update(tElement *Ele)
 {
 	t_element	*this = (t_element *)Ele;
+	 int	i;
 	
 	if( this->Delay == 0 ) {
-		if( GetLink(Ele->Inputs[0]) )
-			RaiseLink(Ele->Outputs[0]);
+		for( i = 0; i < Ele->NInputs; i ++ )
+		{
+			if( GetLink(Ele->Inputs[i]) )
+				RaiseLink(Ele->Outputs[i]);
+		}
 	}
 	else {
-		if( this->Cache[ (this->Pos - 1 + this->Delay) % this->Delay ] )
-			RaiseLink(Ele->Outputs[0]);
+		 int	readOfs = ((this->Pos + 1) % this->Delay) * Ele->NInputs;
+		 int	writeOfs = this->Pos * Ele->NInputs;
+		
+		for( i = 0; i < Ele->NInputs; i ++ )
+		{
+			//printf("Cache[%i] = %i\n", readOfs + i, this->Cache[ readOfs + i ]);
+			if( this->Cache[ readOfs + i ] )
+				RaiseLink(Ele->Outputs[i]);
 	
-		this->Cache[ this->Pos ] = GetLink(Ele->Inputs[0]);
+			this->Cache[ writeOfs + i ] = GetLink(Ele->Inputs[i]);
+		}
 		this->Pos ++;
 		if(this->Pos == this->Delay)	this->Pos = 0;
 	}
@@ -55,7 +69,7 @@ static void _Update(tElement *Ele)
 
 tElementDef gElement_DELAY = {
 	NULL, "DELAY",
-	1, 1,
+	1, -1,
 	_Create,
 	_Update
 };

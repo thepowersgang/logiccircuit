@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <stdint.h>
 
+#define	USE_LINKS	1
+
 /**
  * \brief Line array (group) definition structure
  */
@@ -230,14 +232,42 @@ tGroupDef *GetGroup(const char *Name)
 }
 
 /**
+ * \brief Create a new link value
+ */
+tLinkValue *LinkValue_Create(void)
+{
+	tLinkValue	*ret;
+	ret = malloc(sizeof(tLinkValue));
+	//if(!ret)	return NULL;
+	ret->NDrivers = 0;
+	ret->Value = 0;
+	ret->ReferenceCount = 1;
+	return ret;
+}
+
+void LinkValue_Ref(tLinkValue *Value)
+{
+	Value->ReferenceCount ++;
+}
+
+void LinkValue_Deref(tLinkValue *Value)
+{
+	Value->ReferenceCount --;
+	if( !Value->ReferenceCount ) {
+		free(Value);
+	}
+}
+
+/**
  * \brief Create an unnamed link
  */
 tLink *CreateAnonLink(void)
 {
 	tLink	*ret = malloc(sizeof(tLink)+1);
-	ret->Value = 0;
+	ret->Value = LinkValue_Create();
 	ret->Link = NULL;
 	ret->Name[0] = '\0';
+	ret->ReferenceCount = 0;
 	
 	if( gpCurUnit ) {
 		ret->Next = gpCurUnit->Links;
@@ -270,9 +300,10 @@ tLink *CreateNamedLink(const char *Name)
 	}
 	
 	ret = malloc(sizeof(tLink) + strlen(Name) + 1);
-	ret->Value = 0;
+	ret->Value = LinkValue_Create();
 	strcpy(ret->Name, Name);
 	ret->Link = NULL;
+	ret->ReferenceCount = 1;
 	
 	if(prev) {
 		ret->Next = prev->Next;
@@ -304,6 +335,7 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 	char	namePrefix[prefixLen+1];
 	 int	i;
 	
+	// Check input counts
 	if( Inputs->NItems != Unit->Inputs.NItems ) {
 		// TODO: Error message?
 		fprintf(stderr, "ERROR: %s takes %i lines, %i given\n",
@@ -311,10 +343,9 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 		return NULL;
 	}
 	
+	// Create the prefix to add to the name
 	snprintf(namePrefix, prefixLen+1, "%s#%i", Unit->Name, Unit->InstanceCount);
 	Unit->InstanceCount ++;
-	
-	//printf("namePrefix = '%s'\n", namePrefix);
 	
 	// Create duplicates of all links (renamed)
 	for( link = Unit->Links; link; link = link->Next )
@@ -322,23 +353,24 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 		tLink	*def, *prev = NULL;
 		 int	len = 0;
 		
+		// Only append prefix to named links
 		if( link->Name[0] )	len = prefixLen + strlen(link->Name);
 		
+		// Create link
 		newLink = malloc( sizeof(tLink) + len + 1 );
+		// Only append prefix to named links
 		if( link->Name[0] ) {
 			strcpy(newLink->Name, namePrefix);
 			strcat(newLink->Name, link->Name);
-			//printf("newLink->Name = '%s' ('%s' + '%s')\n",
-			//	newLink->Name, namePrefix, link->Name);
 		}
 		else
 			newLink->Name[0] = '\0';
 		newLink->Link = NULL;
-		newLink->Value = 0;
+		newLink->Value = LinkValue_Create();
 		
-		link->Backlink = newLink;	// Set a back link to speed up later stuff
+		link->Backlink = newLink;	// Set a back link to speed up remapping inputs
 		
-		// Append
+		// Append to the current list
 		def = gpCurUnit ? gpCurUnit->Links : gpLinks;
 		for( ; def; prev = def, def = def->Next )
 		{
@@ -360,36 +392,59 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 		}
 	}
 	
+	// Re-resolve links
+	for( link = Unit->Links; link; link = link->Next )
+	{
+		if( link->Link ) {
+			// Set new links's ->Link field
+			link->Backlink->Link = link->Link->Backlink;
+			// And merge the two value
+			LinkValue_Ref(link->Link->Backlink->Value);
+			LinkValue_Deref(link->Backlink->Value);
+			link->Backlink->Value = link->Link->Backlink->Value;
+		}
+	}
+	
 	// Replace input lines
 	for( i = 0; i < Unit->Inputs.NItems; i ++ )
 	{
 		link = Unit->Inputs.Items[i]->Backlink;
+		#if USE_LINKS
 		if( link->Link )
 			link->Link->Link = Inputs->Items[i];
 		link->Link = Inputs->Items[i];
-		printf("%s replaced with %s\n",
-			link->Name, Inputs->Items[i]->Name);
+		#endif
+		
+		// Link values
+		LinkValue_Ref( Inputs->Items[i]->Value );
+		LinkValue_Deref( link->Value );
+		link->Value = Inputs->Items[i]->Value;
 	}
 	
 	// Duplicate elements and replace links
 	for( ele = Unit->Elements; ele; ele = ele->Next )
 	{
 		tElement	*newele;
-		//printf("%p %p %i inputs\n", ele, ele->Type, ele->NInputs);
+		
 		newele = ele->Type->Create( ele->Param, ele->NInputs, ele->Inputs );
 		newele->Type = ele->Type;
 		newele->Param = ele->Param;
 		newele->NInputs = ele->NInputs;
 		for( i = 0; i < ele->NInputs; i ++ ) {
-			//printf("%i: %p\n", i, ele->Inputs[i]);
 			newele->Inputs[i] = ele->Inputs[i]->Backlink;
-			if( newele->Inputs[i]->Link )
+			#if USE_LINKS
+			if( newele->Inputs[i]->Link ) {
+				//printf("linked input %i to %p\n", i, newele->Inputs[i]->Link);
 				newele->Inputs[i] = newele->Inputs[i]->Link;
+			}
+			#endif
 		}
 		for( i = 0; i < ele->NOutputs; i ++ ) {
 			newele->Outputs[i] = ele->Outputs[i]->Backlink;
+			#if USE_LINKS
 			if( newele->Outputs[i]->Link )
 				newele->Outputs[i] = newele->Outputs[i]->Link;
+			#endif
 		}
 		
 		if( gpCurUnit ) {
@@ -427,7 +482,6 @@ tList *CreateUnit(const char *Name, int Param, tList *Inputs)
 	for( tpl = gpUnits; tpl; tpl = tpl->Next )
 	{
 		// We can't recurse, so also check that
-		//printf("%p == %p && !strcmp('%s', '%s')\n", tpl, gpCurUnit,Name, tpl->Name);
 		if( tpl != gpCurUnit && strcmp(Name, tpl->Name) == 0 ) {
 			return AppendUnit(tpl, Inputs);
 		}
@@ -441,6 +495,7 @@ tList *CreateUnit(const char *Name, int Param, tList *Inputs)
 	}
 	if(!def)	return NULL;
 	
+	// Sanity check input numbers
 	if( Inputs->NItems < def->MinInput ) {
 		printf("%s requires at least %i input lines\n", def->Name, def->MinInput);
 		return NULL;
@@ -456,7 +511,6 @@ tList *CreateUnit(const char *Name, int Param, tList *Inputs)
 	ele->Type = def;	// Force type to be set
 	ele->Param = Param;
 	for( i = 0; i < Inputs->NItems; i ++ ) {
-		//printf("%i = %p\n", i, Inputs->Items[i]);
 		ele->Inputs[i] = Inputs->Items[i];
 	}
 	
@@ -594,9 +648,17 @@ int MergeLinks(tList *Dest, tList *Src)
 	
 	for( i = 0; i < Dest->NItems; i ++ )
 	{
-		if( Src->Items[i]->Link )
-			Src->Items[i]->Link->Link = Dest->Items[i];
+		//printf("%p(%s) <= %p(%s)\n",
+		//	Dest->Items[i], Dest->Items[i]->Name,
+		//	Src->Items[i], Src->Items[i]->Name
+		//	);
+		LinkValue_Ref( Src->Items[i]->Value );
+		LinkValue_Deref( Dest->Items[i]->Value );
+		Dest->Items[i]->Value = Src->Items[i]->Value;
+		
+		#if USE_LINKS
 		Src->Items[i]->Link = Dest->Items[i];
+		#endif
 	}
 	return 0;
 }
