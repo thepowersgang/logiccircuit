@@ -35,13 +35,13 @@ static void _Update(tElement *Ele)
 	t_element	*this = (t_element *)Ele;
 	
 	if( !this->CurVal ) {
-		if( Ele->Inputs[0]->Value ) {
+		if( GetLink(Ele->Inputs[0]) ) {
 			this->CurVal = 1;
-			Ele->Outputs[0]->NDrivers ++;
+			RaiseLink(Ele->Outputs[0]);
 		}
 	}
 	else {
-		if( !Ele->Inputs[0]->Value )
+		if( !GetLink(Ele->Inputs[0]) )
 			this->CurVal = 0;
 	}
 }

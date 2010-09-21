@@ -40,14 +40,14 @@ static void _Update(tElement *Ele)
 	t_element	*this = (t_element *)Ele;
 	
 	if( this->Delay == 0 ) {
-		if(Ele->Inputs[0]->Value)
-			Ele->Outputs[0]->NDrivers ++;
+		if( GetLink(Ele->Inputs[0]) )
+			RaiseLink(Ele->Outputs[0]);
 	}
 	else {
 		if( this->Cache[ (this->Pos - 1 + this->Delay) % this->Delay ] )
-			Ele->Outputs[0]->NDrivers ++;
+			RaiseLink(Ele->Outputs[0]);
 	
-		this->Cache[ this->Pos ] = Ele->Inputs[0]->Value;
+		this->Cache[ this->Pos ] = GetLink(Ele->Inputs[0]);
 		this->Pos ++;
 		if(this->Pos == this->Delay)	this->Pos = 0;
 	}

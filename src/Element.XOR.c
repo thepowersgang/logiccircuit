@@ -29,10 +29,10 @@ static void _Update(tElement *Ele)
 	 int	i;
 	for( i = 0; i < Ele->NInputs; i++ )
 	{
-		out = out ^ (!!Ele->Inputs[i]->Value);
+		out = out ^ GetLink(Ele->Inputs[i]);
 	}
 	if( out )
-		Ele->Outputs[0]->NDrivers ++;
+		RaiseLink(Ele->Outputs[0]);
 }
 
 tElementDef gElement_XOR = {

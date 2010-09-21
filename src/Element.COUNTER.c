@@ -32,17 +32,24 @@ static void _Update(tElement *Ele)
 {
 	t_element	*this = (t_element *)Ele;
 	 int	i;
-	for( i = 0; i < this->Size; i ++ ) {
-		if( this->Pos & (1 << i) )
-			Ele->Outputs[i]->NDrivers ++;
-	}
 	
-	if( Ele->Inputs[1]->Value )
-		this->Pos ++;
-	if( Ele->Inputs[0]->Value )
+	// Reset
+	if( GetLink(Ele->Inputs[0]) )
 		this->Pos = 0;
+	
+	// Increment
+	if( GetLink(Ele->Inputs[1]) )
+		this->Pos ++;
+	
+	// Wrap
 	if( this->Pos == (1 << this->Size) )
 		this->Pos = 0;
+	
+	// Output
+	for( i = 0; i < this->Size; i ++ ) {
+		if( this->Pos & (1 << i) )
+			RaiseLink(Ele->Outputs[i]);
+	}
 }
 
 tElementDef gElement_COUNTER = {

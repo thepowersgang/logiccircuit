@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
+#include <string.h>
 
 // === IMPORTS ===
 extern tElementDef	*gpElementDefs;
@@ -65,8 +66,8 @@ int main(int argc, char *argv[])
 			link->Link = link->Link->Link;
 		
 		// Zero out
-		link->NDrivers = 0;
-		link->Value = 0;
+		link->Value->NDrivers = 0;
+		link->Value->Value = 0;
 		
 		// Ignore unamed
 		if( !link->Name[0] )
@@ -116,14 +117,14 @@ int main(int argc, char *argv[])
 		
 		// Clear drivers
 		for( link = gpLinks; link; link = link->Next ) {
-			link->NDrivers = 0;
+			link->Value->NDrivers = 0;
 			// Ensure 0 and 1 stay as 0 and 1
 			if( link->Name[0] == '1' ) {
-				link->Value = 1;
-				link->NDrivers = 1;
+				link->Value->Value = 1;
+				link->Value->NDrivers = 1;
 			}
 			else if( link->Name[0] == '0' )
-				link->Value = 0;
+				link->Value->Value = 0;
 		}
 		
 		// Clear screen
@@ -139,10 +140,10 @@ int main(int argc, char *argv[])
 		
 		// Set values
 		for( link = gpLinks; link; link = link->Next ) {
-			link->Value = !!link->NDrivers;
-			if( link->Link && link->Value ) {
-				link->Link->NDrivers = link->NDrivers;
-				link->Link->Value = link->Value;
+			link->Value->Value = !!link->Value->NDrivers;
+			if( link->Link && link->Value->Value ) {
+				link->Link->Value->NDrivers = link->Value->NDrivers;
+				link->Link->Value->Value = link->Value->Value;
 			}
 			//if( link->bDisplay )
 			//if( link->Name[0] == '$' )
@@ -161,8 +162,8 @@ int main(int argc, char *argv[])
 			printf("%s: ", dispItem->Label);
 			for( i = 0; i < dispItem->Values.NItems; i ++ )
 			{
-				printf("%i ", dispItem->Values.Items[i]->NDrivers);
-				//printf("%i", dispItem->Values.Items[i]->Value);
+				//printf("%i ", dispItem->Values.Items[i]->Value->NDrivers);
+				printf("%i", dispItem->Values.Items[i]->Value->Value);
 			}
 			printf("\n");
 		}
@@ -190,7 +191,7 @@ int main(int argc, char *argv[])
 				// Find named link
 				for( link = gpLinks; link; link = link->Next ) {
 					if( strcmp(link->Name, argBuffer) == 0 ) {
-						printf("%s: %i\n", link->Name, link->Value);
+						printf("%s: %i\n", link->Name, link->Value->Value);
 						break;
 					}
 				}
@@ -199,7 +200,7 @@ int main(int argc, char *argv[])
 				 int	len = strlen(argBuffer);
 				for( link = gpLinks; link; link = link->Next ) {
 					if( strncmp(link->Name, argBuffer, len) == 0 ) {
-						printf("%s: %i\n", link->Name, link->Value);
+						printf("%s: %i\n", link->Name, link->Value->Value);
 					}
 				}
 			}

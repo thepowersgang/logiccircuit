@@ -25,8 +25,8 @@ static tElement *_Create(int Param, int NInputs, tLink **Inputs)
 
 static void _Update(tElement *Ele)
 {
-	if( !Ele->Inputs[0]->Value )
-		Ele->Outputs[0]->NDrivers ++;
+	if( !GetLink(Ele->Inputs[0]) )
+		RaiseLink(Ele->Outputs[0]);
 }
 
 tElementDef gElement_NOT = {
