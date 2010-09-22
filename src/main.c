@@ -191,9 +191,14 @@ int main(int argc, char *argv[])
 		// Set values
 		for( link = gpLinks; link; link = link->Next ) {
 			link->Value->Value = !!link->Value->NDrivers;
-			//if( link->bDisplay )
-			//if( link->Name[0] == '$' )
-			//	printf("%s = %i\n", link->Name, link->Value);
+			
+			// Ensure 0 and 1 stay as 0 and 1
+			if( link->Name[0] == '1' ) {
+				link->Value->Value = 1;
+				link->Value->NDrivers = 1;
+			}
+			else if( link->Name[0] == '0' )
+				link->Value->Value = 0;
 		}
 		
 		for( dispItem = gpDisplayItems; dispItem; dispItem = dispItem->Next )
@@ -201,7 +206,9 @@ int main(int argc, char *argv[])
 			// Check condition (if one condition line is high, the item is displayed)
 			for( i = 0; i < dispItem->Condition.NItems; i ++ )
 			{
-				if( dispItem->Condition.Items[i]->Value )	break;
+				if( GetLink(dispItem->Condition.Items[i]) ) {
+					break;
+				}
 			}
 			if( i == dispItem->Condition.NItems )	continue;
 			

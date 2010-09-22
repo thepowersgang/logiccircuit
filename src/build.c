@@ -32,6 +32,7 @@ typedef struct sUnitTemplate
 	tElement	*Elements;
 	tList	Inputs;	//!< Input links
 	tList	Outputs;	//!< Output links
+	tDisplayItem	*DisplayItems;
 	
 	 int	InstanceCount;	//!< Number of times the unit has been used
 	
@@ -129,15 +130,22 @@ int Unit_IsInUnit(void)
 	return !!gpCurUnit;
 }
 
-int AddDisplayItem(const char *Name, tList *Condition, tList *Values)
+tDisplayItem *AddDisplayItem(const char *Name, const tList *Condition, const tList *Values)
 {
 	tDisplayItem	*dispItem, *prev = NULL;
 	 int	pos, i;
+	tDisplayItem	**listHead;
 	
-	for( dispItem = gpDisplayItems; dispItem; prev = dispItem, dispItem = dispItem->Next )
+	
+	if( gpCurUnit )
+		listHead = &gpCurUnit->DisplayItems;
+	else
+		listHead = &gpDisplayItems;
+	
+	for( dispItem = *listHead; dispItem; prev = dispItem, dispItem = dispItem->Next )
 	{
 		if( strcmp(Name, dispItem->Label) == 0 ) {
-			return -1;
+			return NULL;
 		}
 	}
 	
@@ -163,10 +171,10 @@ int AddDisplayItem(const char *Name, tList *Condition, tList *Values)
 	}
 	else {
 		dispItem->Next = NULL;
-		gpDisplayItems = dispItem;
+		*listHead = dispItem;
 	}
 	
-	return 0;
+	return dispItem;
 }
 
 void CreateGroup(const char *Name, int Size)
@@ -330,6 +338,7 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 {
 	tLink	*link, *newLink;
 	tElement	*ele;
+	tDisplayItem	*dispItem;
 	tList	*ret;
 	 int	prefixLen = snprintf(NULL, 0, "%s#%i#", Unit->Name, Unit->InstanceCount);
 	char	namePrefix[prefixLen+1];
@@ -419,6 +428,20 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 		LinkValue_Ref( Inputs->Items[i]->Value );
 		LinkValue_Deref( link->Value );
 		link->Value = Inputs->Items[i]->Value;
+	}
+	
+	// Append display items
+	for( dispItem = Unit->DisplayItems; dispItem; dispItem = dispItem->Next )
+	{
+		tDisplayItem	*newItem;
+		
+		newItem = AddDisplayItem(dispItem->Label, &dispItem->Condition, &dispItem->Values);
+		
+		for( i = 0; i < newItem->Condition.NItems; i ++ )
+			newItem->Condition.Items[i] = newItem->Condition.Items[i]->Backlink;
+		
+		for( i = 0; i < newItem->Values.NItems; i ++ )
+			newItem->Values.Items[i] = newItem->Values.Items[i]->Backlink;
 	}
 	
 	// Duplicate elements and replace links
@@ -573,7 +596,7 @@ void AppendLine(tList *Dest, const char *Name)
  */
 int AppendGroupItem(tList *Dest, const char *Name, int Index)
 {
-	 int	len;
+	 int	len, i, digits;
 	tGroupDef	*grp = GetGroup(Name);
 	
 	//printf("AppendGroupItem: (%p, %s, %i)\n", Dest, Name, Index);
@@ -588,12 +611,15 @@ int AppendGroupItem(tList *Dest, const char *Name, int Index)
 		return 2;
 	}
 	
+	digits = 0;
+	for( i = grp->Size-1; i; i /= 10 )	digits ++;
+	
 	// Get string length
-	len = snprintf(NULL, 0, "%s[%i]", Name, Index);
+	len = snprintf(NULL, 0, "%s[%*i]", Name, digits, Index);
 	
 	{
 		char	newname[len + 1];
-		snprintf(newname, len+1, "%s[%i]", Name, Index);
+		snprintf(newname, len+1, "%s[%*i]", Name, digits, Index);
 		
 		Dest->NItems ++;
 		Dest->Items = realloc( Dest->Items, Dest->NItems * sizeof(tLink*) );
@@ -609,6 +635,7 @@ int AppendGroup(tList *Dest, const char *Name)
 {
 	tGroupDef	*grp = GetGroup(Name);
 	 int	i, ofs, len;
+	 int	digits = 0;
 	
 	//printf("AppendGroup: (%p, %s)\n", Dest, Name);
 	if(!grp) {
@@ -619,14 +646,16 @@ int AppendGroup(tList *Dest, const char *Name)
 	
 	len = snprintf(NULL, 0, "%s[%i]", Name, grp->Size-1);
 	
+	for( i = grp->Size-1; i; i /= 10 )	digits ++;
+	
 	ofs = Dest->NItems;
 	Dest->NItems += grp->Size;
 	Dest->Items = realloc( Dest->Items, Dest->NItems * sizeof(tLink*) );
 	
-	for( i = 0; i < grp->Size; i ++ )
+	for( i = grp->Size; i --; )
 	{
 		char	newname[len + 1];
-		snprintf(newname, 100, "%s[%i]", Name, i);
+		snprintf(newname, 100, "%s[%*i]", Name, digits, i);
 		
 		Dest->Items[ofs+i] = CreateNamedLink(newname);
 	}

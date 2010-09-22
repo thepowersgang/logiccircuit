@@ -30,8 +30,9 @@ extern int	Unit_IsInUnit(void);
 
 /**
  * \brief Add a display item
+ * \return Pointer to the item
  */
-extern int	AddDisplayItem(const char *Name, tList *Condition, tList *Values);
+extern tDisplayItem	*AddDisplayItem(const char *Name, const tList *Condition, const tList *Values);
 
 /**
  * \brief Create a line group
