@@ -9,7 +9,6 @@
 #include <string.h>
 
 #define PRINT_ELEMENTS	0
-#define PRINT_LINKS	0
 
 // === IMPORTS ===
 extern tElementDef	*gpElementDefs;
@@ -34,6 +33,7 @@ void	SigINT_Handler(int Signum);
 
 // === GLOBALS ===
  int	gbRunSimulation = 1;
+ int	gbPrintLinks = 0;
 
 // === CODE ===
 int main(int argc, char *argv[])
@@ -58,6 +58,14 @@ int main(int argc, char *argv[])
 	// Load Circuit file(s)
 	for( i = 1; i < argc; i ++ )
 	{
+		if( argv[i][0] == '-' ) {
+			if( strcmp(argv[i], "-links") == 0 )
+				gbPrintLinks = 1;
+			else {
+				// ERROR
+			}
+		}
+		
 		if( ParseFile(argv[i]) ) {
 			return -1;
 		}
@@ -90,24 +98,28 @@ int main(int argc, char *argv[])
 //		printf("- %p %s\n", link, link->Name);
 	}
 	
-	#if PRINT_LINKS
 	// Print links
-	// > Scan all links and find ones that share a value pointer
-	for( link = gpLinks; link; link = link->Next )
+	// > Scan all links and find ones that share a value pointer 
+	if( gbPrintLinks )
 	{
-		tLink	*link2;
-		if(link->Backlink)	continue;	// Skip ones already done
-		printf("%p:", link->Value);
-		for( link2 = gpLinks; link2; link2 = link2->Next )
+		for( link = gpLinks; link; link = link->Next )
 		{
-			if(link2->Backlink)	continue;
-			if(link2->Value != link->Value)	continue;
-			printf(" %p(%s)", link2, link2->Name);
-			link2->Backlink = link;	// Make backlink non-zero
+			tLink	*link2;
+			if(link->Backlink)	continue;	// Skip ones already done
+			printf("%p:", link->Value);
+			for( link2 = gpLinks; link2; link2 = link2->Next )
+			{
+				if(link2->Backlink)	continue;
+				if(link2->Value != link->Value)	continue;
+				if( link2->Name[0] )
+					printf(" %s", link2->Name);
+				else
+					printf(" %p", link2);
+				link2->Backlink = link;	// Make backlink non-zero
+			}
+			printf("\n");
 		}
-		printf("\n");
 	}
-	#endif
 	
 	#if 1
 	for( ele = gpElements; ele; ele = ele->Next )

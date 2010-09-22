@@ -13,8 +13,8 @@
 $_clear = AND $enable, $clear
 $_set = AND $enable, $set
 
-;$value = AND (NOT $_clear), (OR $value, $_set)
-$value = XOR (XOR $_set, $value), (DELAY $_clear)
+$value = AND (NOT $_clear), (OR $value, $_set)
+;$value = XOR (XOR $_set, $value), (DELAY $_clear)
 
 $ret = AND $enable, $value
 
