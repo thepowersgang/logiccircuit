@@ -512,6 +512,11 @@ int GetToken(tParser *Parser)
 		// Whitespace
 		while( isspace(*Parser->CurPos) && *Parser->CurPos != '\n' )
 			Parser->CurPos ++;
+		// Allow escaping of newlines
+		if( *Parser->CurPos == '\\' && Parser->CurPos[1] == '\n' ) {
+			Parser->CurPos += 2;
+			continue;
+		}
 		
 		#if 1
 		// ASM Comments

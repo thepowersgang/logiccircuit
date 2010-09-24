@@ -81,7 +81,10 @@ $next_stage = DELAY $reg_ready
 
 // Next instruction
 $next_stage = PULSE $next_instruction
-$reg_pc_write, @reg_pc_out, $NULL = ADDER_16BIT (PULSE $next_instruction), @reg_pc_in, 1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0
+$reg_pc_write, @reg_pc_out, $NULL = ADDER_16BIT (PULSE $next_instruction),\
+	@reg_pc_in, \
+	1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, \
+	0
 $stage_reset = DELAY{8} $reg_pc_write
 
 
