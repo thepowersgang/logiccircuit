@@ -61,6 +61,8 @@ enum eTokens
 	TOK_PAREN_OPEN, TOK_PAREN_CLOSE,
 	TOK_BRACE_OPEN, TOK_BRACE_CLOSE,
 	TOK_SQUARE_OPEN,TOK_SQUARE_CLOSE,
+	
+	TOK_T_VALUE
 };
 
 const char * const casTOKEN_NAMES[] = {
@@ -69,7 +71,9 @@ const char * const casTOKEN_NAMES[] = {
 	"TOK_LINE", "TOK_GROUP", "TOK_NEWLINE", "TOK_COMMA", "TOK_ASSIGN",
 	"TOK_PAREN_OPEN", "TOK_PAREN_CLOSE",
 	"TOK_BRACE_OPEN", "TOK_BRACE_CLOSE",
-	"TOK_SQUARE_OPEN","TOK_SQUARE_CLOSE"
+	"TOK_SQUARE_OPEN","TOK_SQUARE_CLOSE",
+	
+	"TOK_LINE, TOK_GROUP, TOK_NUMBER or TOK_PAREN_OPEN"
 };
 
 // === PROTOTYPES ===
@@ -335,8 +339,8 @@ int ParseLine(tParser *Parser)
 			do {
 				if( ParseValue(Parser, &values) ) {
 					SyntaxError(Parser,
-						"Unexpected %s, expected TOK_NUMBER, TOK_LINE or TOK_GROUP",
-						casTOKEN_NAMES[ Parser->Token ]);
+						"Unexpected %s, expected %s",
+						casTOKEN_NAMES[TOK_T_VALUE], casTOKEN_NAMES[ Parser->Token ]);
 				}
 				GetToken(Parser);
 			} while(Parser->Token == TOK_COMMA);
@@ -376,9 +380,7 @@ int ParseLine(tParser *Parser)
 		
 		// Check for assignmenr
 		if( Parser->Token != TOK_ASSIGN ) {
-			// ERROR:
-			fprintf(stderr, "%s:%i: error: Expected '=', found %s '%s'\n",
-				Parser->File, Parser->Line,
+			SyntaxError(Parser, "Expected '=', found %s '%s'",
 				casTOKEN_NAMES[Parser->Token], Parser->TokenStr);
 			return -1;
 		}
@@ -390,7 +392,7 @@ int ParseLine(tParser *Parser)
 	// Assign
 	if( MergeLinks( &destArray, outputs ) )
 		SyntaxError(Parser,
-			"Mismatch of left and right counts (%i != %i)\n",
+			"Mismatch of left and right counts (%i != %i)",
 			destArray.NItems, outputs->NItems
 			);
 	
