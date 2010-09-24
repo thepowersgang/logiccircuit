@@ -49,11 +49,14 @@ int main(int argc, char *argv[])
 	ADD_ELEDEF(NAND);	ADD_ELEDEF(NOR);	ADD_ELEDEF(NXOR);
 	
 	ADD_ELEDEF(NOT);
-	ADD_ELEDEF(CLOCK);
-	ADD_ELEDEF(DELAY);
-	ADD_ELEDEF(PULSE);
 	ADD_ELEDEF(COUNTER);
 	ADD_ELEDEF(DEMUX);
+	
+	ADD_ELEDEF(CLOCK);
+	
+	ADD_ELEDEF(DELAY);
+	ADD_ELEDEF(PULSE);
+	ADD_ELEDEF(HOLD);
 	
 	// Load Circuit file(s)
 	for( i = 1; i < argc; i ++ )

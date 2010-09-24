@@ -1,22 +1,26 @@
 ; Latch
-; Usage: LATCH <enable>, <clear>, <set>
-; - enable: Enables the latch IO
+; Usage: LATCH <clear>, <set>
+; - pulse:	Signal to propogate for delays
 ; - clear:	Set to 1 to reset the latch to 0
 ; - set:	Set to 1 to set the latch to 1
 ; Delays:
-; - Writing: 4
-; - Reading: 1
+; - Writing: 3
+; - Reading: 0
 #defunit LATCH
-#input $enable, $clear, $set
+#input $pulse, $clr, $set
 #output $ready, $ret
 
-$_clear = AND $enable, $clear
-$_set = AND $enable, $set
+; Ensure that lines are held for 2 cycles
+$_set = DELAY $set
+$_clr = DELAY $clr
 
-$value = AND (NOT $_clear), (OR $value, $_set)
-;$value = XOR (XOR $_set, $value), (DELAY $_clear)
+; Have two latches (1 cycle out of sync) to hold better
+$value = AND (NOT $clr), (OR $value, $set)
+$value2 = AND (NOT $_clr), (OR $value, $_set)
 
-$ret = AND $enable, $value
+$ret = DELAY $value
+$ret = DELAY $value2
+$ready = DELAY{3} $pulse
 
 #endunit
 
@@ -39,10 +43,7 @@ $ret = AND $enable, $value
 $reset = AND (DELAY $enable), (DELAY $write), (NOT $datain)
 $set = AND (DELAY $enable), (DELAY $write), (DELAY $datain)
 
-; Feedback loop! for storage
-;$value = AND (NOT $reset), (OR (DELAY{2} $value), $set)
-;$value = AND (NOT $reset), (OR $value, $set)
-$value = XOR (XOR $set, $value), (DELAY $reset)
+$_ready, $value = LATCH $enable, $reset, $set
 
 ; State: 0
 ; W V | Out
@@ -57,7 +58,7 @@ $value = XOR (XOR $set, $value), (DELAY $reset)
 ; 1 0 | 0
 ; 1 1 | 1
 
-$ret = AND (DELAY{5} $enable), $value
-$ready = DELAY{6} $enable
+$ret = AND $_ready, $value
+$ready = DELAY $_ready
 
 #endunit

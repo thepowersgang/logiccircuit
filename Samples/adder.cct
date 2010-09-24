@@ -4,10 +4,8 @@
 #input $val1, $val2, $carry_in
 #output $ret, $carry_out
 
-$_ret = XOR $val1, $val2, $carry_in
+$ret       = DELAY (XOR $val1, $val2, $carry_in)
 $carry_out = OR (AND $val1, $val2), (AND $val1, $carry_in), (AND $val2, $carry_in)
-
-$ret = DELAY $_ret	; Synchronise outputs
 
 #endunit
 
@@ -50,6 +48,12 @@ $ready = DELAY{17} $enable
 #output $ready, @ret[16], $carry_out
 #array _ret 16
 
+$is_active = HOLD{32} $enable
+
+#display $is_active "Adder - Val1 " @val1
+#display $is_active "Adder - Val2 " @val2
+#display $is_active "Adder - _ret " @_ret
+
 @_ret[ 0], $carry0  = ADDER @val1[ 0], @val2[ 0], $carry_in
 @_ret[ 1], $carry1  = ADDER @val1[ 1], @val2[ 1], $carry0
 @_ret[ 2], $carry2  = ADDER @val1[ 2], @val2[ 2], $carry1
@@ -84,8 +88,8 @@ $ready = DELAY{17} $enable
 @ret[14] = AND (DELAY{32} $enable), (DELAY{ 2} @_ret[14])
 @ret[15] = AND (DELAY{32} $enable), @_ret[15]
 
-$carry_out = AND (DELAY{16} $enable), $carry7
+$carry_out = AND (DELAY{32} $enable), $carry7
 
-$ready = DELAY{17} $enable
+$ready = DELAY{33} $enable
 
 #endunit

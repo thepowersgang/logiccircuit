@@ -133,6 +133,17 @@ int ParseValue(tParser *Parser, tList *destList)
 				AppendLine( destList, "1" );
 		}
 		break;
+	
+	case TOK_PAREN_OPEN:
+		{
+		tList	*tmplist;
+		tmplist = ParseOperation(Parser);
+		AppendList(destList, tmplist);
+		List_Free(tmplist);
+		SyntaxAssert(Parser, GetToken(Parser), TOK_PAREN_CLOSE);
+		}
+		break;
+	
 	default:
 		return 1;
 	}
@@ -183,16 +194,9 @@ void *ParseOperation(tParser *Parser)
 		PutBack(Parser);
 		do {
 			if( ParseValue(Parser, &inputs) != 0) {
-				tList	*tmplist;
-				if( Parser->Token != TOK_PAREN_OPEN ) {
-					SyntaxError(Parser,
-						"Unexpected %s, expected TOK_NUMBER, TOK_LINE, TOK_GROUP or TOK_PAREN_OPEN",
-						casTOKEN_NAMES[ Parser->Token ]);
-				}
-				tmplist = ParseOperation(Parser);
-				AppendList(&inputs, tmplist);
-				List_Free(tmplist);
-				SyntaxAssert(Parser, GetToken(Parser), TOK_PAREN_CLOSE);
+				SyntaxError(Parser,
+					"Unexpected %s, expected TOK_NUMBER, TOK_LINE, TOK_GROUP or TOK_PAREN_OPEN",
+					casTOKEN_NAMES[ Parser->Token ]);
 			}
 			
 			GetToken(Parser);
@@ -221,7 +225,6 @@ void *ParseOperation(tParser *Parser)
  */
 int ParseLine(tParser *Parser)
 {
-	 int	tok;
 	tList	destArray = {0};
 	tList	*outputs;
 	
@@ -360,53 +363,25 @@ int ParseLine(tParser *Parser)
 		return 0;
 	}
 	
-	// Standard Assignment Line
-	PutBack(Parser);
-	do {
-		tok = GetToken(Parser);
-		switch( tok )
+	// If there are parameters
+	if( Parser->Token != TOK_IDENT )
+	{
+		// Standard Assignment Line
+		PutBack(Parser);
+		while( ParseValue(Parser, &destArray) == 0 )
 		{
-		case TOK_LINE:
-			//printf("%s,", Parser->TokenStr);
-			AppendLine( &destArray, Parser->TokenStr );
-			break;
-		case TOK_GROUP:
-			{
-			char	name[Parser->TokenLength+1];
-			strcpy(name, Parser->TokenStr);
-			//printf("%s,", Parser->TokenStr);
-			
-			tok = GetToken(Parser);
-			if( tok == TOK_SQUARE_OPEN ) {
-				SyntaxAssert( Parser, GetToken(Parser), TOK_NUMBER );
-				
-				// TODO: Handle ranges
-				if( AppendGroupItem( &destArray, name, atoi(Parser->TokenStr) ) )
-					SyntaxError(Parser, "Error referencing group");
-				
-				SyntaxAssert( Parser, GetToken(Parser), TOK_SQUARE_CLOSE );
-			}
-			else {
-				PutBack(Parser);
-				if( AppendGroup( &destArray, name ) )
-					SyntaxError(Parser, "Error referencing group");
-			}
-			}
-			break;
-		default:
-			SyntaxError(Parser, "Expected TOK_LINE or TOK_GROUP, got %s", casTOKEN_NAMES[tok]);
+			if( GetToken(Parser) != TOK_COMMA )
+				break;
+		}
+		
+		// Check for assignmenr
+		if( Parser->Token != TOK_ASSIGN ) {
+			// ERROR:
+			fprintf(stderr, "%s:%i: error: Expected '=', found %s '%s'\n",
+				Parser->File, Parser->Line,
+				casTOKEN_NAMES[Parser->Token], Parser->TokenStr);
 			return -1;
 		}
-		tok = GetToken(Parser);
-	} while( tok == TOK_COMMA );
-	
-	// Check for assignmenr
-	if( tok != TOK_ASSIGN ) {
-		// ERROR:
-		fprintf(stderr, "%s:%i: error: Expected '=', found %s (%s)\n",
-			Parser->File, Parser->Line,
-			casTOKEN_NAMES[tok], Parser->TokenStr);
-		return -1;
 	}
 	
 	// Get gate (or gate chain)

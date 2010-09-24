@@ -25,40 +25,26 @@ $ready, @ret[7] = MEMORY_CELL $enable, $write, @datain[7]
 #input $enable, $write, @datain[16]
 #output $ready, @ret[16]
 
-$ready, @ret[0]  = MEMORY_CELL $enable, $write, @datain[0]
-$ready, @ret[1]  = MEMORY_CELL $enable, $write, @datain[1]
-$ready, @ret[2]  = MEMORY_CELL $enable, $write, @datain[2]
-$ready, @ret[3]  = MEMORY_CELL $enable, $write, @datain[3]
-$ready, @ret[4]  = MEMORY_CELL $enable, $write, @datain[4]
-$ready, @ret[5]  = MEMORY_CELL $enable, $write, @datain[5]
-$ready, @ret[6]  = MEMORY_CELL $enable, $write, @datain[6]
-$ready, @ret[7]  = MEMORY_CELL $enable, $write, @datain[7]
-$ready, @ret[8]  = MEMORY_CELL $enable, $write, @datain[8]
-$ready, @ret[9]  = MEMORY_CELL $enable, $write, @datain[9]
-$ready, @ret[10] = MEMORY_CELL $enable, $write, @datain[10]
-$ready, @ret[11] = MEMORY_CELL $enable, $write, @datain[11]
-$ready, @ret[12] = MEMORY_CELL $enable, $write, @datain[12]
-$ready, @ret[13] = MEMORY_CELL $enable, $write, @datain[13]
-$ready, @ret[14] = MEMORY_CELL $enable, $write, @datain[14]
-$ready, @ret[15] = MEMORY_CELL $enable, $write, @datain[15]
+%assign i 0
+%rep 16
+$ready, @ret[i]  = MEMORY_CELL $enable, $write, @datain[i]
+%assign i i+1
+%endrep
 
 #endunit
 
-; LATCH_BYTE <enable>, <clear>, <datain[8]>
+; LATCH_BYTE <clear>, <datain[8]>
 ; - 1 byte of latches
-; - Has a delay of LATCH (4)
+; - Has a delay of LATCH (2)
 #defunit LATCH_BYTE
-#input $enable, $clear, @datain[8]
+#input $clear, @datain[8]
 #output @ret[8]
 
-$_unused, @ret[0] = LATCH $enable, $clear, @datain[0]
-$_unused, @ret[1] = LATCH $enable, $clear, @datain[1]
-$_unused, @ret[2] = LATCH $enable, $clear, @datain[2]
-$_unused, @ret[3] = LATCH $enable, $clear, @datain[3]
-$_unused, @ret[4] = LATCH $enable, $clear, @datain[4]
-$_unused, @ret[5] = LATCH $enable, $clear, @datain[5]
-$_unused, @ret[6] = LATCH $enable, $clear, @datain[6]
-$_unused, @ret[7] = LATCH $enable, $clear, @datain[7]
+%assign i 0
+%rep 8
+$NULL, @ret[i] = LATCH 1, $clear, @datain[i]
+%assign i i+1
+%endrep
 
 #endunit
 
@@ -66,12 +52,12 @@ $_unused, @ret[7] = LATCH $enable, $clear, @datain[7]
 ; - 1 byte of latches
 ; - Has a delay of LATCH (4)
 #defunit LATCH_WORD
-#input $enable, $clear, @datain[16]
+#input $clear, @datain[16]
 #output @ret[16]
 
 %assign i 0
 %rep 16
-$_unused, @ret[i] = LATCH $enable, $clear, @datain[i]
+$NULL, @ret[i] = LATCH 1, $clear, @datain[i]
 %assign i i+1
 %endrep
 
@@ -87,22 +73,11 @@ $_unused, @ret[i] = LATCH $enable, $clear, @datain[i]
 
 @select = DEMUX{4} $enable, @addr[0], @addr[1], @addr[2], @addr[3]
 
-$ready, @ret = MEMORY_BYTE @select[0], $write, @datain
-$ready, @ret = MEMORY_BYTE @select[1], $write, @datain
-$ready, @ret = MEMORY_BYTE @select[2], $write, @datain
-$ready, @ret = MEMORY_BYTE @select[3], $write, @datain
-$ready, @ret = MEMORY_BYTE @select[4], $write, @datain
-$ready, @ret = MEMORY_BYTE @select[5], $write, @datain
-$ready, @ret = MEMORY_BYTE @select[6], $write, @datain
-$ready, @ret = MEMORY_BYTE @select[7], $write, @datain
-$ready, @ret = MEMORY_BYTE @select[8], $write, @datain
-$ready, @ret = MEMORY_BYTE @select[9], $write, @datain
-$ready, @ret = MEMORY_BYTE @select[10], $write, @datain
-$ready, @ret = MEMORY_BYTE @select[11], $write, @datain
-$ready, @ret = MEMORY_BYTE @select[12], $write, @datain
-$ready, @ret = MEMORY_BYTE @select[13], $write, @datain
-$ready, @ret = MEMORY_BYTE @select[14], $write, @datain
-$ready, @ret = MEMORY_BYTE @select[15], $write, @datain
+%assign i 0
+%rep 16
+$ready, @ret = MEMORY_BYTE @select[i], $write, @datain
+%assign i i+1
+%endrep
 
 #endunit
 
