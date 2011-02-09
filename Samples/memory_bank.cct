@@ -75,7 +75,7 @@ $NULL, @ret[i] = LATCH 1, $clear, @datain[i]
 
 %assign i 0
 %rep 16
-$ready, @ret = MEMORY_BYTE @select[i], $write, @datain
+$ready, @ret = MEMORY_BYTE @select[i], (DELAY $write), (DELAY @datain)
 %assign i i+1
 %endrep
 

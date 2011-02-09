@@ -38,25 +38,40 @@ static tElement *_Create(int Param, int NInputs, tLink **Inputs)
 	return &ret->Ele;
 }
 
+// DELAY{1}:
+// if(GetLink()) RaiseLink()
+// DELAY{2}:
+// if(saved) RaiseLink()
+// saved = GetLink();
+// DELAY{n}:
+// if(saved[(pos+1)%(n-1)])
+//   RaiseLink()
+// saved[pos%(n-1)] = GetLink();
+
 static void _Update(tElement *Ele)
 {
 	t_element	*this = (t_element *)Ele;
 	 int	i;
 	
-	if( this->Delay == 0 ) {
+	// Single cycle delay
+	if( this->Delay == 0 )
+	{
 		for( i = 0; i < Ele->NInputs; i ++ )
 		{
 			if( GetLink(Ele->Inputs[i]) )
 				RaiseLink(Ele->Outputs[i]);
 		}
 	}
-	else {
+	else
+	{
 		 int	readOfs = ((this->Pos + 1) % this->Delay) * Ele->NInputs;
 		 int	writeOfs = this->Pos * Ele->NInputs;
 		
 		for( i = 0; i < Ele->NInputs; i ++ )
 		{
-			//printf("Cache[%i] = %i\n", readOfs + i, this->Cache[ readOfs + i ]);
+			//printf("DELAY{%i} Cache[%i] = %i\n",
+			//	this->Delay,
+			//	readOfs + i, this->Cache[ readOfs + i ]);
 			if( this->Cache[ readOfs + i ] )
 				RaiseLink(Ele->Outputs[i]);
 	

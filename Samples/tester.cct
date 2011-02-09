@@ -4,9 +4,13 @@
 
 %include "adder.cct"
 
-#array val1	8
-#array val2	8
-#array output	8
+%include "memory_bank.cct"
+
+#array val1	16
+#array val2	16
+#array val	16
+#array output	16
+#array mem_value	16
 
 #display 1 "Carry Input " $carry_in
 #display 1 "Value 1     " @val1
@@ -15,27 +19,29 @@
 #display 1 "Output      " @output
 #display 1 "Carry Out   " $carry_out
 
-@val1 = DELAY 0, 1, 0, 0, 0, 0, 1, 0	// Low to High (0 - 7)
-@val2 = DELAY 0, 1, 0, 0, 0, 0, 1, 0
+@val1 = DELAY 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1	// Low to High (0 - 7)
+@val2 = DELAY 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 $carry_in = 0
+$enable = PULSE 1
 
-$adder_done, @output, $carry_out = ADDER_8BIT 1, @val1, @val2, $carry_in
+$adder_done, @output, $carry_out = ADDER_16BIT $enable, @val1, @val2, $carry_in
 
-%endif
-
-%if 0
-
-%include "memory_cell.cct"
 
 #display 1 "Write  " $write
-#display $write "Datain " $datain
+#display $write "Datain " @mem_value
 #display 1 "Ready  " $ready
-#display $ready "Value  " $val
+#display $ready "Value  " @val
 
-$enable = DELAY 1
-$write = DELAY 1
-$datain = DELAY 1
+$write = PULSE $adder_done
+@mem_value = DELAY @output
+$write = PULSE 1
 
-$ready, $val = MEMORY_CELL $enable, $write, $datain
+%assign i 0
+%rep 16
+@mem_value[i] = PULSE 1
+%assign i i+1
+%endrep
+
+$ready, @val = MEMORY_WORD 1, $write, @mem_value
 
 %endif

@@ -3,7 +3,6 @@
 // Designed in LogicCircuit
 %include "memory.cct"
 %include "../adder.cct"
-//%include "../memory_bank.cct"
 
 #array mem_data_in 8
 #array mem_data_out 8
@@ -23,6 +22,9 @@
 #array addr	16
 #array instr	8
 #array val	8
+
+#breakpoint (DELAY{2} $next_stage) "Next Stage"
+#breakpoint $reg_pc_write "PC Write"
 
 #display 1 "Clock " $clock
 #display 1 "Stage " @stage_state
@@ -59,6 +61,7 @@ $mem_ready, @mem_data_in = MEMORY_SPACE $mem_enable, @mem_addr, $mem_data_write,
 
 // Registers
 $reg_ready, @reg_data_in = MEMORY_ARRAY16 $reg_enable, $reg_write, @reg_addr, @reg_data_out
+#display $reg_pc_write "New PC" @reg_pc_out
 $NULL, @reg_pc_in = MEMORY_WORD 1, $reg_pc_write, @reg_pc_out
 // @instr, @val and @addr - Temporary "variables" used to hold intermediate values
 // to be moved to other locations
@@ -80,6 +83,7 @@ $next_stage = DELAY $reg_ready
 
 
 // Next instruction
+// - Increment IP, Reset stage MUX once done
 $next_stage = PULSE $next_instruction
 $reg_pc_write, @reg_pc_out, $NULL = ADDER_16BIT (PULSE $next_instruction),\
 	@reg_pc_in, \
@@ -89,11 +93,13 @@ $stage_reset = DELAY{8} $reg_pc_write
 
 
 // === Instruction input ===
+#display @stage_state[0] "Instruction Input" @stage_state[0]
 // Reset all values
 $instr_clear = @stage_state[0]	// Clear the instruction cache
 $val_clear   = @stage_state[0]	// Clear the instruction cache
 $addr_clear  = @stage_state[0]	// Clear the address cache
 // STAGE0 - Opcode Fetch
+#display @stage_state[0] "Opcode fetch" 1
 %assign i 0
 %rep 16
 @mem_addr[i] = AND @stage_state[0], @reg_pc_in[i]	// Set memory address to PC
@@ -102,6 +108,7 @@ $addr_clear  = @stage_state[0]	// Clear the address cache
 $mem_enable = PULSE @stage_state[0]	// Enable memory for read (pulse to line up with the AND above)
 
 // STAGE1 - Instruction fetched
+#display @stage_state[1] "Instruction Save" @stage_state[1]
 %assign	i 0
 %rep 8
 @instr[i] = AND @stage_state[1], (DELAY{4} @mem_data_in[i])	// Save the opcode byte
@@ -128,6 +135,7 @@ $is_OR     = AND (DELAY @instr[7]), (NOT   @instr[6]), (DELAY @instr[5]), (DELAY
 $is_XOR    = AND (DELAY @instr[7]), (DELAY @instr[6]), (NOT   @instr[5]), (NOT   @instr[4])	// 1100rrrr
 
 // === OPCODES ===
+#display @stage_state[2] "Opcode decode" 1
 // --- NOP ---
 // Just Ignored
 $next_instruction = AND $is_NOP, (DELAY @stage_state[2])
@@ -151,15 +159,16 @@ $reg_enable  = DELAY (AND $is_LOAD, (PULSE @stage_state[2]))
 @reg_addr[1] = DELAY (AND $is_LOAD, (DELAY @stage_state[2]), 0)
 @reg_addr[2] = DELAY (AND $is_LOAD, (DELAY @stage_state[2]), 1)
 @reg_addr[3] = DELAY (AND $is_LOAD, (DELAY @stage_state[2]), 1)
+//#display @stage_state[3], $is_LOAD "LOAD - Read R14:R15" 1
 // > Store in the @addr LATCH (Takes 3 cycles to fully complete)
 @addr[7] = AND $is_LOAD, @stage_state[3], @reg_data_in[3]	// R15
 @addr[6] = AND $is_LOAD, @stage_state[3], @reg_data_in[2]
 @addr[5] = AND $is_LOAD, @stage_state[3], @reg_data_in[1]
 @addr[4] = AND $is_LOAD, @stage_state[3], @reg_data_in[0]
-@addr[3] = AND $is_LOAD, @stage_state[3], @reg_data_in[3]	// R14
-@addr[2] = AND $is_LOAD, @stage_state[3], @reg_data_in[2]
-@addr[1] = AND $is_LOAD, @stage_state[3], @reg_data_in[1]
-@addr[0] = AND $is_LOAD, @stage_state[3], @reg_data_in[0]
+@addr[3] = AND $is_LOAD, @stage_state[4], @reg_data_in[3]	// R14
+@addr[2] = AND $is_LOAD, @stage_state[4], @reg_data_in[2]
+@addr[1] = AND $is_LOAD, @stage_state[4], @reg_data_in[1]
+@addr[0] = AND $is_LOAD, @stage_state[4], @reg_data_in[0]
 $next_stage = AND $is_LOAD, @stage_state[4]	// Stage 4 when LATCH is set (stage_state[3] is only high for 1 cycle)
 // > Set address & enable
 %assign i 0
@@ -352,6 +361,7 @@ $reg_enable = PULSE (AND $is_OR, @stage_state[4])
 $next_instruction = PULSE (AND $is_OR, @stage_state[5])
 
 // --- XOR A, Rr ---
+#display $is_XOR "XOR A, Rr" @instr[3], @instr[2], @instr[1], @instr[0]
 // > Read to @val
 @reg_addr[0] = AND $is_XOR, (DELAY @stage_state[2]), @instr[0]
 @reg_addr[1] = AND $is_XOR, (DELAY @stage_state[2]), @instr[1]
@@ -363,8 +373,12 @@ $reg_enable = PULSE (AND $is_XOR, @stage_state[2])
 @val[i] = AND $is_XOR, @stage_state[3], @reg_data_in[i]
 %assign i i+1
 %endrep
+
+#display (AND $is_XOR, @stage_state[3]) "val  " @reg_data_in
+
 // > Read A
 $reg_enable = PULSE (AND $is_XOR, @stage_state[3])
+
 // > Write back A ^ Rr
 $reg_write = PULSE (AND $is_XOR, @stage_state[4])
 $reg_enable = PULSE (AND $is_XOR, @stage_state[4])
@@ -373,4 +387,6 @@ $reg_enable = PULSE (AND $is_XOR, @stage_state[4])
 @reg_data_out[i] = AND (AND $is_XOR, @stage_state[4]), (XOR @val[i], @reg_data_in[i])
 %assign i i+1
 %endrep
+#display (AND $is_XOR, @stage_state[4]) "A    " @reg_data_out
+#display (AND $is_XOR, @stage_state[4]) "res  " @reg_data_out
 $next_instruction = PULSE (AND $is_XOR, @stage_state[5])

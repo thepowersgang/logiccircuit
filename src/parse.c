@@ -344,7 +344,7 @@ int ParseLine(tParser *Parser)
 				}
 				GetToken(Parser);
 			} while(Parser->Token == TOK_COMMA);
-			PutBack(Parser);	// Put back non-comma character
+			PutBack(Parser);	// Put back non-comma token
 			
 			// Remove quotes
 			title[strlen(title)-1] = '\0';
@@ -352,11 +352,32 @@ int ParseLine(tParser *Parser)
 			
 			AddDisplayItem(title, &cond, &values);
 		
-			title --;
+			title --;	//  Reverse the ++ above
 		
 			free(title);
 			List_Free(&cond);
 			List_Free(&values);
+		}
+		// Set breakpoint
+		else if( strcmp(Parser->TokenStr, "#breakpoint") == 0 ) {
+			tList	cond = {0};
+			char	*title;
+			// Condition - Single value (well, should be :)
+			ParseValue(Parser, &cond);
+			// Display Title - String
+			SyntaxAssert(Parser, GetToken(Parser), TOK_STRING);
+			title = strdup(Parser->TokenStr);
+			
+			// Remove quotes
+			title[strlen(title)-1] = '\0';
+			title ++;
+			
+			AddBreakpoint(title, &cond);
+		
+			title --;	//  Reverse the ++ above
+		
+			free(title);
+			List_Free(&cond);
 		}
 		else {
 			SyntaxError(Parser, "Unknown meta-statement '%s'",

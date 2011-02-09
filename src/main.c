@@ -14,6 +14,7 @@
 extern tElementDef	*gpElementDefs;
 extern tLink	*gpLinks;
 extern tElement	*gpElements;
+extern tBreakpoint	*gpBreakpoints;
 extern tDisplayItem	*gpDisplayItems;
 
 extern int ParseFile(const char *Filename);
@@ -33,6 +34,7 @@ void	SigINT_Handler(int Signum);
 
 // === GLOBALS ===
  int	gbRunSimulation = 1;
+ int	gbStepping = 1;
  int	gbPrintLinks = 0;
 
 // === CODE ===
@@ -40,7 +42,6 @@ int main(int argc, char *argv[])
 {
 	tLink	*link;
 	tElement	*ele;
-	tDisplayItem	*dispItem;
 	 int	i;
 	 int	timestamp;
 	
@@ -179,6 +180,9 @@ int main(int argc, char *argv[])
 	// Execute
 	for( timestamp = 0; gbRunSimulation; timestamp ++ )
 	{
+		tDisplayItem	*dispItem;
+		tBreakpoint	*bp;
+		 int	breakPointFired = 0;
 		
 		// Clear drivers
 		for( link = gpLinks; link; link = link->Next ) {
@@ -191,13 +195,109 @@ int main(int argc, char *argv[])
 			else if( link->Name[0] == '0' )
 				link->Value->Value = 0;
 		}
-		
-		// Clear screen
+
+		// === Show Display ===
 		printf("\x1B[2J");
 		printf("\x1B[H");
 		printf("---- %6i ----\n", timestamp);
 		
-		// Update elements
+		for( dispItem = gpDisplayItems; dispItem; dispItem = dispItem->Next )
+		{
+			// Check condition (if one condition line is high, the item is displayed)
+			for( i = 0; i < dispItem->Condition.NItems; i ++ )
+			{
+				if( GetLink(dispItem->Condition.Items[i]) ) {
+					break;
+				}
+			}
+			if( i == dispItem->Condition.NItems )	continue;
+			
+			printf("%s: ", dispItem->Label);
+			for( i = 0; i < dispItem->Values.NItems; i ++ )
+			{
+				//printf("%i ", dispItem->Values.Items[i]->Value->NDrivers);
+				//printf("(%s) %i",
+				//	dispItem->Values.Items[i]->Name,
+				//	dispItem->Values.Items[i]->Value->Value);
+				printf("%i", dispItem->Values.Items[i]->Value->Value);
+			}
+			printf("\n");
+		}
+		
+		// Check breakpoints
+		breakPointFired = 0;
+		for( bp = gpBreakpoints; bp; bp = bp->Next )
+		{
+			// Check condition (if one condition line is high, the item is displayed)
+			for( i = 0; i < bp->Condition.NItems; i ++ )
+			{
+				if( GetLink(bp->Condition.Items[i]) ) {
+					break;
+				}
+			}
+			if( i == bp->Condition.NItems )	continue;
+			
+			if( ! breakPointFired )	printf("\n");
+			printf("BREAKPOINT %s\n", bp->Label);
+			breakPointFired = 1;
+		}
+		
+		// === User Input ===
+		if( gbStepping || breakPointFired )
+		{
+			for( ;; )
+			{
+				char	commandBuffer[100];
+				char	argBuffer[100];
+				
+				printf("> ");
+				ReadCommand(100, commandBuffer, 100, argBuffer);
+				
+				// Quit
+				if( strcmp(commandBuffer, "q") == 0 ) {
+					gbRunSimulation = 0;
+					break ;
+				}
+				// Run until breakpoint
+				else if( strcmp(commandBuffer, "run") == 0 ) {
+					gbStepping = 0;	// Disable single step
+					break;
+				}
+				// Continue (Same as step)
+				else if( strcmp(commandBuffer, "c") == 0 ) {
+					gbStepping = 1;
+					break;
+				}
+				// Step
+				else if( strcmp(commandBuffer, "s") == 0 ) {
+					gbStepping = 1;
+					break;
+				}
+				// Display
+				else if( strcmp(commandBuffer, "d") == 0 ) {
+					// Find named link
+					for( link = gpLinks; link; link = link->Next ) {
+						if( strcmp(link->Name, argBuffer) == 0 ) {
+							printf("%s: %i\n", link->Name, link->Value->Value);
+							break;
+						}
+					}
+				}
+				else if( strcmp(commandBuffer, "dispall") == 0 ) {
+					 int	len = strlen(argBuffer);
+					for( link = gpLinks; link; link = link->Next ) {
+						if( link->Name[0] && strncmp(link->Name, argBuffer, len) == 0 ) {
+							printf("%s: %i\n", link->Name, link->Value->Value);
+						}
+					}
+				}
+				else {
+					printf("Unknown command '%s'\n", commandBuffer);
+				}
+			}
+		}
+		
+		// === Update elements ===
 		for( ele = gpElements; ele; ele = ele->Next )
 		{
 			ele->Type->Update( ele );
@@ -215,68 +315,6 @@ int main(int argc, char *argv[])
 			else if( link->Name[0] == '0' )
 				link->Value->Value = 0;
 		}
-		
-		for( dispItem = gpDisplayItems; dispItem; dispItem = dispItem->Next )
-		{
-			// Check condition (if one condition line is high, the item is displayed)
-			for( i = 0; i < dispItem->Condition.NItems; i ++ )
-			{
-				if( GetLink(dispItem->Condition.Items[i]) ) {
-					break;
-				}
-			}
-			if( i == dispItem->Condition.NItems )	continue;
-			
-			printf("%s: ", dispItem->Label);
-			for( i = 0; i < dispItem->Values.NItems; i ++ )
-			{
-				//printf("%i ", dispItem->Values.Items[i]->Value->NDrivers);
-				printf("%i", dispItem->Values.Items[i]->Value->Value);
-			}
-			printf("\n");
-		}
-		
-		for( ;; )
-		{
-			char	commandBuffer[100];
-			char	argBuffer[100];
-			
-			printf("> ");
-			ReadCommand(100, commandBuffer, 100, argBuffer);
-			
-			// Quit
-			if( strcmp(commandBuffer, "q") == 0 ) {
-				gbRunSimulation = 0;
-				break ;
-			}
-			// Continue
-			else if( strcmp(commandBuffer, "c") == 0 ) {
-				break;
-			}
-			// Display
-			else if( strcmp(commandBuffer, "d") == 0 ) {
-				// Find named link
-				for( link = gpLinks; link; link = link->Next ) {
-					if( strcmp(link->Name, argBuffer) == 0 ) {
-						printf("%s: %i\n", link->Name, link->Value->Value);
-						break;
-					}
-				}
-			}
-			else if( strcmp(commandBuffer, "dispall") == 0 ) {
-				 int	len = strlen(argBuffer);
-				for( link = gpLinks; link; link = link->Next ) {
-					if( link->Name[0] && strncmp(link->Name, argBuffer, len) == 0 ) {
-						printf("%s: %i\n", link->Name, link->Value->Value);
-					}
-				}
-			}
-			else {
-				printf("Unknown command '%s'\n", commandBuffer);
-			}
-		}
-		
-		//sleep(1);
 	}
 	
 	// Swap back to main buffer
@@ -327,7 +365,8 @@ void SigINT_Handler(int Signum)
 	printf("\x1B[?1047l");
 	exit(55);
 	#else
-	gbRunSimulation = 0;
+	//gbRunSimulation = 0;
+	gbStepping = 1;
 	#endif
 }
 

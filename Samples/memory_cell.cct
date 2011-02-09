@@ -10,23 +10,27 @@
 #input $pulse, $clr, $set
 #output $ready, $ret
 
-; Ensure that lines are held for 2 cycles
-$_set = DELAY $set
-$_clr = DELAY $clr
+; Offset second Flip-Flop
+//$_set = DELAY $set
+//$_clr = DELAY $clr
+$_set = HOLD{2} $set
+$_clr = HOLD{2} $clr
 
-; Have two latches (1 cycle out of sync) to hold better
-$value = AND (NOT $clr), (OR $value, $set)
-$value2 = AND (NOT $_clr), (OR $value, $_set)
+//#display (HOLD{2} $pulse) "$set, $clr, $_set, $_clr" $set, $clr, $_set, $_clr
 
-$ret = DELAY $value
-$ret = DELAY $value2
-$ready = DELAY{3} $pulse
+; Have two latches (1 cycle out of sync) to stop flipping
+//$value = AND (NOT $clr), (OR $value, $set)
+$value2 = AND (NOT $_clr), (OR $value2, $_set)
+
+$ret = OR $value, $value2
+$ready = DELAY{5} $pulse
+//#display $ready "$value, $value2" $value, $value2
 
 #endunit
 
 ; Memory Cell
 ; Usage: MEMORY_CELL <enable>, <write>, <value>
-; - enable:	Set to 1 to read/write from the cell
+; - enable:	Set to 1 to access the cell
 ; - write:	Set to 1 to set the cell
 ; - value:	New cell contents (ignored if <write> is not set)
 ; Returns:
@@ -43,20 +47,9 @@ $ready = DELAY{3} $pulse
 $reset = AND (DELAY $enable), (DELAY $write), (NOT $datain)
 $set = AND (DELAY $enable), (DELAY $write), (DELAY $datain)
 
-$_ready, $value = LATCH $enable, $reset, $set
+//#display 1 "$reset, $set" $reset, $set
 
-; State: 0
-; W V | Out
-; 0 0 | 0
-; 0 1 | 0
-; 1 0 | 0
-; 1 1 | 1
-; State: 1
-; W V | Out
-; 0 0 | 1
-; 0 1 | 1
-; 1 0 | 0
-; 1 1 | 1
+$_ready, $value = LATCH (DELAY{2} $enable), $reset, $set
 
 $ret = AND $_ready, $value
 $ready = DELAY $_ready

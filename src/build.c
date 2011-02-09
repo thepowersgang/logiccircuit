@@ -33,6 +33,7 @@ typedef struct sUnitTemplate
 	tList	Inputs;	//!< Input links
 	tList	Outputs;	//!< Output links
 	tDisplayItem	*DisplayItems;
+	tBreakpoint	*Breakpoints;
 	
 	 int	InstanceCount;	//!< Number of times the unit has been used
 	
@@ -47,6 +48,7 @@ tElement	*gpLastElement = (tElement*)&gpElements;
 tElementDef	*gpElementDefs;
 tUnitTemplate	*gpUnits;
 tUnitTemplate	*gpCurUnit;
+tBreakpoint	*gpBreakpoints;
 tDisplayItem	*gpDisplayItems;
 
 // === CODE ===
@@ -128,6 +130,47 @@ int Unit_CloseUnit(void)
 int Unit_IsInUnit(void)
 {
 	return !!gpCurUnit;
+}
+
+tBreakpoint *AddBreakpoint(const char *Name, const tList *Condition)
+{
+	tBreakpoint	*bp, *prev = NULL;
+	 int	pos, i;
+	tBreakpoint	**listHead;
+	
+	
+	if( gpCurUnit )
+		listHead = &gpCurUnit->Breakpoints;
+	else
+		listHead = &gpBreakpoints;
+	
+	for( bp = *listHead; bp; prev = bp, bp = bp->Next )
+	{
+		if( strcmp(Name, bp->Label) == 0 ) {
+			return NULL;
+		}
+	}
+	
+	// Create new
+	pos = strlen(Name)+1;
+	bp = malloc( sizeof(tBreakpoint) + pos + (Condition->NItems)*sizeof(tLink*) );
+	bp->Condition.NItems = Condition->NItems;
+	bp->Condition.Items = (void*)&bp->Label[pos];
+	for( i = 0; i < Condition->NItems; i ++ )
+		bp->Condition.Items[i] = Condition->Items[i];
+	
+	strcpy(bp->Label, Name);
+	
+	if( prev ) {
+		bp->Next = prev->Next;
+		prev->Next = bp;
+	}
+	else {
+		bp->Next = NULL;
+		*listHead = bp;
+	}
+	
+	return bp;
 }
 
 tDisplayItem *AddDisplayItem(const char *Name, const tList *Condition, const tList *Values)
@@ -275,7 +318,7 @@ tLink *CreateAnonLink(void)
 	ret->Value = LinkValue_Create();
 	ret->Link = NULL;
 	ret->Name[0] = '\0';
-	ret->ReferenceCount = 0;
+	ret->ReferenceCount = 1;
 	
 	if( gpCurUnit ) {
 		ret->Next = gpCurUnit->Links;
@@ -339,6 +382,7 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 	tLink	*link, *newLink;
 	tElement	*ele;
 	tDisplayItem	*dispItem;
+	tBreakpoint	*bp;
 	tList	*ret;
 	 int	prefixLen = snprintf(NULL, 0, "%s#%i#", Unit->Name, Unit->InstanceCount);
 	char	namePrefix[prefixLen+1];
@@ -434,14 +478,35 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 	for( dispItem = Unit->DisplayItems; dispItem; dispItem = dispItem->Next )
 	{
 		tDisplayItem	*newItem;
+		char	newName[ prefixLen + strlen(dispItem->Label) + 1 ];
 		
-		newItem = AddDisplayItem(dispItem->Label, &dispItem->Condition, &dispItem->Values);
+		strcpy(newName, namePrefix);
+		strcat(newName, dispItem->Label);
 		
+		newItem = AddDisplayItem(newName, &dispItem->Condition, &dispItem->Values);
+		if( !newItem ) {
+			fprintf(stderr, "Warning: AddDisplayItem('%s', %p, %p) failed\n",
+				newName, &dispItem->Condition, &dispItem->Values);
+			continue ;
+		}
+		// Resolve backlinks
 		for( i = 0; i < newItem->Condition.NItems; i ++ )
 			newItem->Condition.Items[i] = newItem->Condition.Items[i]->Backlink;
 		
 		for( i = 0; i < newItem->Values.NItems; i ++ )
 			newItem->Values.Items[i] = newItem->Values.Items[i]->Backlink;
+	}
+	
+	// Append display items
+	for( bp = Unit->Breakpoints; bp; bp = bp->Next )
+	{
+		tBreakpoint	*newBP;
+		
+		newBP = AddBreakpoint(dispItem->Label, &dispItem->Condition);
+		
+		// Resolve backlinks
+		for( i = 0; i < newBP->Condition.NItems; i ++ )
+			newBP->Condition.Items[i] = newBP->Condition.Items[i]->Backlink;
 	}
 	
 	// Duplicate elements and replace links
@@ -613,6 +678,7 @@ int AppendGroupItem(tList *Dest, const char *Name, int Index)
 	
 	digits = 0;
 	for( i = grp->Size-1; i; i /= 10 )	digits ++;
+	if( digits == 0 )	digits = 1;
 	
 	// Get string length
 	len = snprintf(NULL, 0, "%s[%*i]", Name, digits, Index);
@@ -644,6 +710,42 @@ int AppendGroup(tList *Dest, const char *Name)
 		return 1;
 	}
 	
+	for( i = grp->Size-1; i; i /= 10 )	digits ++;
+	if( digits == 0 )	digits = 1;	
+	
+	len = snprintf(NULL, 0, "%s[%*i]", Name, digits, grp->Size-1);
+
+	ofs = Dest->NItems;
+	Dest->NItems += grp->Size;
+	Dest->Items = realloc( Dest->Items, Dest->NItems * sizeof(tLink*) );
+	
+	for( i = 0; i < grp->Size; i ++ )
+	{
+		char	newname[len + 1];
+		snprintf(newname, len+1, "%s[%*i]", Name, digits, i);
+		
+		Dest->Items[ofs+i] = CreateNamedLink(newname);
+	}
+	
+	return 0;
+}
+
+/**
+ * \brief Append every line in a group to a list (reversed)
+ */
+int AppendGroupRev(tList *Dest, const char *Name)
+{
+	tGroupDef	*grp = GetGroup(Name);
+	 int	i, ofs, len;
+	 int	digits = 0;
+	
+	//printf("AppendGroup: (%p, %s)\n", Dest, Name);
+	if(!grp) {
+		// ERROR:
+		fprintf(stderr, "ERROR: Unknown group %s\n", Name);
+		return 1;
+	}
+	
 	len = snprintf(NULL, 0, "%s[%i]", Name, grp->Size-1);
 	
 	for( i = grp->Size-1; i; i /= 10 )	digits ++;
@@ -652,10 +754,10 @@ int AppendGroup(tList *Dest, const char *Name)
 	Dest->NItems += grp->Size;
 	Dest->Items = realloc( Dest->Items, Dest->NItems * sizeof(tLink*) );
 	
-	for( i = grp->Size; i --; )
+	for( i = 0; i < grp->Size; i ++ )
 	{
 		char	newname[len + 1];
-		snprintf(newname, 100, "%s[%*i]", Name, digits, i);
+		snprintf(newname, len, "%s[%*i]", Name, digits, grp->Size - i - 1);
 		
 		Dest->Items[ofs+i] = CreateNamedLink(newname);
 	}

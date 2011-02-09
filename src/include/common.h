@@ -5,11 +5,19 @@
 
 typedef struct sList	tList;
 typedef struct sDisplayItem	tDisplayItem;
+typedef struct sBreakpoint	tBreakpoint;
 
 struct sList
 {
 	 int	NItems;
 	tLink	**Items;
+};
+
+struct sBreakpoint
+{
+	tBreakpoint	*Next;
+	tList	Condition;
+	char	Label[];
 };
 
 struct sDisplayItem
@@ -33,6 +41,12 @@ extern int	Unit_IsInUnit(void);
  * \return Pointer to the item
  */
 extern tDisplayItem	*AddDisplayItem(const char *Name, const tList *Condition, const tList *Values);
+
+/**
+ * \brief Add a breakpoint
+ * \return Pointer to the breakpoint
+ */
+extern tBreakpoint	*AddBreakpoint(const char *Name, const tList *Condition);
 
 /**
  * \brief Create a line group

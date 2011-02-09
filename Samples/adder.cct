@@ -10,11 +10,17 @@ $carry_out = OR (AND $val1, $val2), (AND $val1, $carry_in), (AND $val2, $carry_i
 #endunit
 
 // 8-Bit Adder
-// - Delay of 17 (8 * HALF_ADDER + 1)
+// - Delay of 17 (8 * HALF_ADDER + 3)
 #defunit ADDER_8BIT
 #input $enable, @val1[8], @val2[8], $carry_in
 #output $ready, @ret[8], $carry_out
 #array _ret 8
+
+$is_active = HOLD{18} $enable
+
+#display $is_active "Adder8 - Val1 " @val1
+#display $is_active "Adder8 - Val2 " @val2
+#display $is_active "Adder8 - _ret " @_ret
 
 @_ret[0], $carry0 = ADDER @val1[0], @val2[0], $carry_in
 @_ret[1], $carry1 = ADDER @val1[1], @val2[1], $carry0
@@ -25,24 +31,24 @@ $carry_out = OR (AND $val1, $val2), (AND $val1, $carry_in), (AND $val2, $carry_i
 @_ret[6], $carry6 = ADDER @val1[6], @val2[6], $carry5
 @_ret[7], $carry7 = ADDER @val1[7], @val2[7], $carry6
 
-@ret[0] = AND (DELAY{16} $enable), (DELAY{14} @_ret[0])
-@ret[1] = AND (DELAY{16} $enable), (DELAY{12} @_ret[1])
-@ret[2] = AND (DELAY{16} $enable), (DELAY{10} @_ret[2])
-@ret[3] = AND (DELAY{16} $enable), (DELAY{ 8} @_ret[3])
-@ret[4] = AND (DELAY{16} $enable), (DELAY{ 6} @_ret[4])
-@ret[5] = AND (DELAY{16} $enable), (DELAY{ 4} @_ret[5])
-@ret[6] = AND (DELAY{16} $enable), (DELAY{ 2} @_ret[6])
-@ret[7] = AND (DELAY{16} $enable), @_ret[7]
+@ret[0] = AND (DELAY{18} $enable), (DELAY{14} @_ret[0])
+@ret[1] = AND (DELAY{18} $enable), (DELAY{12} @_ret[1])
+@ret[2] = AND (DELAY{18} $enable), (DELAY{10} @_ret[2])
+@ret[3] = AND (DELAY{18} $enable), (DELAY{ 8} @_ret[3])
+@ret[4] = AND (DELAY{18} $enable), (DELAY{ 6} @_ret[4])
+@ret[5] = AND (DELAY{18} $enable), (DELAY{ 4} @_ret[5])
+@ret[6] = AND (DELAY{18} $enable), (DELAY{ 2} @_ret[6])
+@ret[7] = AND (DELAY{18} $enable), @_ret[7]
 
-$carry_out = AND (DELAY{16} $enable), $carry7
+$carry_out = AND (DELAY{18} $enable), $carry7
 
-$ready = DELAY{17} $enable
+$ready = DELAY{19} $enable
 
 #endunit
 
 
 // 16-Bit Adder
-// - Delay of 33 (16 * HALF_ADDER + 1)
+// - Delay of 33 (16 * HALF_ADDER + 3)
 #defunit ADDER_16BIT
 #input $enable, @val1[16], @val2[16], $carry_in
 #output $ready, @ret[16], $carry_out
