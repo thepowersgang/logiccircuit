@@ -25,7 +25,7 @@ static tElement *_Create(int Param, int NInputs, tLink **Inputs)
 	if(!ret)	return NULL;
 	
 	ret->Delay = Param - 1;
-	ret->Cache = (int8_t *) &ret->_links[2];
+	ret->Cache = (int8_t *) &ret->_links[NInputs*2];
 	if(Param > 1)
 		ret->Cache[0] = 0;
 	

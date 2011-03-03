@@ -1,4 +1,6 @@
 /*
+ * PULSE element
+ * - Raises the output for only one tick when input rises
  */
 #include <element.h>
 #include <stdlib.h>
@@ -13,11 +15,10 @@ typedef struct
 }	t_element;
 
 // === CODE ===
-static tElement *_Create(int Param, int NInputs, tLink **Inputs)
+static tElement *_Create(int *Params, int NInputs, tLink **Inputs)
 {
 	t_element *ret;
-	if( Param < 1 )
-		Param = 1;
+	
 	ret = calloc( 1, sizeof(t_element) + 2*sizeof(tLink*) + Param - 1 );
 	if(!ret)	return NULL;
 	
