@@ -46,8 +46,8 @@ int main(int argc, char *argv[])
 	 int	timestamp;
 	
 	// Add element definitions
-	ADD_ELEDEF(AND);	ADD_ELEDEF(OR);	ADD_ELEDEF(XOR);
-	ADD_ELEDEF(NAND);	ADD_ELEDEF(NOR);	ADD_ELEDEF(NXOR);
+	ADD_ELEDEF( AND); ADD_ELEDEF( OR); ADD_ELEDEF( XOR);
+	ADD_ELEDEF(NAND); ADD_ELEDEF(NOR); ADD_ELEDEF(NXOR);
 	
 	ADD_ELEDEF(NOT);
 	ADD_ELEDEF(COUNTER);
@@ -124,6 +124,8 @@ int main(int argc, char *argv[])
 			}
 			printf("\n");
 		}
+		
+		return 0;
 	}
 	
 	#if 1

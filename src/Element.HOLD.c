@@ -16,15 +16,18 @@ typedef struct
 }	t_element;
 
 // === CODE ===
-static tElement *_Create(int Param, int NInputs, tLink **Inputs)
+static tElement *_Create(int NParams, int *Params, int NInputs, tLink **Inputs)
 {
 	t_element *ret;
-	if( Param < 1 )
-		Param = 1;
-	ret = calloc( 1, sizeof(t_element) + 2*NInputs*sizeof(tLink*) + Param*sizeof(int) );
+	 int	duration = 1;
+	
+	if( NParams > 0)
+		duration = Params[0];
+	
+	ret = calloc( 1, sizeof(t_element) + 2*NInputs*sizeof(tLink*) + duration*sizeof(int) );
 	if(!ret)	return NULL;
 	
-	ret->Time = Param;
+	ret->Time = duration;
 	
 	ret->Ele.NOutputs = NInputs;
 	ret->Ele.NInputs = NInputs;

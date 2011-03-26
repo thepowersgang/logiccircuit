@@ -720,6 +720,9 @@ void PutBack(tParser *Parser)
 	
 	if( Parser->TokenStr != Parser->_static )
 		free( Parser->TokenStr );
+
+	if( !Parser->TokenLength )
+		return ;
 	
 	if(Parser->TokenLength <= 15) {
 		memcpy(Parser->_static, Parser->TokenStart, Parser->TokenLength);

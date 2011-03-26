@@ -13,7 +13,11 @@ struct sElementDef
 	tElementDef	*Next;
 	const char	*Name;
 	 int	MinInput, MaxInput;	// -1: None
-	tElement	*(*Create)(int Param, int NInputs, tLink **Inputs);
+	/**
+	 * \param NParams	Number of parameters
+	 * \param Params	List of numeric parameters
+	 */
+	tElement	*(*Create)(int NParams, int *Params, int NInputs, tLink **Inputs);
 	void	(*Update)(tElement *this);
 };
 

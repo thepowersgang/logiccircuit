@@ -13,12 +13,16 @@ typedef struct
 }	t_element;
 
 // === CODE ===
-static tElement *_Create(int Param, int NInputs, tLink **Inputs)
+static tElement *_Create(int NParams, int *Params, int NInputs, tLink **Inputs)
 {
-	t_element *ret = calloc( 1, sizeof(t_element) + (1)*sizeof(tLink*) );
-	if(!ret)	return NULL;
-	
-	ret->Period = Param;
+	t_element *ret;
+
+	if( NParams != 1 )	return NULL;
+
+	ret = calloc( 1, sizeof(t_element) + (1)*sizeof(tLink*) );
+	if(!ret)	return NULL;	
+
+	ret->Period = Params[0];
 	ret->Pos = 0;
 	
 	ret->Ele.NOutputs = 1;

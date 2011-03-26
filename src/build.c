@@ -514,7 +514,7 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 	{
 		tElement	*newele;
 		
-		newele = ele->Type->Create( ele->Param, ele->NInputs, ele->Inputs );
+		newele = ele->Type->Create( 1, &ele->Param, ele->NInputs, ele->Inputs );
 		newele->Type = ele->Type;
 		newele->Param = ele->Param;
 		newele->NInputs = ele->NInputs;
@@ -594,7 +594,7 @@ tList *CreateUnit(const char *Name, int Param, tList *Inputs)
 	}
 	
 	// Create an instance
-	ele = def->Create(Param, Inputs->NItems, Inputs->Items);
+	ele = def->Create(1, &Param, Inputs->NItems, Inputs->Items);
 	if(!ele)	return NULL;
 	ele->Type = def;	// Force type to be set
 	ele->Param = Param;
