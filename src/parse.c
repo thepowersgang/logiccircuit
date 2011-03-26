@@ -458,6 +458,8 @@ int ParseFile(const char *Filename)
 	FILE	*fp;
 	char	*buf;
 	
+	memset(&parser, 0, sizeof(tParser));
+	
 	#if 1
 	{
 	char	tmpFileName[] = "/tmp/logic_cct.cct.XXXXXX";

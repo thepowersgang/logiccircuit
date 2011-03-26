@@ -18,10 +18,8 @@ typedef struct
 static tElement *_Create(int NParams, int *Param, int NInputs, tLink **Inputs)
 {
 	t_element *ret;
-	
-	if(NParams != 1)	return NULL;
 
-	ret = calloc( 1, sizeof(t_element) + 2*sizeof(tLink*) + Param[0] - 1 );
+	ret = calloc( 1, sizeof(t_element) + 2*sizeof(tLink*) );
 	if(!ret)	return NULL;
 	
 	ret->CurVal = 0;
