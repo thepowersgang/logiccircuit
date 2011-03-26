@@ -18,7 +18,7 @@ An attempt at designing a CPU to be built using virtual logic gates
     1100 - LDI A, imm8
     1101 - LAI X, imm16
     1110 - MOV SP, X	; Set SP from X
-    1111 - ADDS SP, A	; Sign extended add A to SP
+    1111 - ADD SP, A	; Sign extended add A to SP
 1000rrrr - ADD A, r
 1001rrrr - SUB A, r
 1010rrrr - AND A, r

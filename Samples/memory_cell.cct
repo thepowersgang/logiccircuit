@@ -6,6 +6,7 @@
 ; Delays:
 ; - Writing: 3
 ; - Reading: 0
+%define delayof_LATCH	3
 #defunit LATCH
 #input $pulse, $clr, $set
 #output $ready, $ret
@@ -39,6 +40,7 @@ $ready = DELAY{5} $pulse
 ; Delays:
 ; - Writing: 6
 ; - Reading: 6
+%define delayof_MEMORY_CELL	6
 
 #defunit MEMORY_CELL
 #input $enable, $write, $datain	; set input lines

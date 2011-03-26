@@ -3,6 +3,7 @@
 ; MEMORY_BYTE <enable>, <write>, <datain[8]>
 ; - 1 byte of memory
 ; - Has a delay of MEMORY_CELL
+%define delayof_MEMORY_BYTE	delayof_MEMORY_CELL
 #defunit MEMORY_BYTE
 #input $enable, $write, @datain[8]
 #output $ready, @ret[8]
@@ -21,6 +22,7 @@ $ready, @ret[7] = MEMORY_CELL $enable, $write, @datain[7]
 ; MEMORY_WORD <enable>, <write>, <datain[16]>
 ; - 16-bits of memory
 ; - Has a delay of MEMORY_CELL
+%define delayof_MEMORY_WORD	delayof_MEMORY_CELL
 #defunit MEMORY_WORD
 #input $enable, $write, @datain[16]
 #output $ready, @ret[16]
@@ -36,6 +38,7 @@ $ready, @ret[i]  = MEMORY_CELL $enable, $write, @datain[i]
 ; LATCH_BYTE <clear>, <datain[8]>
 ; - 1 byte of latches
 ; - Has a delay of LATCH (2)
+%define delayof_LATCH_BYTE	delayof_LATCH
 #defunit LATCH_BYTE
 #input $clear, @datain[8]
 #output @ret[8]
@@ -51,6 +54,7 @@ $NULL, @ret[i] = LATCH 1, $clear, @datain[i]
 ; LATCH_WORD <enable>, <clear>, <datain[16]>
 ; - 1 byte of latches
 ; - Has a delay of LATCH (4)
+%define delayof_LATCH_WORD	delayof_LATCH
 #defunit LATCH_WORD
 #input $clear, @datain[16]
 #output @ret[16]
