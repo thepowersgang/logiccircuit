@@ -1,21 +1,30 @@
 An attempt at designing a CPU to be built using virtual logic gates
 
-4 bit opcodes
+8-bit opcodes, usually with 4 operation, 4 register
 
-0000xxxx - NOP (TODO: Have only 0x00 be NOP?, Do I need an explicit NOP - MOV A, A is one, also use unused space)
-0001sccc - JMPcc .+rel8/abs16 (depending on s)
-0010sccc - CALLcc .+rel8/abs16 (depending on s)
-0011xccc - RETcc (TODO: Maybe overload the unused bit to give more opcode space)
-0100rrrr - LOAD r, [X]
-0101rrrr - STORE [X], r
-0110rrrr - MOV A, r
-0111rrrr - MOV r, A
+0000rrrr - MOV A, r	(MOV A, A = NOP)
+0001rrrr - MOV r, A
+0010rrrr - LOAD r, [X]
+0011rrrr - STORE [X], r
+0100xxxx - ????
+0101sccc - JMPcc .+rel8/abs16 (depending on s)
+0110sccc - CALLcc .+rel8/abs16 (depending on s)
+01110ccc - RETcc
+    1xxx - MISC
+    1000 - NOT A
+    1001 - NEG A
+    1010 - CLC
+    1011 - STC
+    1100 - LDI A, imm8
+    1101 - LAI X, imm16
+    1110 - MOV SP, X	; Set SP from X
+    1111 - ADDS SP, A	; Sign extended add A to SP
 1000rrrr - ADD A, r
 1001rrrr - SUB A, r
 1010rrrr - AND A, r
 1011rrrr - OR A, r
 1100rrrr - XOR A, r
-1101rrrr - MISC (NOT A; NEG A; CLC; STC; LDI A, imm8; LAI X, imm16)
+1101rrrr - SHL A, r
 1110rrrr - PUSH r
 1111rrrr - POP r
 

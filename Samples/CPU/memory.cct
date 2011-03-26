@@ -16,21 +16,32 @@
 ;#display $is_ROM "ROM 0x001?    " @ROM_select[1]
 
 // ROM area
+//  Reserved range: 0xF000 - 0xFFFF
+//  Size: 16 bytes
 $is_ROM = AND (DELAY $enable), (NOT   @addr[15]), (NOT   @addr[14]), (NOT   @addr[13]), (NOT   @addr[12])
 @ROM_select = DEMUX{4} $is_ROM, (DELAY{2} @addr[0]), (DELAY{2} @addr[1]), (DELAY{2} @addr[2]), (DELAY{2} @addr[3])
 
-// 0x00
-@data_output[7] = DELAY @ROM_select[0]
-@data_output[6] = DELAY @ROM_select[0]
-;@data_output[5] = 0
-;@data_output[4] = 0
-;@data_output[3] = 0
-;@data_output[2] = 0
-;@data_output[1] = 0
-;@data_output[0] = 0
+%macro _ROM_BYTE 2
+ %assign i 7
+ %rep 8
+  %if %2 & 1 << i
+@data_output[i] = DELAY @ROM_select[%1]
+  %endif
+  %assign i i-1
+ %endrep
+%endmacro
 
+// === ROM Contents ===
+_ROM_BYTE 0x00, 0x44	; LDI A, 0x80
+_ROM_BYTE 0x01, 0x80	;
+_ROM_BYTE 0x02, 0x11	; MOV r1, A
+_ROM_BYTE 0x03, 0x45	; LAI X, 0xF000
+_ROM_BYTE 0x04, 0x00	;
+_ROM_BYTE 0x05, 0xF0	;
+
+// === / ===
+
+// 1 delay for DEMUX, 1 for data
 $ready = DELAY{2} $is_ROM
-
-//$ready = AND (NOT $is_ROM), $enable
 
 #endunit

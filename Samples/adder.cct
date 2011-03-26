@@ -10,7 +10,7 @@ $carry_out = OR (AND $val1, $val2), (AND $val1, $carry_in), (AND $val2, $carry_i
 #endunit
 
 // 8-Bit Adder
-// - Delay of 17 (8 * HALF_ADDER + 3)
+// - Delay of 19 (8 * HALF_ADDER + 3)
 #defunit ADDER_8BIT
 #input $enable, @val1[8], @val2[8], $carry_in
 #output $ready, @ret[8], $carry_out
