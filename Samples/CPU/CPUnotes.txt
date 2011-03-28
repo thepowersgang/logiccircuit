@@ -41,6 +41,16 @@ R15:R14 - SP pseudo register
 R13:R12 - X pseudo register
 R0 - Accumulator (A)
 
+Branch Conditions:
+000:	Unconditional
+001:	Never
+010:	A == 0
+011:	A != 0
+100:	Carry Set
+101:	Carry Clear
+110:	Negative
+111:	Non-negative
+
 First 4 bits select the "unit"
 last 4 bits select a register input for the unit
 (usually)

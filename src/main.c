@@ -254,7 +254,10 @@ int main(int argc, char *argv[])
 				char	argBuffer[100];
 				
 				printf("> ");
-				ReadCommand(100, commandBuffer, 100, argBuffer);
+				ReadCommand(
+					sizeof(commandBuffer)-1, commandBuffer,
+					sizeof(argBuffer)-1, argBuffer
+					);
 				
 				// Quit
 				if( strcmp(commandBuffer, "q") == 0 ) {

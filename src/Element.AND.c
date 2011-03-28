@@ -15,39 +15,37 @@ typedef struct
 // === CODE ===
 static tElement *_Create(int NParams, int *Params, int NInputs, tLink **Inputs)
 {
-	t_element *ret = calloc( 1, sizeof(t_element) + (1+NInputs)*sizeof(tLink*) );
+	 int	busSize = 1;
+	if(NParams >= 1)
+		busSize = Params[0];
+	
+	if(busSize < 1)	busSize = 1;
+	
+	if( NInputs < busSize )	return NULL;
+	
+	t_element *ret = calloc( 1, sizeof(t_element) + (busSize+NInputs)*sizeof(tLink*) );
 	if(!ret)	return NULL;
-	ret->Ele.NOutputs = 1;
+	// TODO: Extend to use variable number of "tail" arguments
+	ret->Ele.NOutputs = busSize;
 	ret->Ele.NInputs = NInputs;
 	ret->Ele.Outputs = &ret->_links[0];
-	ret->Ele.Inputs = &ret->_links[1];
+	ret->Ele.Inputs = &ret->_links[busSize];
 	return &ret->Ele;
 }
 
 static void _Update(tElement *Ele)
 {
 	 int	out = 1;
-	 int	i;
+	 int	i, j;
 	
-	// --- HACK ---
-	#if 0
-	if( Ele->NInputs == 3 ) {
-		printf("%i (%s)", GetLink(Ele->Inputs[0]), Ele->Inputs[0]->Name);
-		for( i = 1; i < Ele->NInputs; i++ )
-		{
-			printf(" && %i (%s)", GetLink(Ele->Inputs[i]), Ele->Inputs[i]->Name);
-		}
-		printf("\n");
-	}
-	#endif
-	// --- / ---
-	
-	for( i = 0; i < Ele->NInputs; i++ )
+	for( i = 0; i < Ele->NInputs - Ele->NOutputs; i++ )
 	{
 		out = out && GetLink(Ele->Inputs[i]);
 	}
-	if( out ) {
-		RaiseLink(Ele->Outputs[0]);
+	for( j = 0; i < Ele->NInputs; i ++, j ++ )
+	{
+		if( out && GetLink(Ele->Inputs[i]) )
+			RaiseLink(Ele->Outputs[j]);
 	}
 }
 

@@ -19,15 +19,17 @@ $ret = DELAY $_ret	; Synchronise outputs
 #input $enable, @val1[8], @val2[8], $borrow_in
 #output $ready, @ret[8], $borrow_out
 #array _ret 8
+#array borrow 9
 
-@_ret[0], $borrow0 = SUBTRACTOR @val1[0], @val2[0], $borrow_in
-@_ret[1], $borrow1 = SUBTRACTOR @val1[1], @val2[1], $borrow0
-@_ret[2], $borrow2 = SUBTRACTOR @val1[2], @val2[2], $borrow1
-@_ret[3], $borrow3 = SUBTRACTOR @val1[3], @val2[3], $borrow2
-@_ret[4], $borrow4 = SUBTRACTOR @val1[4], @val2[4], $borrow3
-@_ret[5], $borrow5 = SUBTRACTOR @val1[5], @val2[5], $borrow4
-@_ret[6], $borrow6 = SUBTRACTOR @val1[6], @val2[6], $borrow5
-@_ret[7], $borrow7 = SUBTRACTOR @val1[7], @val2[7], $borrow6
+@borrow[0] = $borrow_in
+
+%assign i 0
+%assign j 1
+%rep 8
+@_ret[i], @borrow[j] = ADDER (DELAY @val1[i]), (NOT @val2[i]), (NOT @borrow[i])
+%assign i i+1
+%assign j j+1
+%endrep
 
 @ret[0] = AND (DELAY{16} $enable), (DELAY{14} @_ret[0])
 @ret[1] = AND (DELAY{16} $enable), (DELAY{12} @_ret[1])
@@ -38,7 +40,7 @@ $ret = DELAY $_ret	; Synchronise outputs
 @ret[6] = AND (DELAY{16} $enable), (DELAY{ 2} @_ret[6])
 @ret[7] = AND (DELAY{16} $enable), @_ret[7]
 
-$borrow_out = AND (DELAY{16} $enable), $borrow7
+$borrow_out = AND (DELAY{16} $enable), @borrow[8]
 
 $ready = DELAY{17} $enable
 
