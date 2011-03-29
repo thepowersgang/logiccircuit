@@ -125,7 +125,7 @@ int ParseValue(tParser *Parser, tList *destList)
 					if( end < start )
 						SyntaxError(Parser, "End of range is before start");
 					
-					for( ; start < end; start ++ )
+					for( ; start <= end; start ++ )
 					{
 						if( AppendGroupItem(destList, tmpName, start) )
 							SyntaxError(Parser, "Error referencing group item %s[%i]", tmpName, start);

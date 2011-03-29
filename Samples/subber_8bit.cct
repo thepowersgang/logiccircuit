@@ -5,7 +5,7 @@
 #output $ret, $borrow_out
 
 $_ret = XOR $val1, $val2, $carry_in
-// Exploit the OR nature of assignment in place of a gate (it's faster)
+; Exploit the OR nature of assignment in place of a gate (it's faster)
 $borrow_out = AND (DELAY $carry_in), (NXOR $val1, $val2)
 $borrow_out = AND (NOT $val1), (DELAY $val2)
 
