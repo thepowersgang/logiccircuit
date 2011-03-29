@@ -208,6 +208,8 @@ $_branch_condition = AND (NOT   @instr[2]), (DELAY @instr[1]), $is_r0_zero	// A 
 $_branch_condition = AND (DELAY @instr[2]), (NOT   @instr[1]), $flags_C	// Carry Set
 $_branch_condition = AND (DELAY @instr[2]), (DELAY @instr[1]), @reg_0_value[7]	// Negative
 $branch_condition = XOR $_branch_condition, @instr[0]
+// Load destination
+;@addr = 
 // --- JMPcc ---
 // TODO
 // --- CALLcc ---
@@ -381,7 +383,6 @@ $reg_write = PULSE (AND $is_ADD, @stage_state[5])
 $reg_enable = PULSE (AND $is_ADD, @stage_state[5])
 @reg_data_out = DELAY (AND{NUM_GPR_BITS} $is_ADD, @stage_state[5], @add_temp)
 $next_instruction = PULSE (AND $is_ADD, @stage_state[6])
-// TODO
 
 // --- AND A, Rr ---
 // > Read to @val

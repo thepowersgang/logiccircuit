@@ -57,6 +57,7 @@ enum eTokens
 	TOK_NEWLINE,
 	TOK_COMMA,
 	TOK_ASSIGN,
+	TOK_COLON,
 	
 	TOK_PAREN_OPEN, TOK_PAREN_CLOSE,
 	TOK_BRACE_OPEN, TOK_BRACE_CLOSE,
@@ -68,7 +69,7 @@ enum eTokens
 const char * const casTOKEN_NAMES[] = {
 	"TOK_NULL", "TOK_EOF",
 	"TOK_META_STATEMENT", "TOK_NUMBER", "TOK_IDENT", "TOK_STRING",
-	"TOK_LINE", "TOK_GROUP", "TOK_NEWLINE", "TOK_COMMA", "TOK_ASSIGN",
+	"TOK_LINE", "TOK_GROUP", "TOK_NEWLINE", "TOK_COMMA", "TOK_ASSIGN", "TOK_COLON",
 	"TOK_PAREN_OPEN", "TOK_PAREN_CLOSE",
 	"TOK_BRACE_OPEN", "TOK_BRACE_CLOSE",
 	"TOK_SQUARE_OPEN","TOK_SQUARE_CLOSE",
@@ -108,11 +109,38 @@ int ParseValue(tParser *Parser, tList *destList)
 	case TOK_GROUP:
 		tmpName = strdup(Parser->TokenStr);
 		// Single line? (@group[i])
-		if( GetToken(Parser) == TOK_SQUARE_OPEN ) {
-			SyntaxAssert(Parser, GetToken(Parser), TOK_NUMBER);
-			if( AppendGroupItem(destList, tmpName, atoi(Parser->TokenStr)) )
-				SyntaxError(Parser, "Error referencing group item");
-			SyntaxAssert(Parser, GetToken(Parser), TOK_SQUARE_CLOSE);
+		if( GetToken(Parser) == TOK_SQUARE_OPEN )
+		{
+			 int	start, end;
+			do
+			{
+				SyntaxAssert(Parser, GetToken(Parser), TOK_NUMBER);
+				start = atoi(Parser->TokenStr);
+				
+				if( GetToken(Parser) == TOK_COLON )
+				{
+					// Item Range
+					SyntaxAssert(Parser, GetToken(Parser), TOK_NUMBER);
+					end = atoi(Parser->TokenStr);
+					if( end < start )
+						SyntaxError(Parser, "End of range is before start");
+					
+					for( ; start < end; start ++ )
+					{
+						if( AppendGroupItem(destList, tmpName, start) )
+							SyntaxError(Parser, "Error referencing group item %s[%i]", tmpName, start);
+					}
+					
+					GetToken(Parser);
+				}
+				else
+				{
+					// Single item
+					if( AppendGroupItem(destList, tmpName, start) )
+						SyntaxError(Parser, "Error referencing group item");
+				}
+			} while(Parser->Token == TOK_COMMA);
+			SyntaxAssert(Parser, Parser->Token, TOK_SQUARE_CLOSE);
 		}
 		// Entire group.
 		else {
@@ -655,6 +683,11 @@ int GetToken(tParser *Parser)
 	// Argument Separation
 	case ',':	// Comma
 		ret = TOK_COMMA;
+		break;
+	
+	// Argument Separation
+	case ':':	// Colon
+		ret = TOK_COLON;
 		break;
 		
 	// Assignment

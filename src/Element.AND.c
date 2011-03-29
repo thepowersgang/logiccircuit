@@ -16,8 +16,10 @@ typedef struct
 static tElement *_Create(int NParams, int *Params, int NInputs, tLink **Inputs)
 {
 	 int	busSize = 1;
-	if(NParams >= 1)
-		busSize = Params[0];
+	
+	if(NParams > 1)	return NULL;
+	
+	if(NParams >= 1)	busSize = Params[0];
 	
 	if(busSize < 1)	busSize = 1;
 	
