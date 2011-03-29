@@ -123,7 +123,7 @@ int ParseValue(tParser *Parser, tList *destList)
 					SyntaxAssert(Parser, GetToken(Parser), TOK_NUMBER);
 					end = atoi(Parser->TokenStr);
 					
-					if( end < start )
+					if( end > start )
 					{
 						// Count up
 						for( ; start <= end; start ++ )
