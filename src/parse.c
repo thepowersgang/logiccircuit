@@ -122,13 +122,24 @@ int ParseValue(tParser *Parser, tList *destList)
 					// Item Range
 					SyntaxAssert(Parser, GetToken(Parser), TOK_NUMBER);
 					end = atoi(Parser->TokenStr);
-					if( end < start )
-						SyntaxError(Parser, "End of range is before start");
 					
-					for( ; start <= end; start ++ )
+					if( end < start )
 					{
-						if( AppendGroupItem(destList, tmpName, start) )
-							SyntaxError(Parser, "Error referencing group item %s[%i]", tmpName, start);
+						// Count up
+						for( ; start <= end; start ++ )
+						{
+							if( AppendGroupItem(destList, tmpName, start) )
+								SyntaxError(Parser, "Error referencing group item %s[%i]", tmpName, start);
+						}
+					}
+					else
+					{
+						// Count down
+						for( ; start >= end; start -- )
+						{
+							if( AppendGroupItem(destList, tmpName, start) )
+								SyntaxError(Parser, "Error referencing group item %s[%i]", tmpName, start);
+						}
 					}
 					
 					GetToken(Parser);
