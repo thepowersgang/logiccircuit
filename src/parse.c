@@ -59,6 +59,8 @@ enum eTokens
 	TOK_ASSIGN,
 	TOK_COLON,
 	
+	TOK_PLUS, TOK_MINUS, TOK_STAR, TOK_SLASH,
+	
 	TOK_PAREN_OPEN, TOK_PAREN_CLOSE,
 	TOK_BRACE_OPEN, TOK_BRACE_CLOSE,
 	TOK_SQUARE_OPEN,TOK_SQUARE_CLOSE,
@@ -70,6 +72,7 @@ const char * const casTOKEN_NAMES[] = {
 	"TOK_NULL", "TOK_EOF",
 	"TOK_META_STATEMENT", "TOK_NUMBER", "TOK_IDENT", "TOK_STRING",
 	"TOK_LINE", "TOK_GROUP", "TOK_NEWLINE", "TOK_COMMA", "TOK_ASSIGN", "TOK_COLON",
+	"TOK_PLUS", "TOK_MINUS", "TOK_STAR", "TOK_SLASH",
 	"TOK_PAREN_OPEN", "TOK_PAREN_CLOSE",
 	"TOK_BRACE_OPEN", "TOK_BRACE_CLOSE",
 	"TOK_SQUARE_OPEN","TOK_SQUARE_CLOSE",
@@ -78,6 +81,7 @@ const char * const casTOKEN_NAMES[] = {
 };
 
 // === PROTOTYPES ===
+ int	ParseNumber(tParser *Parser);
  int	ParseValue(tParser *Parser, tList *destList);
 void	*ParseOperation(tParser *Parser);
  int	ParseLine(tParser *Parser);
@@ -90,14 +94,68 @@ void	SyntaxWarning(tParser *Parser, const char *Fmt, ...);
 void	SyntaxAssert(tParser *Parser, int Got, int Expected);
 
 // === CODE ===
+int ParseNumber_Paren(tParser *Parser)
+{
+	if( GetToken(Parser) == TOK_PAREN_OPEN ) {
+		int ret = ParseNumber(Parser);
+		SyntaxAssert( Parser, GetToken(Parser), TOK_PAREN_CLOSE );
+		return ret;
+	}
+	SyntaxAssert( Parser, Parser->Token, TOK_NUMBER );
+	return atoi(Parser->TokenStr);
+}
+int ParseNumber_MulDiv(tParser *Parser)
+{
+	 int	val = ParseNumber_Paren(Parser);
+	
+	for(;;)
+	{
+		switch( GetToken(Parser) )
+		{
+		case TOK_STAR:
+			val *= ParseNumber_Paren(Parser);
+			break;
+		case TOK_SLASH:
+			val /= ParseNumber_Paren(Parser);
+			break;
+		default:
+			PutBack(Parser);
+			return val;
+		}
+	}
+}
+int ParseNumber_AddSub(tParser *Parser)
+{
+	 int	val = ParseNumber_MulDiv(Parser);
+	
+	for(;;)
+	{
+		switch( GetToken(Parser) )
+		{
+		case TOK_PLUS:
+			val += ParseNumber_MulDiv(Parser);
+			break;
+		case TOK_MINUS:
+			val -= ParseNumber_MulDiv(Parser);
+			break;
+		default:
+			PutBack(Parser);
+			return val;
+		}
+	}
+}
 /**
  * \brief Read a number from the buffer
  */
 int ParseNumber(tParser *Parser)
 {
+	#if 0
 	// TODO: Handle arithmatic operations too.
 	SyntaxAssert( Parser, GetToken(Parser), TOK_NUMBER );
 	return atoi(Parser->TokenStr);
+	#else
+	return ParseNumber_AddSub(Parser);
+	#endif
 }
 
 /**
@@ -738,6 +796,11 @@ int GetToken(tParser *Parser)
 	case '=':	// Assign Equals
 		ret = TOK_ASSIGN;
 		break;
+	
+	case '+':	ret = TOK_PLUS;	break;
+	case '-':	ret = TOK_MINUS;	break;
+	case '*':	ret = TOK_STAR;	break;
+	case '/':	ret = TOK_SLASH;	break;
 	
 	// String
 	case '"':
