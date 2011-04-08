@@ -91,6 +91,16 @@ void	SyntaxAssert(tParser *Parser, int Got, int Expected);
 
 // === CODE ===
 /**
+ * \brief Read a number from the buffer
+ */
+int ParseNumber(tParser *Parser)
+{
+	// TODO: Handle arithmatic operations too.
+	SyntaxAssert( Parser, GetToken(Parser), TOK_NUMBER );
+	return atoi(Parser->TokenStr);
+}
+
+/**
  * \brief Parse a "value" (Constant, Line or Group)
  * \return Zero on success, 1 if no value is found
  */
@@ -114,14 +124,16 @@ int ParseValue(tParser *Parser, tList *destList)
 			 int	start, end;
 			do
 			{
-				SyntaxAssert(Parser, GetToken(Parser), TOK_NUMBER);
-				start = atoi(Parser->TokenStr);
+				//SyntaxAssert(Parser, GetToken(Parser), TOK_NUMBER);
+				//start = atoi(Parser->TokenStr);
+				start = ParseNumber( Parser );
 				
 				if( GetToken(Parser) == TOK_COLON )
 				{
 					// Item Range
-					SyntaxAssert(Parser, GetToken(Parser), TOK_NUMBER);
-					end = atoi(Parser->TokenStr);
+					//SyntaxAssert(Parser, GetToken(Parser), TOK_NUMBER);
+					//end = atoi(Parser->TokenStr);
+					end = ParseNumber( Parser );
 					
 					if( end > start )
 					{
@@ -170,6 +182,9 @@ int ParseValue(tParser *Parser, tList *destList)
 			if( num < 0 || num > 1 ) {
 				SyntaxWarning(Parser, "Non-boolean constant value (%i) used\n", num);
 			}
+			
+//			if(LookAhead() == 
+			
 			if( num == 0 )
 				AppendLine( destList, "0" );
 			else
@@ -201,7 +216,9 @@ void *ParseOperation(tParser *Parser)
 {
 	char	*name;
 	tList	inputs = {0};
-	 int	param = -1;
+	const int	maxParams = 4;
+	 int	numParams = 0;
+	 int	params[maxParams];
 	
 	// Get Name
 	if( ParseValue(Parser, &inputs) == 0 )
@@ -221,12 +238,15 @@ void *ParseOperation(tParser *Parser)
 	
 	name = strdup( Parser->TokenStr );
 	
-	// Static Paramater (e.g. DELAY{4})
+	// Static Paramaters (e.g. DELAY{4}, AND{8,2})
 	if( GetToken(Parser) == TOK_BRACE_OPEN )
 	{
-		SyntaxAssert( Parser, GetToken(Parser), TOK_NUMBER );
-		param = atoi( Parser->TokenStr );
-		SyntaxAssert( Parser, GetToken(Parser), TOK_BRACE_CLOSE );
+		do {
+			if( numParams == maxParams )
+				SyntaxError(Parser, "Too many parameters to a gate (> %i)", maxParams);
+			params[numParams++] = ParseNumber( Parser );
+		} while( GetToken(Parser) == TOK_COMMA );
+		SyntaxAssert( Parser, Parser->Token, TOK_BRACE_CLOSE );
 	}
 	else
 		PutBack(Parser);
@@ -252,7 +272,7 @@ void *ParseOperation(tParser *Parser)
 	
 	// Create output
 	{
-		tList	*ret = CreateUnit( name, param, &inputs );
+		tList	*ret = CreateUnit( name, numParams, params, &inputs );
 		if(!ret) {
 			free(inputs.Items);
 			SyntaxError(Parser, "Unknown unit %s", name);
@@ -288,16 +308,19 @@ int ParseLine(tParser *Parser)
 			 int	len;
 			SyntaxAssert(Parser, GetToken(Parser), TOK_IDENT );
 			name = strndup( Parser->TokenStart, Parser->TokenLength );
-			SyntaxAssert(Parser, GetToken(Parser), TOK_NUMBER );
-			len = atoi( Parser->TokenStr );
+			//SyntaxAssert(Parser, GetToken(Parser), TOK_NUMBER );
+			//len = atoi( Parser->TokenStr );
+			len = ParseNumber( Parser );
 			
-			printf("Create Group @%s[%i]\n", name, len);
+			//printf("Create Group @%s[%i]\n", name, len);
 			CreateGroup( name, len );
 			free( name );
 		}
 		// Define a unit
 		else if( strcmp(Parser->TokenStr, "#defunit") == 0 ) {
 			SyntaxAssert(Parser, GetToken(Parser), TOK_IDENT );
+			if( Unit_IsInUnit() )
+				SyntaxError(Parser, "#defunit used within a unit (nesting not allowed)");
 			Unit_DefineUnit( Parser->TokenStr );
 		}
 		// Close a unit definition
@@ -320,10 +343,13 @@ int ParseLine(tParser *Parser)
 				case TOK_GROUP:
 					{
 					char	name[Parser->TokenLength+1];
+					 int	len;
 					strcpy(name, Parser->TokenStr);
 					SyntaxAssert(Parser, GetToken(Parser), TOK_SQUARE_OPEN);
-					SyntaxAssert(Parser, GetToken(Parser), TOK_NUMBER);
-					Unit_AddGroupInput( name, atoi(Parser->TokenStr) );
+					//SyntaxAssert(Parser, GetToken(Parser), TOK_NUMBER);
+					//len = atoi(Parser->TokenStr);
+					len = ParseNumber( Parser );
+					Unit_AddGroupInput( name, len );
 					SyntaxAssert(Parser, GetToken(Parser), TOK_SQUARE_CLOSE);
 					}
 					break;
@@ -352,10 +378,13 @@ int ParseLine(tParser *Parser)
 				case TOK_GROUP:
 					{
 					char	name[Parser->TokenLength+1];
+					 int	len;
 					strcpy(name, Parser->TokenStr);
 					SyntaxAssert(Parser, GetToken(Parser), TOK_SQUARE_OPEN);
-					SyntaxAssert(Parser, GetToken(Parser), TOK_NUMBER);
-					Unit_AddGroupOutput( name, atoi(Parser->TokenStr) );
+					//SyntaxAssert(Parser, GetToken(Parser), TOK_NUMBER);
+					//len = atoi(Parser->TokenStr);
+					len = ParseNumber( Parser );
+					Unit_AddGroupOutput( name, len );
 					SyntaxAssert(Parser, GetToken(Parser), TOK_SQUARE_CLOSE);
 					}
 					break;
@@ -504,11 +533,11 @@ int ParseFile(const char *Filename)
 	char	tmpFileName[] = "/tmp/logic_cct.cct.XXXXXX";
 	char	*cmdString;
 	
-	char	*fname = strrchr(Filename, '/');
-	 int	pathLen = (intptr_t)fname - (intptr_t)Filename + 1;
-	char	*path = malloc( pathLen + 1 );
-	memcpy(path, Filename, pathLen);
-	path[pathLen] = '\0';
+	//char	*fname = strrchr(Filename, '/');
+	// int	pathLen = (intptr_t)fname - (intptr_t)Filename + 1;
+	//char	*path = malloc( pathLen + 1 );
+	//memcpy(path, Filename, pathLen);
+	//path[pathLen] = '\0';
 	
 	close( mkstemp(tmpFileName) );
 	
@@ -518,9 +547,13 @@ int ParseFile(const char *Filename)
 	printf("%s\n", cmdString);
 	fflush(stdout);
 	
-	system(cmdString);
+	if( system(cmdString) != 0 ) {
+		fprintf(stderr, "Executing '%s' failed\n", cmdString);
+		free(cmdString);
+		return 1;
+	}
 	free(cmdString);
-	free(path);
+	//free(path);
 	fp = fopen(tmpFileName, "r");
 	unlink( tmpFileName );
 	}

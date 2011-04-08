@@ -18,6 +18,7 @@ struct sElementDef
 	 * \param Params	List of numeric parameters
 	 */
 	tElement	*(*Create)(int NParams, int *Params, int NInputs, tLink **Inputs);
+	tElement	*(*Duplicate)(tElement *this);
 	void	(*Update)(tElement *this);
 };
 

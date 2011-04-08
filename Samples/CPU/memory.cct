@@ -11,6 +11,8 @@
 
 #array ROM_select	16
 
+#display $enable "Memory Addr" @addr
+
 ;#display $ready  "Memory Output " @data_output
 ;#display $is_ROM "ROM 0x000?    " @ROM_select[0] 
 ;#display $is_ROM "ROM 0x001?    " @ROM_select[1]
@@ -19,7 +21,7 @@
 //  Reserved range: 0xF000 - 0xFFFF
 //  Size: 16 bytes
 $is_ROM = AND (DELAY $enable), (NOT   @addr[15]), (NOT   @addr[14]), (NOT   @addr[13]), (NOT   @addr[12])
-@ROM_select = DEMUX{4} $is_ROM, (DELAY{2} @addr[0]), (DELAY{2} @addr[1]), (DELAY{2} @addr[2]), (DELAY{2} @addr[3])
+@ROM_select = DEMUX{4} $is_ROM, (DELAY{2} @addr[0:3])
 
 %macro _ROM_BYTE 2
  %assign i 7

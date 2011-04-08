@@ -51,6 +51,7 @@ int main(int argc, char *argv[])
 	
 	ADD_ELEDEF(NOT);
 	ADD_ELEDEF(COUNTER);
+	ADD_ELEDEF(MUX);
 	ADD_ELEDEF(DEMUX);
 	
 	ADD_ELEDEF(CLOCK);
@@ -69,6 +70,7 @@ int main(int argc, char *argv[])
 			else {
 				// ERROR
 			}
+			continue ;
 		}
 		
 		if( ParseFile(argv[i]) ) {
@@ -103,38 +105,14 @@ int main(int argc, char *argv[])
 //		printf("- %p %s\n", link, link->Name);
 	}
 	
-	// Print links
-	// > Scan all links and find ones that share a value pointer 
-	if( gbPrintLinks )
-	{
-		for( link = gpLinks; link; link = link->Next )
-		{
-			tLink	*link2;
-			if(link->Backlink)	continue;	// Skip ones already done
-			printf("%p:", link->Value);
-			for( link2 = gpLinks; link2; link2 = link2->Next )
-			{
-				if(link2->Backlink)	continue;
-				if(link2->Value != link->Value)	continue;
-				if( link2->Name[0] )
-					printf(" %s", link2->Name);
-				else
-					printf(" %p", link2);
-				link2->Backlink = link;	// Make backlink non-zero
-			}
-			printf("\n");
-		}
-		
-		return 0;
-	}
-	
 	#if 1
 	for( ele = gpElements; ele; ele = ele->Next )
 	{
 		#if PRINT_ELEMENTS
 		printf("%p %s", ele, ele->Type->Name);
 		#endif
-		for( i = 0; i < ele->NInputs; i ++ ) {
+		for( i = 0; i < ele->NInputs; i ++ )
+		{
 			#if USE_LINKS
 			// Expand links
 			if( ele->Inputs[i]->Link ) {
@@ -174,6 +152,39 @@ int main(int argc, char *argv[])
 		#endif
 	}
 	#endif
+	
+	
+	// Print links
+	// > Scan all links and find ones that share a value pointer 
+	if( gbPrintLinks )
+	{
+		for( link = gpLinks; link; link = link->Next )
+		{
+			 int	linkCount;
+			tLink	*link2;
+			if(link->Backlink)	continue;	// Skip ones already done
+			linkCount = 0;
+			printf("(tValue)%p:", link->Value);
+			for( link2 = gpLinks; link2; link2 = link2->Next )
+			{
+				if(link2->Backlink)	continue;
+				if(link2->Value != link->Value)	continue;
+				if( link2->Name[0] )
+					printf(" %s", link2->Name);
+				else
+					printf(" (tLink)%p", link2);
+				link2->Backlink = link;	// Make backlink non-zero
+				linkCount ++;
+			}
+			printf(" (Used %i times)", linkCount);
+			//if( linkCount <= 2 )
+			//	printf("\r");
+			//else
+				printf("\n");
+		}
+		
+		return 0;
+	}
 	
 	signal(SIGINT, SigINT_Handler);
 	

@@ -1,0 +1,31 @@
+%include "adder.cct"
+
+// 8-Bit Subtractor
+// - Delay of 14 (ADDER_8BIT + 1)
+#defunit SUBBER_8BIT
+#input $enable, @val1[8], @val2[8], $borrow_in
+#output $ready, @ret[8], $borrow_out
+
+// A - B = A + ~B + 1
+// -B = ~B + 1 (0xF -> 0 -> 1)
+
+$ready, @ret, $borrow_out = ADDER_8BIT (DELAY $enable), (DELAY @val1), (NOT @val2), (NOT $borrow_in)
+
+#endunit
+
+// 16-Bit Subtractor
+// - Delay of 16 (ADDER_16BIT + 1)
+#defunit SUBBER_16BIT
+#input $enable, @val1[16], @val2[16], $borrow_in
+#output $ready, @ret[16], $borrow_out
+
+// A - B = A + ~B + 1
+// -B = ~B + 1 (0xF -> 0 -> 1)
+
+//#display (DELAY $enable) "DELAY @val1     " (DELAY @val1[15:0])
+//#display (DELAY $enable) "NOT   @val2     " (NOT @val2[15:0])
+//#display (DELAY $enable) "NOT   $borrow_in" (NOT $carry_in)
+
+$ready, @ret, $borrow_out = ADDER_16BIT (DELAY $enable), (DELAY @val1), (NOT @val2), (NOT $borrow_in)
+
+#endunit

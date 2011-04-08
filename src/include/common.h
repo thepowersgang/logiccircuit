@@ -81,7 +81,7 @@ extern int	MergeLinks(tList *Dest, tList *Src);
 /**
  * \brief Create a gate/unit
  */
-extern tList	*CreateUnit(const char *Name, int Param, tList *Inputs);
+extern tList	*CreateUnit(const char *Name, int NParams, int *Params, tList *Inputs);
 
 
 #if __cplusplus

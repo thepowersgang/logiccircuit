@@ -1,4 +1,8 @@
 /*
+ * De-Multiplexer
+ * INPUTS:
+ * - Data
+ * - Select[bits]
  */
 #include <element.h>
 #include <stdlib.h>
@@ -20,7 +24,7 @@ static tElement *_Create(int NParams, int *Params, int NInputs, tLink **Inputs)
 	if( NParams != 1 )	return NULL;
 	bits = Params[0];
 	
-	if( NInputs != 1 + bits ) {
+	if( NInputs < 1 + bits ) {
 		return NULL;
 	}
 	
@@ -31,6 +35,14 @@ static tElement *_Create(int NParams, int *Params, int NInputs, tLink **Inputs)
 	ret->Ele.Inputs = &ret->_links[0];
 	ret->Ele.NOutputs = 1 << bits;
 	ret->Ele.Outputs = &ret->_links[NInputs];
+	return &ret->Ele;
+}
+
+static tElement *_Duplicate(tElement *Source)
+{
+	 int	size = sizeof(t_element) + (Source->NOutputs+Source->NInputs)*sizeof(tLink*);
+	t_element *ret = malloc( size );
+	memcpy(ret, Source, size);
 	return &ret->Ele;
 }
 
@@ -57,5 +69,6 @@ tElementDef gElement_DEMUX = {
 	NULL, "DEMUX",
 	2, -1,
 	_Create,
+	_Duplicate,
 	_Update
 };

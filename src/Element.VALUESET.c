@@ -54,6 +54,16 @@ static tElement *_Create(int NParams, int *Params, int NInputs, tLink **Inputs)
 	return &ret->Ele;
 }
 
+static tElement *_Duplicate(tElement *Source)
+{
+	 int	size = sizeof(t_element) + (Source->NOutputs+Source->NInputs)*sizeof(tLink*);
+	t_element *ret = malloc( size );
+	memcpy(ret, Source, size);
+	ret->Ele.Outputs = &ret->_links[0];
+	ret->Ele.Inputs = &ret->_links[size];
+	return &ret->Ele;
+}
+
 static void _Update(tElement *Ele)
 {
 	t_element	*this = (t_element *)Ele;
@@ -81,5 +91,6 @@ tElementDef gElement_VALUESET = {
 	NULL, "VALUESET",
 	1, -1,
 	_Create,
+	_Duplicate,
 	_Update
 };

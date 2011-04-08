@@ -37,6 +37,19 @@ static tElement *_Create(int NParams, int *Params, int NInputs, tLink **Inputs)
 	return &ret->Ele;
 }
 
+static tElement *_Duplicate(tElement *Source)
+{
+	t_element	*ele = (void*)Source;
+	 int	size = sizeof(t_element) + (Source->NOutputs+Source->NInputs)*sizeof(tLink*)
+		+ ele->Time * sizeof(int);
+	t_element *ret = malloc( size );
+	memcpy(ret, Source, size);
+	ret->Ele.Outputs = &ret->_links[0];
+	ret->Ele.Inputs = &ret->_links[Source->NInputs];
+	ret->Rem = (int*)&ret->_links[Source->NInputs*2];
+	return &ret->Ele;
+}
+
 static void _Update(tElement *Ele)
 {
 	t_element	*this = (t_element *)Ele;
@@ -61,5 +74,6 @@ tElementDef gElement_HOLD = {
 	NULL, "HOLD",
 	1, -1,	// Min of 1, no max
 	_Create,
+	_Duplicate,
 	_Update
 };

@@ -220,6 +220,9 @@ tDisplayItem *AddDisplayItem(const char *Name, const tList *Condition, const tLi
 	return dispItem;
 }
 
+/**
+ * \brief Create a new group
+ */
 void CreateGroup(const char *Name, int Size)
 {
 	tGroupDef	*ret, *def, *prev = NULL;
@@ -238,7 +241,11 @@ void CreateGroup(const char *Name, int Size)
 	for( ; def; prev = def, def = def->Next )
 	{
 		if(strcmp(ret->Name, def->Name) == 0) {
-			fprintf(stderr, "ERROR: Redefinition of %s", ret->Name);
+			fprintf(stderr, "ERROR: Redefinition of %s\n", ret->Name);
+			if( gpCurUnit )
+				fprintf(stderr, " in unit '%s'\n", gpCurUnit->Name);
+			else
+				fprintf(stderr, " in root scope\n");
 			free(ret);
 			return;
 		}
@@ -249,16 +256,16 @@ void CreateGroup(const char *Name, int Size)
 		ret->Next = prev->Next;
 		prev->Next = ret;
 	}
-	else {
-		if( gpCurUnit ) {
-			ret->Next = gpCurUnit->Groups;
-			gpCurUnit->Groups = ret;
-		}
-		else {
-			ret->Next = gpGroups;
-			gpGroups = ret;
-		}
+	else if( gpCurUnit ) {
+		ret->Next = gpCurUnit->Groups;
+		gpCurUnit->Groups = ret;
 	}
+	else {
+		ret->Next = gpGroups;
+		gpGroups = ret;
+	}
+	
+//	printf("'%s' added to %s\n", ret->Name, (gpCurUnit?gpCurUnit->Name:"."));
 }
 
 /**
@@ -433,15 +440,13 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 			newLink->Next = prev->Next;
 			prev->Next = newLink;
 		}
+		else if( gpCurUnit ) {
+			newLink->Next = gpCurUnit->Links;
+			gpCurUnit->Links = newLink;
+		}
 		else {
-			if( gpCurUnit ) {
-				newLink->Next = gpCurUnit->Links;
-				gpCurUnit->Links = newLink;
-			}
-			else {
-				newLink->Next = gpLinks;
-				gpLinks = newLink;
-			}
+			newLink->Next = gpLinks;
+			gpLinks = newLink;
 		}
 	}
 	
@@ -514,10 +519,11 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 	{
 		tElement	*newele;
 		
-		newele = ele->Type->Create( 1, &ele->Param, ele->NInputs, ele->Inputs );
-		newele->Type = ele->Type;
-		newele->Param = ele->Param;
-		newele->NInputs = ele->NInputs;
+		newele = ele->Type->Duplicate( ele );
+		if(!newele) {
+			fprintf(stderr, "Error in creating copy of %s", ele->Type->Name);
+			return NULL;
+		}
 		for( i = 0; i < ele->NInputs; i ++ ) {
 			newele->Inputs[i] = ele->Inputs[i]->Backlink;
 			#if USE_LINKS
@@ -558,7 +564,7 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 /**
  * \brief Create a new unit instance
  */
-tList *CreateUnit(const char *Name, int Param, tList *Inputs)
+tList *CreateUnit(const char *Name, int NParams, int *Params, tList *Inputs)
 {
 	tElement	*ele;
 	tList	*ret = NULL;
@@ -594,10 +600,13 @@ tList *CreateUnit(const char *Name, int Param, tList *Inputs)
 	}
 	
 	// Create an instance
-	ele = def->Create(1, &Param, Inputs->NItems, Inputs->Items);
-	if(!ele)	return NULL;
+	ele = def->Create(NParams, Params, Inputs->NItems, Inputs->Items);
+	if(!ele) {
+		fprintf(stderr, "Error in creating '%s'\n", def->Name);
+		return NULL;
+	}
 	ele->Type = def;	// Force type to be set
-	ele->Param = Param;
+	//ele->Param = Param;
 	for( i = 0; i < Inputs->NItems; i ++ ) {
 		ele->Inputs[i] = Inputs->Items[i];
 	}
@@ -619,7 +628,6 @@ tList *CreateUnit(const char *Name, int Param, tList *Inputs)
 	for( i = 0; i < ele->NOutputs; i ++ ) {
 		ele->Outputs[i] = CreateAnonLink();
 		ret->Items[i] = ele->Outputs[i];
-		//printf(" ret->Items[%i] = %p\n", i, ret->Items[i]);
 	}
 	
 	return ret;

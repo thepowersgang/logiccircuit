@@ -46,6 +46,20 @@ static tElement *_Create(int NParams, int *Params, int NInputs, tLink **Inputs)
 	return &ret->Ele;
 }
 
+static tElement *_Duplicate(tElement *Source)
+{
+	t_element	*ele = (void*)Source;
+	 int	size = sizeof(t_element) + (2*Source->NInputs)*sizeof(tLink*)
+		+ Source->NInputs*ele->Delay;
+	t_element *ret = malloc( size );
+	memcpy(ret, Source, size);
+	ret->Ele.Outputs = &ret->_links[0];
+	ret->Ele.Inputs = &ret->_links[Source->NInputs];
+	ret->Cache = (int8_t *) &ret->_links[Source->NInputs*2];
+	if(ele->Delay)	ret->Cache[0] = 0;
+	return &ret->Ele;
+}
+
 // DELAY{1}:
 // if(GetLink()) RaiseLink()
 // DELAY{2}:
@@ -94,5 +108,6 @@ tElementDef gElement_DELAY = {
 	NULL, "DELAY",
 	1, -1,
 	_Create,
+	_Duplicate,
 	_Update
 };
