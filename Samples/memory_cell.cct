@@ -6,6 +6,8 @@
 ; Delays:
 ; - Writing: 3
 ; - Reading: 0
+%define delayof_LATCH	1
+%if 0
 %define delayof_LATCH	3
 #defunit LATCH
 #input $pulse, $clr, $set
@@ -15,17 +17,17 @@
 $_set = HOLD{2} $set
 $_clr = HOLD{2} $clr
 
-//#display (HOLD{2} $pulse) "$set, $clr, $_set, $_clr" $set, $clr, $_set, $_clr
-
 ; Actual latch, uses the fact that $_clr and $_set are held high to
 ; stabilise the value when set (due to the double memory effect of $value)
 $value = AND (NOT $_clr), (OR $value, $_set)
 
 $ret = DELAY $value
-$ready = DELAY{5} $pulse
+$ready = DELAY{3} $pulse
 //#display $ready "$value, $value2" $value, $value2
 
 #endunit
+
+%endif
 
 ; Memory Cell
 ; Usage: MEMORY_CELL <enable>, <write>, <value>

@@ -4,12 +4,13 @@
 // Designed in LogicCircuit
 %include "memory.cct"
 %include "../adder.cct"
-%include "../subber_8bit.cct"
+%include "../subber.cct"
 
 %define	NUM_GPR_BITS	8
 %define	NUM_ADDR_BITS	16
 
 #array mem_data_in NUM_GPR_BITS
+#array mem_data_in_ NUM_GPR_BITS
 #array mem_data_out NUM_GPR_BITS
 #array reg_data_in NUM_GPR_BITS
 #array reg_data_out NUM_GPR_BITS
@@ -29,35 +30,28 @@
 #array instr	8
 #array val	NUM_GPR_BITS
 
-#breakpoint (DELAY{2} $next_stage) "Next Stage"
+#breakpoint $next_stage "Next Stage"
 #breakpoint $reg_pc_write "PC Write"
 #breakpoint $stage_reset "Stage Reset"
 
-#display 1 "Clock " $clock
-#display 1 "Stage " @stage_state
-#display 1 "Reset " $stage_reset
-#display 1 "NextS " $next_stage
-#display 1 "PC    " @reg_pc_in
-#display 1 "Opcode" @instr
-#display 1 "NextI " $next_instruction
-
-#display 1 "MemEn " $mem_enable
-#display $mem_enable "MemAddr" @mem_addr
-#display $mem_write "MemOut " @mem_data_out
-#display 1 "MemRdy" $mem_ready
-#display $mem_ready "MemIn  " @mem_data_in
-#display 1 "RegRdy" $reg_ready
+#display 1 "Clock  " $clock
+#display 1 "Stage %4x" @stage_num[3:0], @stage_state
+#display 1 "Reset  " $stage_reset
+#display 1 "NextS  " $next_stage
+#display 1 "PC     " @reg_pc_in[NUM_ADDR_BITS-1:0]
+#display 1 "instr = 0x%8x" @instr[7:0]
+#display 1 "val   = 0x%8x" @val[NUM_GPR_BITS-1:0]
+#display 1 "addr  = 0x%16x" @addr[NUM_ADDR_BITS-1:0]
+#display 1 "NextI  " $next_instruction
 
 // Instruction clock (used to ensure synchronisation)
 // In each 128 cycles, the clock is high for one
 // TODO: Determine how many logic cycles are needed to run the CPU
 //       - Maybe have @stage_state[15] map to reset (or map others via an
 //         AND with $is_*)
+// NOTE: Unused really
 $clock = CLOCK{128}
 
-// === Memory ===
-// TODO: Maybe have these lines be arguments of some form
-$mem_ready, @mem_data_in = MEMORY_SPACE $mem_enable, @mem_addr, $mem_data_write, @mem_data_out
 
 // === Registers ===
 // --- General Purpose Registers ---
@@ -70,29 +64,50 @@ $mem_ready, @mem_data_in = MEMORY_SPACE $mem_enable, @mem_addr, $mem_data_write,
 #array reg_ %+ i %+ _newvalue NUM_GPR_BITS
 $reg_ %+ i %+ _ready, @reg_ %+ i %+ _value = MEMORY_BYTE 1, $reg_ %+ i %+ _write, @reg_ %+ i %+ _newvalue	// Actual Register
 
-$reg_ %+ i %+ _write = AND @reg_select[i], $reg_write	// Get global Write signal
+$reg_ %+ i %+ _write = AND @reg_select[i], (DELAY $reg_write)	// Get global Write signal
 $reg_ready = DELAY{delayof_MEMORY_WORD} @reg_select[i]	// Set global ready signal
- %assign j 0
- %rep NUM_GPR_BITS
-@reg_ %+ i %+ _newvalue[j] = AND @reg_select[i], @reg_data_out[j]	// Get global input
-@reg_data_in[j] = AND @reg_select[i], @reg_ %+ i %+ _value[j]	// Set global output
- %assign j j+1
- %endrep
+
+@reg_ %+ i %+ _newvalue = AND{NUM_GPR_BITS} @reg_select[i], (DELAY @reg_data_out)	// Get global input
+@reg_data_in = AND{NUM_GPR_BITS} @reg_select[i], @reg_ %+ i %+ _value	// Set global output
 %assign i i+1
 %endrep
+#display 1 "R 0=%8x R 1=%8x R 2=%8x R 3=%8x" @reg_0_value[NUM_GPR_BITS-1:0], @reg_1_value[NUM_GPR_BITS-1:0], \
+	@reg_2_value[NUM_GPR_BITS-1:0], @reg_3_value[NUM_GPR_BITS-1:0]
+#display 1 "R 4=%8x R 5=%8x R 6=%8x R 7=%8x" @reg_4_value[NUM_GPR_BITS-1:0], @reg_5_value[NUM_GPR_BITS-1:0], \
+	@reg_6_value[NUM_GPR_BITS-1:0], @reg_7_value[NUM_GPR_BITS-1:0]
+#display 1 "R 8=%8x R 9=%8x R10=%8x R11=%8x" @reg_8_value[NUM_GPR_BITS-1:0], @reg_9_value[NUM_GPR_BITS-1:0], \
+	@reg_10_value[NUM_GPR_BITS-1:0], @reg_11_value[NUM_GPR_BITS-1:0]
+#display 1 "R12=%8x R13=%8x R14=%8x R15=%8x" @reg_12_value[NUM_GPR_BITS-1:0], @reg_13_value[NUM_GPR_BITS-1:0], \
+	@reg_14_value[NUM_GPR_BITS-1:0], @reg_15_value[NUM_GPR_BITS-1:0]
+// --- FLAGS Pseudo-Register ---
+$NULL, $flags_C = LATCH 1, $flags_C_clear, $flags_C
+#display 1 "CF" $flags_C
+
+#display $reg_enable "Register Addr %4b, Write? %1b" @reg_addr[3:0]
+#display $reg_write "Register Value %8x" @reg_data_out[7:0]
+
 // --- Program Counter ---
 #display $reg_pc_write "New PC" @reg_pc_out
 $NULL, @reg_pc_in = MEMORY_WORD 1, $reg_pc_write, @reg_pc_out
-// --- FLAGS Pseudo-Register ---
-$NULL, $flags_C = LATCH 1, $flags_C_clear, $flags_C
+
+
+
+// === Memory ===
+// TODO: Maybe have these lines be arguments of some form
+$mem_ready, @mem_data_in_ = MEMORY_SPACE $mem_enable, @mem_addr, $mem_data_write, @mem_data_out
+#display $mem_enable "MemAddr" @mem_addr
+#display $mem_write "MemOut " @mem_data_out
+#display $mem_ready "MemIn  " @mem_data_in_[NUM_GPR_BITS-1:0]
+@mem_data_in = DELAY{4} @mem_data_in_	// Line up with stage change (rdy->next->counter->demux->)
 
 // === "Temporary" Latches ===
 // @instr, @val and @addr - Temporary "variables" used to hold intermediate values
 // to be moved to other locations
+#display 1 "instr_clear=%1i, val_clear=%1i" $instr_clear, $val_clear
 @instr = LATCH_BYTE $instr_clear, @instr
 @val   = LATCH_BYTE $val_clear, @val
 @addr  = LATCH_WORD $addr_clear, @addr
-$NULL, $next_instruction  = LATCH 1, $nextinstr_clear, $next_instruction
+//$NULL, $next_instruction  = LATCH 1, $nextinstr_clear, $next_instruction
 
 // === Timing control (stages) ===
 // 4-bit counter reset by $stage_reset, incremented by $mem_ready
@@ -108,42 +123,40 @@ $next_stage = DELAY $reg_ready
 $stage_reset = PULSE $next_instruction
 
 // === PC Increment ===
-$increment_pc = PULSE $next_instruction
 $reg_pc_invalidate = $increment_pc	// Invalidate PC when increment is called
 // Add 1 to the PC register (if $increment_pc is set)
 // - Assigning to reg_pc_(write|out) causes it to update the register
 //   once done
-$reg_pc_write, @reg_pc_out, $NULL = ADDER_16BIT ($increment_pc),\
-	@reg_pc_in, \
-	1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, \
-	0
-$reg_pc_valid = DELAY{4} $reg_pc_write	// TODO: Fine tune this to the write delay of a word register
+$reg_pc_write, @reg_pc_out, $NULL = ADDER_16BIT $increment_pc, @reg_pc_in, (CONST{16,0x0001} 1), 0
+$reg_pc_valid = DELAY{6} $reg_pc_write	// TODO: Fine tune this to the write delay of a word register
 $reg_pc_valid = PULSE 1	// Raise at CPU init
 $NULL, $reg_pc_valid  = LATCH 1, $reg_pc_invalidate, $reg_pc_valid
+#display 1 "PC Valid? %1i" $reg_pc_valid
 
 // === Instruction input ===
 // STAGE0 - Opcode Fetch
 #display @stage_state[0] "Opcode fetch" 1
 // Reset all values
-$instr_clear = @stage_state[0]	// Clear the instruction cache
-$val_clear   = @stage_state[0]	// Clear the value cache
-$addr_clear  = @stage_state[0]	// Clear the address cache
+$instr_clear = DELAY @stage_state[0]	// Clear the instruction cache
+$val_clear   = DELAY @stage_state[0]	// Clear the value cache
+$addr_clear  = DELAY @stage_state[0]	// Clear the address cache
 // Read opcode from memory
 // - Memory read will update the stage to #2
 // - ANDing with $reg_pc_valid causes the read to not be attempted until
 //   PC is marked as valid
-@mem_addr = DELAY (AND{NUM_ADDR_BITS} @stage_state[0], $reg_pc_valid, @reg_pc_in)	// Set memory address to PC
+@mem_addr = PULSE (AND{NUM_ADDR_BITS} @stage_state[0], $reg_pc_valid, @reg_pc_in)	// Set memory address to PC
 $mem_enable   = PULSE (AND @stage_state[0], $reg_pc_valid)	// Enable memory for read
 $increment_pc = PULSE (AND @stage_state[0], $reg_pc_valid)	// Increment the program counter too
 
-// STAGE1 - Instruction fetched, save in latch
-#display @stage_state[1] "Instruction Save" @stage_state[1]
-@instr = AND{8} @stage_state[1], (DELAY{4} @mem_data_in)	// Save the opcode byte
+// === STAGE1 - Instruction fetched, save in latch ===
+#display @stage_state[1] "Instruction Save" 1
+@instr = AND{8} @stage_state[1], @mem_data_in	// Save the opcode byte
 $next_stage = PULSE (DELAY{3} @stage_state[1])	// Wait for latch to hold and for instructions to decode
 
 // =======================
 // === Opcode Decoding ===
 // =======================
+$decode_instr = AND (NOT @stage_state[0], @stage_state[1])
 $is_MOVar  = AND (NOT   @instr[7]), (NOT   @instr[6]), (NOT   @instr[5]), (NOT   @instr[4])	// 0000rrrr
 $is_MOVra  = AND (NOT   @instr[7]), (NOT   @instr[6]), (NOT   @instr[5]), (DELAY @instr[4])	// 0001rrrr
 
@@ -197,29 +210,36 @@ $_branch_condition = AND (DELAY @instr[2]), (NOT   @instr[1]), $flags_C	// Carry
 $_branch_condition = AND (DELAY @instr[2]), (DELAY @instr[1]), @reg_0_value[7]	// Negative
 $branch_condition = XOR $_branch_condition, @instr[0]
 // Load destination
-$is_branch = AND $is_JMPcc, $is_CALLcc
+$is_branch = OR $is_JMPcc, $is_CALLcc
 // Part 1
 // - Byte 0
-$next_stage = AND $is_branch, @stage_state[2], $reg_pc_valid
+$next_stage = PULSE (AND $is_branch, @stage_state[2], $reg_pc_valid)
 @mem_addr = AND{NUM_ADDR_BITS} $is_branch, (DELAY @stage_state[3]), @reg_pc_in
 $mem_enable = PULSE (AND $is_branch, @stage_state[3])	// Enable memory for read
 $increment_pc = PULSE (AND $is_branch, @stage_state[3])	// Increment PC
 @addr[0:7] = AND{8} $is_branch, @stage_state[4], @mem_data_in[0:7]
+// > Sign extend
+@addr[8:15] = AND{8} $is_branch, @stage_state[4], (NOT @instr[3]), \
+	@mem_data_in[7], @mem_data_in[7], @mem_data_in[7], @mem_data_in[7], \
+	@mem_data_in[7], @mem_data_in[7], @mem_data_in[7], @mem_data_in[7]
 // Part 2
-$next_stage = AND $is_branch, @stage_state[4], $reg_pc_valid
+$next_stage = PULSE (AND $is_branch, @stage_state[4], $reg_pc_valid)
 // - Add current PC (only for s=0)
 // @addr[8:15] is zero due to the latch being cleared at the beginning of an instruction
-$next_stage, @addr, $NULL = ADDER_16BIT (AND $is_branch, @stage_state[5], (NOT @instr[3])), @reg_pc_in, @addr, 0
-$addr_clear = AND $is_branch, @stage_state[5], (NOT @instr[3])	// Clear addr latch for next value
+$next_stage, @addr, $NULL = ADDER_16BIT (PULSE (AND $is_branch, @stage_state[5], (NOT @instr[3]))), @reg_pc_in, @addr, 0
+$addr_clear = DELAY (PULSE (AND $is_branch, @stage_state[5], (NOT @instr[3])))	// Clear addr latch for next value
+$next_stage = PULSE (AND $is_branch, @stage_state[6], (NOT @instr[3]))	// Skip stage 6
 // - Byte 1 (only for s=1)
 @mem_addr = AND{NUM_ADDR_BITS} $is_branch, @instr[3], @stage_state[5], @reg_pc_in
 $mem_enable = PULSE (AND $is_branch, @instr[3], @stage_state[5])	// Enable memory for read
 $increment_pc = PULSE (AND $is_branch, @instr[3], @stage_state[5])	// Increment PC
 @addr[8:15] = AND{8} $is_branch, @instr[3], @stage_state[6], @mem_data_in[0:7]
-$next_stage = AND $is_branch, @instr[3], @stage_state[6], $reg_pc_valid
+$next_stage = PULSE (AND $is_branch, @instr[3], @stage_state[6], $reg_pc_valid)
 // --- JMPcc ---
+#display $is_JMPcc "Op - JMPcc " @instr[3:0]
 @reg_pc_out = AND{NUM_ADDR_BITS} $is_JMPcc, $_branch_condition, @stage_state[7], @addr
-$reg_pc_write = AND $is_JMPcc, $_branch_condition, @stage_state[7]
+$reg_pc_write = PULSE (AND $is_JMPcc, $_branch_condition, @stage_state[7])
+$next_instruction = PULSE (AND $is_JMPcc, $_branch_condition, @stage_state[7])
 // TODO
 // --- CALLcc ---
 // TODO
@@ -264,29 +284,29 @@ $next_instruction = PULSE (AND $is_STORE, @stage_state[5])
 
 
 // --- MOVar ---
-#display $is_ADD "Op - MOV A, Rr" @instr[3:0]
+#display $is_MOVar "Op - MOV A, Rr" @instr[3:0]
 // > Read register Rr
+$reg_enable = AND $is_MOVra, (PULSE @stage_state[2])
 @reg_addr[0:3] = AND{4} $is_MOVar, (PULSE @stage_state[2]), @instr[0:3]
 // reg_addr should have reverted to zero by now (stage 2), so we just use the
 // "stored" value from @reg_data_in to write to A
-$reg_enable = PULSE (AND $is_MOVar, @stage_state[3])
-$reg_write = PULSE (AND $is_MOVar, @stage_state[3])
+$reg_enable = AND $is_MOVar, (PULSE @stage_state[3])
+$reg_write = AND $is_MOVar, (PULSE @stage_state[3])
 @reg_data_out = AND{NUM_GPR_BITS} $is_MOVar, (PULSE @stage_state[3]), @reg_data_in
 // Reset when write completes
 $next_instruction = PULSE (AND $is_MOVar, @stage_state[4])
 
 
 // --- MOVra ---
-#display $is_ADD "Op - MOV Rr, A" @instr[3:0]
+#display $is_MOVra "Op - MOV Rr, A" @instr[3:0]
 // > Read from R0 (A)
-// > Set register address again
-@reg_addr[0:3] = AND{4} $is_MOVra, (DELAY @stage_state[2]), @instr[0:3]
 // > Write data from R0 to Rr
-$reg_enable = PULSE (AND $is_MOVar, @stage_state[2])
-$reg_write = PULSE (AND $is_MOVar, @stage_state[2])
-@reg_data_out = AND{NUM_GPR_BITS} $is_MOVar, (PULSE @stage_state[2]), @reg_0_value
+@reg_addr = AND{4} $is_MOVra, (PULSE @stage_state[2]), @instr[0:3]
+$reg_enable = AND $is_MOVra, (PULSE @stage_state[2])
+$reg_write = AND $is_MOVra, (PULSE @stage_state[2])
+@reg_data_out = AND{NUM_GPR_BITS} $is_MOVra, (PULSE @stage_state[2]), @reg_0_value
 // Reset when write completes
-$next_instruction = PULSE (AND $is_MOVar, @stage_state[3])
+$next_instruction = AND $is_MOVra, (PULSE @stage_state[3])
 
 // --- ADD A, Rr ---
 #display $is_ADD "Op - ADD A, Rr" @instr[3:0]
@@ -306,7 +326,7 @@ $reg_enable = PULSE (AND $is_ADD, @stage_state[5])
 $next_instruction = PULSE (AND $is_ADD, @stage_state[6])
 
 // --- SUB A, Rr ---
-#display $is_ADD "Op - SUB A, Rr" @instr[3:0]
+#display $is_SUB "Op - SUB A, Rr" @instr[3:0]
 // > Read to @val
 @reg_addr = AND{4} $is_SUB, (DELAY @stage_state[2]), @instr[0:3]
 $reg_enable = PULSE (AND $is_SUB, @stage_state[2])
@@ -315,7 +335,7 @@ $reg_enable = PULSE (AND $is_SUB, @stage_state[2])
 $reg_enable = PULSE (AND $is_SUB, @stage_state[3])
 // > Get A + Rr
 $flags_C_clear = PULSE (AND $is_SUB, @stage_state[4])	// Clear Carry Flag
-$next_stage, @add_temp, $flags_C = SUBTRACTOR_ %+ NUM_GPR_BITS %+ BIT (AND $is_SUB, @stage_state[4]), @val, @reg_data_in, $flags_C
+$next_stage, @add_temp, $flags_C = SUBBER_ %+ NUM_GPR_BITS %+ BIT (AND $is_SUB, @stage_state[4]), @val, @reg_data_in, $flags_C
 // > Write Back
 $reg_write = PULSE (AND $is_SUB, @stage_state[5])
 $reg_enable = PULSE (AND $is_SUB, @stage_state[5])
@@ -389,7 +409,7 @@ $next_instruction = PULSE (AND $is_XOR, @stage_state[5])
 // TODO: Implement
 
 // --- NOT A ---
-#display $is_NOT_A "NOT A" $is_NOT_A
+#display $is_NOT_A "Op - NOT A" 1
 // > Read A
 #display (AND $is_NOT_A, @stage_state[3]) "A  " @reg_0_value
 // > Write back, changed
@@ -403,11 +423,10 @@ $reg_0_write  = PULSE (AND $is_NOT_A, @stage_state[2])
 $next_instruction = PULSE (AND $is_NOT_A, @stage_state[3])
 
 // --- NEG A ---
-// TODO:
-#display $is_NEG_A "NEG A" $is_NEG_A
+#display $is_NEG_A "Op - NEG A" 1
 // > Get A + Rr
 $flags_C_clear = PULSE (AND $is_NEG_A, @stage_state[2])	// Clear Carry Flag
-$next_stage, @add_temp, $flags_C = SUBTRACTOR_ %+ NUM_GPR_BITS %+ BIT (AND $is_NEG_A, @stage_state[2]), \
+$next_stage, @add_temp, $flags_C = SUBBER_ %+ NUM_GPR_BITS %+ BIT (AND $is_NEG_A, @stage_state[2]), \
 	0, 0, 0, 0, 0, 0, 0, 0, \
 	@reg_0_value, $flags_C
 // > Write Back
@@ -417,48 +436,53 @@ $reg_enable = PULSE (AND $is_NEG_A, @stage_state[3])
 $next_instruction = PULSE (AND $is_NEG_A, @stage_state[4])
 
 // --- CLC ---
+#display $is_CLC "Op - CLC" 1
 $flags_C_clear = AND $is_CLC, @stage_state[2]
 $next_instruction = PULSE (AND $is_CLC, @stage_state[2])
 
 // --- STC ---
+#display $is_STC "Op - STC" 1
 $flags_C = AND $is_SRC, @stage_state[2]
 $next_instruction = PULSE (AND $is_CLC, @stage_state[2])
 
 // --- LDI ---
 // Load Data Immediate
 // A := imm8
+#display $is_LDI_A "Op - LDI A, imm8" 1
 // - Wait until PC is valid
-$next_stage = AND $is_LDI_A, @stage_state[2], $reg_pc_valid
 // - Read value from memory
-@mem_addr = AND{NUM_ADDR_BITS} (DELAY $is_LDI_A, @stage_state[3]), @reg_pc_in
-$mem_enable = PULSE (AND $is_LDI_A, @stage_state[3])	// Enable memory for read
-$increment_pc = PULSE (AND $is_LDI_A, @stage_state[3])	// Increment PC
+@mem_addr = AND{NUM_ADDR_BITS} (AND $is_LDI_A, @stage_state[2], $reg_pc_valid), @reg_pc_in
+$mem_enable = PULSE (AND $is_LDI_A, @stage_state[2], $reg_pc_valid)	// Enable memory for read
+$increment_pc = PULSE (AND $is_LDI_A, @stage_state[2], $reg_pc_valid)	// Increment PC
 // - Save to A
-$reg_write = PULSE (AND $is_LDI_A, @stage_state[4])
-$reg_enable = PULSE (AND $is_LDI_A, @stage_state[4])
-@reg_data_out = DELAY (AND{NUM_GPR_BITS} $is_LDI_A, @stage_state[4], @mem_data_in)
+@val = AND{NUM_GPR_BITS} $is_LDI_A, @stage_state[3], @mem_data_in
+$reg_0_write = PULSE (AND $is_LDI_A, @stage_state[3])
+@reg_0_newvalue = DELAY (AND{NUM_GPR_BITS} $is_LDI_A, @stage_state[3], @mem_data_in)
 // - Next Instruction
-$next_instruction = PULSE (AND $is_LDI_A, @stage_state[5])
+$next_instruction = PULSE (AND $is_LDI_A, @stage_state[3])
 
 // --- LAI ---
 // Load Address Immediate
 // X := imm16
+#display $is_LAI_X "Op - LAI X, imm16" 1
 // - Wait until PC is valid
-$next_stage = AND $is_LAI_A, @stage_state[2], $reg_pc_valid
+$next_stage = PULSE (AND $is_LAI_X, @stage_state[2], $reg_pc_valid)
 // - Read low byte of address
-@mem_addr = DELAY (AND{NUM_ADDR_BITS} $is_LAI_A, @stage_state[3], @reg_pc_in)
-$mem_enable = PULSE (AND $is_LAI_A, @stage_state[3])	// Enable memory for read
-$increment_pc = PULSE (AND $is_LAI_A, @stage_state[3])	// Increment PC
+@mem_addr = DELAY (AND{NUM_ADDR_BITS} $is_LAI_X, @stage_state[3], @reg_pc_in)
+$mem_enable = PULSE (AND $is_LAI_X, @stage_state[3])	// Enable memory for read
+$increment_pc = PULSE (AND $is_LAI_X, @stage_state[3])	// Increment PC
 // - Save to R12
-$reg_12_write = PULSE (AND $is_LAI_A, @stage_state[4])
-@reg_12_newvalue = DELAY (AND{NUM_GPR_BITS} $is_LAI_A, @stage_state[4], @mem_data_in)
-$next_stage = PULSE (AND $is_LAI_A, (DELAY{2} @stage_state[4]))
+$reg_12_write = PULSE (AND $is_LAI_X, @stage_state[4])
+@reg_12_newvalue = DELAY (AND{NUM_GPR_BITS} $is_LAI_X, @stage_state[4], @mem_data_in)
+@addr[7:0] = AND{NUM_GPR_BITS} $is_LAI_X, @stage_state[4], @mem_data_in	// DEBUG
+$next_stage = PULSE (AND $is_LAI_X, (DELAY{2} @stage_state[4]), $reg_pc_valid)
 // - Read high byte of address
-@mem_addr = DELAY (AND{NUM_ADDR_BITS} $is_LAI_A, @stage_state[5], @reg_pc_in)
-$mem_enable = PULSE (AND $is_LAI_A, @stage_state[5])	// Enable memory for read
-$increment_pc = PULSE (AND $is_LAI_A, @stage_state[5])	// Increment PC
+@mem_addr = DELAY (AND{NUM_ADDR_BITS} $is_LAI_X, @stage_state[5], @reg_pc_in)
+$mem_enable = PULSE (AND $is_LAI_X, @stage_state[5])	// Enable memory for read
+$increment_pc = PULSE (AND $is_LAI_X, @stage_state[5])	// Increment PC
 // - Save to R13
-$reg_13_write = PULSE (AND $is_LAI_A, @stage_state[6])
-@reg_13_newvalue = DELAY (AND{NUM_GPR_BITS} $is_LAI_A, @stage_state[6], @mem_data_in)
+$reg_13_write = PULSE (AND $is_LAI_X, @stage_state[6])
+@reg_13_newvalue = DELAY (AND{NUM_GPR_BITS} $is_LAI_X, @stage_state[6], @mem_data_in)
+@addr[15:8] = AND{NUM_GPR_BITS} $is_LAI_X, @stage_state[6], @mem_data_in	// DEBUG
 // - Next Instruction
-$next_instruction = PULSE (AND $is_LAI_A, @stage_state[6])
+$next_instruction = PULSE (AND $is_LAI_X, @stage_state[6])

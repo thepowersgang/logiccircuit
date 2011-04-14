@@ -8,8 +8,8 @@ OBJ := main.o parse.o build.o
 #OBJ += Element.AND.o Element.OR.o Element.XOR.o
 #OBJ += Element.NAND.o Element.NOR.o Element.NXOR.o
 OBJ += Elements.Logic.o Element.NOT.o
-OBJ += Element.CLOCK.o Element.COUNTER.o Element.DELAY.o Element.MUX.o Element.DEMUX.o
-OBJ += Element.PULSE.o Element.HOLD.o Element.VALUESET.o
+OBJ += Element.CLOCK.o Element.COUNTER.o Element.MUX.o Element.DEMUX.o Element.LATCH.o
+OBJ += Element.PULSE.o Element.HOLD.o Element.VALUESET.o Element.CONST.o Element.DELAY.o
 BIN = ../logic_cct
 
 .PHONY: all clean

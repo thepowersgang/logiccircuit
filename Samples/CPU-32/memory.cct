@@ -6,8 +6,8 @@
 %include "../memory_bank.cct"
 
 #defunit MEMORY_SPACE
-#input $enable, @addr[16], $data_write, @data_input[8]
-#output $ready, @data_output[8]
+#input $enable, @addr[32], $data_write, @data_input[32]
+#output $ready, @data_output[32]
 
 #array ROM_select	16
 
@@ -25,30 +25,18 @@
 $is_ROM = AND (DELAY $enable), (NOT   @addr[15]), (NOT   @addr[14]), (NOT   @addr[13]), (NOT   @addr[12])
 @ROM_select = DEMUX{4} $is_ROM, (DELAY{2} @addr[0:3])
 
-%macro _ROM_BYTE 2
+%macro _ROM_DWORD 2
  %assign i 7
  %rep 8
   %if %2 & 1 << i
-@data_output[i] = DELAY @ROM_select[%1]
+@data_output[i] = DELAY @ROM_select[%1/4]
   %endif
   %assign i i-1
  %endrep
 %endmacro
 
 // === ROM Contents ===
-_ROM_BYTE 0x00, 0x58	; JMP 0x0000
-_ROM_BYTE 0x01, 0x00	;
-_ROM_BYTE 0x02, 0x00	;
-
-;_ROM_BYTE 0x00, 0x7C	; LDI A, 0x80
-;_ROM_BYTE 0x01, 0x80	;
-;_ROM_BYTE 0x02, 0x11	; MOV r1, A
-;_ROM_BYTE 0x03, 0x7D	; LAI X, 0xF000
-;_ROM_BYTE 0x04, 0x00	;
-;_ROM_BYTE 0x05, 0xF0	;
-;_ROM_BYTE 0x06, 0x50	; JMP .+0xFE
-;_ROM_BYTE 0x07, 0xFE	;
-// === / ===
+_ROM_DWORD 0x0000, 0x40FFFFFC	; JMP .+0xFFFFFC (-4)
 
 // 1 delay for DEMUX, 1 for data
 $ready = DELAY{2} $is_ROM

@@ -5,8 +5,10 @@
 #include <element.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <signal.h>
 #include <string.h>
+#include <ctype.h>
 
 #define PRINT_ELEMENTS	0
 
@@ -31,6 +33,7 @@ extern void	LinkValue_Deref(tLinkValue *Value);
 // === PROTOTYPES ===
 void	ReadCommand(int MaxCmd, char *Command, int MaxArg, char *Argument);
 void	SigINT_Handler(int Signum);
+void	PrintDisplayItem(tDisplayItem *dispItem);
 
 // === GLOBALS ===
  int	gbRunSimulation = 1;
@@ -53,6 +56,7 @@ int main(int argc, char *argv[])
 	ADD_ELEDEF(COUNTER);
 	ADD_ELEDEF(MUX);
 	ADD_ELEDEF(DEMUX);
+	ADD_ELEDEF(LATCH);
 	
 	ADD_ELEDEF(CLOCK);
 	
@@ -60,6 +64,7 @@ int main(int argc, char *argv[])
 	ADD_ELEDEF(PULSE);
 	ADD_ELEDEF(HOLD);
 	ADD_ELEDEF(VALUESET);
+	ADD_ELEDEF(CONST);
 	
 	// Load Circuit file(s)
 	for( i = 1; i < argc; i ++ )
@@ -226,16 +231,7 @@ int main(int argc, char *argv[])
 			}
 			if( i == dispItem->Condition.NItems )	continue;
 			
-			printf("%s: ", dispItem->Label);
-			for( i = 0; i < dispItem->Values.NItems; i ++ )
-			{
-				//printf("%i ", dispItem->Values.Items[i]->Value->NDrivers);
-				//printf("(%s) %i",
-				//	dispItem->Values.Items[i]->Name,
-				//	dispItem->Values.Items[i]->Value->Value);
-				printf("%i", dispItem->Values.Items[i]->Value->Value);
-			}
-			printf("\n");
+			PrintDisplayItem(dispItem);
 		}
 		
 		// Check breakpoints
@@ -385,5 +381,74 @@ void SigINT_Handler(int Signum)
 	//gbRunSimulation = 0;
 	gbStepping = 1;
 	#endif
+}
+
+
+void PrintDisplayItem(tDisplayItem *DispItem)
+{
+	const char	*format = DispItem->Label;
+	 int	lineNum = 0;
+	 int	count, i, tmpCount;
+	uint32_t	val;
+	
+	for( ; *format; format ++ )
+	{
+		if( *format == '%' )
+		{
+			format ++;
+			count = 0;
+			while( isdigit(*format) )
+			{
+				count *= 10;
+				count += *format - '0';
+				format ++;
+			}
+			
+			if(count == 0)	count = 1;
+			
+			#define BITS_PER_BLOCK	32
+			
+			tmpCount = count % BITS_PER_BLOCK;
+			do
+			{
+				val = 0;
+				for( i = 0; i < tmpCount && lineNum < DispItem->Values.NItems; i ++)
+				{
+					val *= 2;
+					val += !!DispItem->Values.Items[lineNum++]->Value->Value;
+				}
+				//for(; i < tmpCount; i ++ )
+				//	val *= 2;
+				
+				switch(*format)
+				{
+				case 'x':
+					printf("%0*x", (i+3)/4, val);
+					break;
+				case 'i':
+					printf("%i ", val);
+					break;
+				case 'b':
+				default:
+					for( ; i --; )
+						printf("%i", val & (1 << i));
+					break;
+				}
+				
+				tmpCount = BITS_PER_BLOCK;
+			}	while( count >= BITS_PER_BLOCK );
+			#undef BITS_PER_BLOCK
+		}
+		else
+			printf("%c", *format);
+	}
+	
+	if(lineNum != DispItem->Values.NItems)
+		printf(": ");
+	for( ; lineNum < DispItem->Values.NItems; lineNum ++ )
+	{
+		printf("%i", DispItem->Values.Items[lineNum]->Value->Value);
+	}
+	printf("\n");
 }
 

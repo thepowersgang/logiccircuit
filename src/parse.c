@@ -102,7 +102,11 @@ int ParseNumber_Paren(tParser *Parser)
 		return ret;
 	}
 	SyntaxAssert( Parser, Parser->Token, TOK_NUMBER );
-	return atoi(Parser->TokenStr);
+	//printf("ParseNumber_Paren: %.*s = %li\n",
+	//	Parser->TokenLength, Parser->TokenStr,
+	//	strtol(Parser->TokenStr, NULL, 0)
+	//	);
+	return strtol(Parser->TokenStr, NULL, 0);
 }
 int ParseNumber_MulDiv(tParser *Parser)
 {
@@ -278,7 +282,7 @@ void *ParseOperation(tParser *Parser)
 	 int	numParams = 0;
 	 int	params[maxParams];
 	
-	// Get Name
+	// Check for a constant value
 	if( ParseValue(Parser, &inputs) == 0 )
 	{
 		tList *ret = calloc(1, sizeof(tList));
@@ -286,6 +290,7 @@ void *ParseOperation(tParser *Parser)
 		return ret;
 	}
 	
+	// Check if token is an ident
 	if( Parser->Token != TOK_IDENT )
 	{
 		SyntaxError(Parser,
@@ -310,21 +315,16 @@ void *ParseOperation(tParser *Parser)
 		PutBack(Parser);
 	
 	// Input lines
-	if( GetToken(Parser) != TOK_NEWLINE )
+	if( ParseValue(Parser, &inputs) == 0 )
 	{
-		PutBack(Parser);
-		do {
+		while(GetToken(Parser) == TOK_COMMA)
+		{
 			if( ParseValue(Parser, &inputs) != 0) {
 				SyntaxError(Parser,
-					"Unexpected %s, expected TOK_NUMBER, TOK_LINE, TOK_GROUP or TOK_PAREN_OPEN",
-					casTOKEN_NAMES[ Parser->Token ]);
+					"Unexpected %s, expected TOK_NUMBER, TOK_LINE, TOK_GROUP or TOK_PAREN_OPEN in node %s",
+					casTOKEN_NAMES[ Parser->Token ], name);
 			}
-			
-			GetToken(Parser);
-		} while(Parser->Token == TOK_COMMA);
-		PutBack(Parser);
-	}
-	else {
+		}
 		PutBack(Parser);
 	}
 	
@@ -453,7 +453,7 @@ int ParseLine(tParser *Parser)
 			PutBack(Parser);	// Put back non-comma character
 		}
 		// Set display values
-		else if( strcmp(Parser->TokenStr, "#display") == 0 ) {
+		else if( strcmp(Parser->TokenStr, "#display") == 0 || strcmp(Parser->TokenStr, "#displayx") == 0 ) {
 			tList	cond = {0}, values = {0};
 			char	*title;
 			// Condition - Single value (well, should be :)

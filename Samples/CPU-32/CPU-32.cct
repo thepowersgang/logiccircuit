@@ -1,0 +1,172 @@
+// <?php // Hijack
+// 32-bit CPU
+// By John Hodge (thePowersGang)
+// Designed in LogicCircuit
+%include "memory.cct"
+%include "../adder.cct"
+%include "../subber.cct"
+
+%define	NUM_GPR_BITS	32
+%define	NUM_ADDR_BITS	32
+
+#array mem_data_in NUM_GPR_BITS
+#array mem_data_in_ NUM_GPR_BITS
+#array mem_data_out NUM_GPR_BITS
+#array reg_data_in NUM_GPR_BITS
+#array reg_data_out NUM_GPR_BITS
+#array mem_addr NUM_ADDR_BITS
+#array reg_addr 4
+#array reg_select	16
+
+#array reg_pc_in	NUM_ADDR_BITS
+#array reg_pc_out	NUM_ADDR_BITS
+
+#array stage_num	4
+#array stage_state	16
+
+#array instr	32
+#array val	NUM_GPR_BITS
+#array addr	NUM_ADDR_BITS
+
+#array add_temp	NUM_GPR_BITS
+
+#breakpoint $next_stage "Next Stage"
+#breakpoint $reg_pc_write "PC Write"
+#breakpoint $stage_reset "Stage Reset"
+
+#display 1 "Clock  " $clock
+#display 1 "Stage %4x" @stage_num[3:0], @stage_state
+#display 1 "Reset  " $stage_reset
+#display 1 "NextS  " $next_stage
+#display 1 "PC    = 0x%32x" @reg_pc_in[NUM_ADDR_BITS-1:0]
+#display 1 "instr = 0x%32x" @instr[31:0]
+#display 1 "val   = 0x%32x" @val[NUM_GPR_BITS-1:0]
+#display 1 "addr  = 0x%32x" @addr[NUM_ADDR_BITS-1:0]
+#display 1 "NextI  " $next_instruction
+
+// Instruction clock (used to ensure synchronisation)
+// In each 128 cycles, the clock is high for one
+// TODO: Determine how many logic cycles are needed to run the CPU
+//       - Maybe have @stage_state[15] map to reset (or map others via an
+//         AND with $is_*)
+// NOTE: Unused really
+$clock = CLOCK{128}
+
+
+// === Registers ===
+// --- General Purpose Registers ---
+// Registers can be accessed directly (by the @reg_*_value groups), or
+// by @reg_data_in which is selected using the @reg_addr group
+@reg_select = DEMUX{4} $reg_enable, @reg_addr	// Select the register
+%assign i 0
+%rep 16
+#array reg_ %+ i %+ _value NUM_GPR_BITS
+#array reg_ %+ i %+ _newvalue NUM_GPR_BITS
+$reg_ %+ i %+ _ready, @reg_ %+ i %+ _value = LATCH{NUM_GPR_BITS} 1, (PULSE $reg_ %+ i %+ _write), (DELAY @reg_ %+ i %+ _newvalue)	// Actual Register
+
+$reg_ %+ i %+ _write = AND @reg_select[i], (DELAY $reg_write)	// Get global Write signal
+$reg_ready = DELAY{2} @reg_select[i]	// Set global ready signal
+
+@reg_ %+ i %+ _newvalue = AND{NUM_GPR_BITS} @reg_select[i], (DELAY @reg_data_out)	// Get global input
+@reg_data_in = AND{NUM_GPR_BITS} @reg_select[i], @reg_ %+ i %+ _value	// Set global output
+%assign i i+1
+%endrep
+#display 1 "R 0=%32x R 1=%32x R 2=%32x R 3=%32x" @reg_0_value[NUM_GPR_BITS-1:0], @reg_1_value[NUM_GPR_BITS-1:0], \
+	@reg_2_value[NUM_GPR_BITS-1:0], @reg_3_value[NUM_GPR_BITS-1:0]
+#display 1 "R 4=%32x R 5=%32x R 6=%32x R 7=%32x" @reg_4_value[NUM_GPR_BITS-1:0], @reg_5_value[NUM_GPR_BITS-1:0], \
+	@reg_6_value[NUM_GPR_BITS-1:0], @reg_7_value[NUM_GPR_BITS-1:0]
+#display 1 "R 8=%32x R 9=%32x R10=%32x R11=%32x" @reg_8_value[NUM_GPR_BITS-1:0], @reg_9_value[NUM_GPR_BITS-1:0], \
+	@reg_10_value[NUM_GPR_BITS-1:0], @reg_11_value[NUM_GPR_BITS-1:0]
+#display 1 "R12=%32x R13=%32x R14=%32x R15=%32x" @reg_12_value[NUM_GPR_BITS-1:0], @reg_13_value[NUM_GPR_BITS-1:0], \
+	@reg_14_value[NUM_GPR_BITS-1:0], @reg_15_value[NUM_GPR_BITS-1:0]
+// --- FLAGS Pseudo-Register ---
+$NULL, $flags_C = LATCH 1, $flags_C_clear, $flags_C
+#display 1 "CF" $flags_C
+
+#display $reg_enable "Register Addr %4b" @reg_addr[3:0]
+#display $reg_write "Register Value %32x" @reg_data_out[NUM_GPR_BITS-1:0]
+
+// --- Program Counter ---
+#display $reg_pc_write "New PC 0x%32x" @reg_pc_out[31:0]
+$NULL, @reg_pc_in = LATCH{32} 1, (PULSE $reg_pc_write), (DELAY @reg_pc_out)
+
+
+
+// === Memory ===
+// TODO: Maybe have these lines be arguments of some form
+$mem_ready, @mem_data_in_ = MEMORY_SPACE $mem_enable, @mem_addr, $mem_data_write, @mem_data_out
+#display $mem_enable "MemAddr" @mem_addr[NUM_ADDR_BITS-1:0]
+#display $mem_write "MemOut " @mem_data_out[31:0]
+#display $mem_ready "MemIn  " @mem_data_in_[NUM_GPR_BITS-1:0]
+@mem_data_in = DELAY{4} @mem_data_in_	// Line up with stage change (rdy->next->counter->demux->)
+
+// === "Temporary" Latches ===
+// @instr, @val and @addr - Temporary "variables" used to hold intermediate values
+// to be moved to other locations
+#display 1 "instr_clear=%1i, val_clear=%1i" $instr_clear, $val_clear
+$NULL, @instr = LATCH{32} 1, $instr_clear, @instr
+$NULL, @val   = LATCH{NUM_GPR_BITS} 1, $val_clear, @val
+$NULL, @addr  = LATCH{NUM_ADDR_BITS} 1, $addr_clear, @addr
+//$NULL, $next_instruction  = LATCH 1, $nextinstr_clear, $next_instruction
+
+// === Timing control (stages) ===
+// 4-bit counter reset by $stage_reset, incremented by $mem_ready
+// Attached to a 4-bit de-mutexer controlling the state of stages
+@stage_num = COUNTER{4} $stage_reset, $next_stage
+@stage_state = DEMUX{4} 1, @stage_num
+; $next_instruction = DELAY $clock
+$next_stage = DELAY $mem_ready
+$next_stage = DELAY $reg_ready
+
+
+// === Next instruction ===
+$stage_reset = PULSE $next_instruction
+
+// === PC Increment ===
+$reg_pc_invalidate = $increment_pc	// Invalidate PC when increment is called
+// Add 1 to the PC register (if $increment_pc is set)
+// - Assigning to reg_pc_(write|out) causes it to update the register
+//   once done
+$reg_pc_write, @reg_pc_out, $NULL = ADDER_32BIT $increment_pc, @reg_pc_in, (CONST{32,0x1} 1), 0
+$reg_pc_valid = DELAY{6} $reg_pc_write	// TODO: Fine tune this to the write delay of a word register
+$reg_pc_valid = PULSE 1	// Raise at CPU init
+$NULL, $reg_pc_valid  = LATCH 1, $reg_pc_invalidate, $reg_pc_valid
+#display 1 "PC Valid? %1i" $reg_pc_valid
+
+// === Instruction input ===
+// STAGE0 - Opcode Fetch
+#display @stage_state[0] "Opcode fetch" 1
+// Reset all values
+$instr_clear = DELAY @stage_state[0]	// Clear the instruction cache
+$val_clear   = DELAY @stage_state[0]	// Clear the value cache
+$addr_clear  = DELAY @stage_state[0]	// Clear the address cache
+// Read opcode from memory
+// - Memory read will update the stage to #2
+// - ANDing with $reg_pc_valid causes the read to not be attempted until
+//   PC is marked as valid
+@mem_addr = DELAY (AND{NUM_ADDR_BITS} @stage_state[0], $reg_pc_valid, @reg_pc_in)	// Set memory address to PC
+$mem_enable   = PULSE (AND @stage_state[0], $reg_pc_valid)	// Enable memory for read
+$increment_pc = PULSE (AND @stage_state[0], $reg_pc_valid)	// Increment the program counter too
+
+// === STAGE1 - Instruction fetched, save in latch ===
+#display @stage_state[1] "Instruction Save" 1
+@instr = AND{32} @stage_state[1], @mem_data_in	// Save the opcode byte
+$next_stage = PULSE (DELAY{3} @stage_state[1])	// Wait for latch to hold and for instructions to decode
+
+// =======================
+// === Opcode Decoding ===
+// =======================
+#display @stage_state[2] "Opcode decode" 1
+%define decode_enable	(NOT @stage_state[0], @stage_state[1])
+$is_ALU = AND decode_enable, (NOT @instr[31]), (NOT @instr[30])
+
+// === Handle Undefined Opcodes ===
+$is_UNDEF = NOT (OR $is_ALU)
+; $next_instruction = AND @stage_state[2], $is_UNDEF
+
+// === OPCODES ===
+// --- ALU Operations ---
+#array alu_in_dst	NUM_GPR_BITS
+#array alu_in_src	NUM_GPR_BITS
+#array alu_out	NUM_GPR_BITS
+#array alu_flags	8	// TODO: Flags register format

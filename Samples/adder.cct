@@ -61,6 +61,35 @@ $ready = DELAY{11} $enable
 
 #endunit
 
+
+// Unit Carry-Lookahead Adder
+#defunit ADDER_CL
+#input $a, $b, $c	; A, B, Carry In
+#output $s, $p, $g	; Sum, Propogate, Generate
+
+$s = XOR $a, $b, $c
+$p = XOR $a, $b
+// Generate hacked up using OR nature of assign (to have delay be 1)
+$g = AND $a, $b
+$g = AND $a, $c
+$g = AND $b, $c
+
+#endunit
+
+// 4-Bit Carry-Lookahead Adder
+// Delay of ??
+#defunit ADDER_4BIT_CL
+#input $enable, @val1[4], @val2[4], $carry_in
+#output $ready, @ret[4], $carry_out
+#array _ret 4
+#array _p 4
+#array _g 4
+#array carry 4
+
+@_ret[0], @_p[0], @_g[0] = ADDER_CL @val1[0], @val1[0], $carry_in
+
+#endunit
+
 // 8-Bit Carry-Select Adder
 // - Delay of 13 (ADDER_4BIT_RIPPLE + 2)
 #defunit ADDER_8BIT
@@ -94,6 +123,26 @@ $NULL, @_ret_hi_0, $carry_0 = ADDER_8BIT $enable, @val1[8:15], @val2[8:15], 0
 $NULL, @_ret_hi_1, $carry_1 = ADDER_8BIT $enable, @val1[8:15], @val2[8:15], 1
 @ret[0:7]  = AND{8} (DELAY $ready_first), (DELAY @_ret_low)
 @ret[8:15] = AND{8} (DELAY $ready_first), (MUX{1,8} $carry_mid, @_ret_hi_0, @_ret_hi_1)
+$carry_out = AND (DELAY $ready_first), (MUX $carry_mid, $carry_0, $carry_1)
+$ready = DELAY{2} $ready_first
+
+#endunit
+
+// 32-Bit Adder
+// - Delay of 17 (ADDER_16BIT + 2)
+%define bits	32
+#defunit ADDER_32BIT
+#input $enable, @val1[bits], @val2[bits], $carry_in
+#output $ready, @ret[bits], $carry_out
+#array _ret_low bits/2
+#array _ret_hi_0 bits/2
+#array _ret_hi_1 bits/2
+
+$ready_first, @_ret_low, $carry_mid = ADDER_16BIT $enable, @val1[0:bits/2-1], @val2[0:bits/2-1], $carry_in
+$NULL, @_ret_hi_0, $carry_0 = ADDER_16BIT $enable, @val1[bits/2:bits-1], @val2[bits/2:bits-1], 0
+$NULL, @_ret_hi_1, $carry_1 = ADDER_16BIT $enable, @val1[bits/2:bits-1], @val2[bits/2:bits-1], 1
+@ret[0:bits/2-1]  = AND{bits/2} (DELAY $ready_first), (DELAY @_ret_low)
+@ret[bits/2:bits-1] = AND{bits/2} (DELAY $ready_first), (MUX{1,bits/2} $carry_mid, @_ret_hi_0, @_ret_hi_1)
 $carry_out = AND (DELAY $ready_first), (MUX $carry_mid, $carry_0, $carry_1)
 $ready = DELAY{2} $ready_first
 

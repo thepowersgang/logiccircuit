@@ -45,16 +45,11 @@ static void _Update(tElement *Ele)
 {
 	t_element	*this = (t_element *)Ele;
 	
-	if( !this->CurVal ) {
-		if( GetLink(Ele->Inputs[0]) ) {
-			this->CurVal = 1;
-			RaiseLink(Ele->Outputs[0]);
-		}
+	// Single pulse on rising edge
+	if( !this->CurVal && GetLink(Ele->Inputs[0]) ) {
+		RaiseLink(Ele->Outputs[0]);
 	}
-	else {
-		if( !GetLink(Ele->Inputs[0]) )
-			this->CurVal = 0;
-	}
+	this->CurVal = !!GetLink(Ele->Inputs[0]);
 }
 
 tElementDef gElement_PULSE = {

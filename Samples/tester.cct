@@ -3,20 +3,31 @@
 %include "adder.cct"
 %include "subber.cct"
 
-%include "memory_bank.cct"
+//%include "memory_bank.cct"
+%include "CPU/memory.cct"
 
+%if 0
+#array mem_value	8
+#array mem_address	16
+#display 1 "Memory Addr" @mem_address[15:0]
+#display 1 "Memory Value" @mem_value[7:0]
+@mem_address = DELAY 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+$mem_ready, @mem_value = MEMORY_SPACE 1, @mem_address, 0, 0,0,0,0,0,0,0,0
+%endif
+
+
+%if 1
 #array val1	16
 #array val2	16
 #array add_output	16
 #array sub_output	16
-#array mem_value	16
 
 #display 1 "Carry Input " $carry_in
-#display 1 "Value 1     " @val1[15:0]
-#display 1 "Value 2     " @val2[15:0]
+#display 1 "Value 1 = 0x%16x" @val1[15:0]
+#display 1 "Value 2 = 0x%16x" @val2[15:0]
 
-@val1 = DELAY 1, 0, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1	// Low to High (0 - 7)
-@val2 = DELAY 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+@val1 = CONST{16,0x0011} 1	// Low to High (0 - 7)
+@val2 = CONST{16,0xFFFE} 1
 $carry_in = DELAY 0
 $enable = DELAY 1
 
@@ -37,16 +48,17 @@ $adder8_done, @adder8_out, $adder8_carry = ADDER_8BIT $enable, @val1[0:7], @val2
 
 %if 1
 #display 1 "Adder Done  " $adder_done
-#display 1 "ADD Output  " @add_output[15:0]
+#display 1 "ADD Output = 0x%16x" @add_output[15:0]
 #display 1 "ADD Carry   " $add_carry_out
 
 $adder_done, @add_output, $add_carry_out = ADDER_16BIT $enable, @val1, @val2, $carry_in
 
 #display 1 "Subber Done " $subber_done
-#display 1 "SUB Output  " @sub_output[15:0]
+#display 1 "SUB Output = 0x%16x" @sub_output[15:0]
 #display 1 "SUB Borrow  " $sub_borrow_out
 
 $subber_done, @sub_output, $sub_borrow_out = SUBBER_16BIT $enable, @val1, @val2, $carry_in
 //$subber_done, @sub_output, $sub_borrow_out = ADDER_16BIT (DELAY $enable), (DELAY @val1), (NOT @val2), (NOT $carry_in)
+%endif
 
 %endif

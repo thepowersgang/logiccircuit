@@ -23,11 +23,9 @@ static tElement *_Create(int NParams, int *Params, int NInputs, tLink **Inputs)
 	
 	if( NParams > 1 )	return NULL;
 	
-	if( NParams == 1 )
-		delay_time = Params[0];
+	if( NParams >= 1 )	delay_time = Params[0];
 	
-	if( delay_time < 1 )
-		delay_time = 1;
+	if( delay_time < 1 )	delay_time = 1;
 
 	ret = calloc( 1, sizeof(t_element) + 2*NInputs*sizeof(tLink*) + NInputs*(delay_time - 1) );
 	if(!ret)	return NULL;
