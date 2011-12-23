@@ -1,10 +1,10 @@
-// <?php // Hijack
 // 32-bit CPU
 // By John Hodge (thePowersGang)
 // Designed in LogicCircuit
 %include "memory.cct"
 %include "../adder.cct"
 %include "../subber.cct"
+%include "../shift_register.cct"
 
 %define	NUM_GPR_BITS	32
 %define	NUM_ADDR_BITS	32
@@ -81,7 +81,9 @@ $reg_ready = DELAY{2} @reg_select[i]	// Set global ready signal
 	@reg_14_value[NUM_GPR_BITS-1:0], @reg_15_value[NUM_GPR_BITS-1:0]
 // --- FLAGS Pseudo-Register ---
 $NULL, $flags_C = LATCH 1, $flags_C_clear, $flags_C
+$NULL, $flags_Z = LATCH 1, $flags_Z_clear, $flags_Z
 #display 1 "CF" $flags_C
+#display 1 "ZF" $flags_Z
 
 #display $reg_enable "Register Addr %4b" @reg_addr[3:0]
 #display $reg_write "Register Value %32x" @reg_data_out[NUM_GPR_BITS-1:0]
@@ -111,7 +113,7 @@ $NULL, @addr  = LATCH{NUM_ADDR_BITS} 1, $addr_clear, @addr
 
 // === Timing control (stages) ===
 // 4-bit counter reset by $stage_reset, incremented by $mem_ready
-// Attached to a 4-bit de-mutexer controlling the state of stages
+// Attached to a 4-bit de-muxer controlling the state of stages
 @stage_num = COUNTER{4} $stage_reset, $next_stage
 @stage_state = DEMUX{4} 1, @stage_num
 ; $next_instruction = DELAY $clock
@@ -156,6 +158,12 @@ $next_stage = PULSE (DELAY{3} @stage_state[1])	// Wait for latch to hold and for
 // =======================
 // === Opcode Decoding ===
 // =======================
+#array alu_addr 	NUM_GPR_BITS
+#array alu_in_dst	NUM_GPR_BITS
+#array alu_in_src	NUM_GPR_BITS
+#array alu_out	NUM_GPR_BITS
+#array alu_flags	8	// TODO: Flags register format
+
 #display @stage_state[2] "Opcode decode" 1
 %define decode_enable	(NOT @stage_state[0], @stage_state[1])
 $is_ALU = AND decode_enable, (NOT @instr[31]), (NOT @instr[30])
@@ -164,9 +172,82 @@ $is_ALU = AND decode_enable, (NOT @instr[31]), (NOT @instr[30])
 $is_UNDEF = NOT (OR $is_ALU)
 ; $next_instruction = AND @stage_state[2], $is_UNDEF
 
+// === Address Decoding ===
+// --- Standard ---
+$is_op_Rr   = AND $is_stdop, (NOT   @instr[26]), (NOT   @instr[25]), (NOT   @instr[24])
+$is_op_Ri20 = AND $is_stdop, (NOT   @instr[26]), (NOT   @instr[25]), (DELAY @instr[24])
+$is_op_Ri16 = AND $is_stdop, (NOT   @instr[26]), (DELAY @instr[25]), (NOT   @instr[24])
+$is_op_Rs16 = AND $is_stdop, (NOT   @instr[26]), (DELAY @instr[25]), (DELAY @instr[24])
+$is_op_RM16 = AND $is_stdop, (DELAY @instr[26]), (NOT   @instr[25]), (NOT   @instr[24])
+$is_op_RM8  = AND $is_stdop, (DELAY @instr[26]), (NOT   @instr[25]), (DELAY @instr[24])
+$is_op_M16R = AND $is_stdop, (DELAY @instr[26]), (NOT   @instr[25]), (NOT   @instr[24])
+$is_op_M8R  = AND $is_stdop, (DELAY @instr[26]), (NOT   @instr[25]), (DELAY @instr[24])
+$is_mem_dest =  OR $is_op_M16R, $is_op_M8R
+$is_reg_dest = NOR $is_op_M16R, $is_op_M8R
+// - Read 'R' (common)
+@reg_addr = AND{4} $is_reg_dest, @instr[23:20]
+@alu_in_dst = AND{32} (DELAY{3} $is_op_Rr), @reg_data_in	// Addr AND, Mux, Select
+// > Rr
+@reg_addr = (DELAY{4} (AND{4} $is_op_Rr, @instr[19:16]))
+@alu_in_src = AND{32} (DELAY{4+3} $is_op_Rr), @reg_data_in	// Addr AND, Mux, Select
+// > Ri20
+@alu_in_src[19:0] = AND{20} $is_op_Ri20, @instr[19:0]
+// > Ri16
+$NULL, @alu_in_src[31:0] = ROTATE_LEFT_N_32 $is_op_Ri16, 0,@instr[16:19], \
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+	@instr[15:0]
+// > Rs16
+$NULL, @alu_in_src[31:0] = ROTATE_LEFT_N_32 $is_op_Rs16, 0,@instr[16:19], \
+	@instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], \
+	@instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], \
+	@instr[15:0]
+// > RM16
+// > RM8
+// > M16R
+// > M8R
+
+// - Mem16
+$is_mem16_op = OR $is_op_RM16, $is_op_M16R
+@reg_addr = AND{4} $is_mem16_op, @instr[19:16]
+$mem_addr_ready, @addr, $NULL = ADDER_32BIT (DELAY{3} $is_mem16_op), @reg_data_in, \
+	@instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], \
+	@instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], \
+	@instr[15:0], \
+	0
+// - Mem8
+$is_mem8_op = OR $is_op_RM8, $is_op_M8R
+@reg_addr = AND{4} $is_mem8_op, @instr[11:8]
+; Add index and offset first
+$_mem8_add1_done, @addr, $NULL = ADDER_32BIT (DELAY{3+2} $is_mem8_op), @reg_data_in, \
+	@instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], \
+	@instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], \
+	@instr[15:0], \
+	0
+; Add base (shifted)
+#array _mem8_reg_shifted 32
+@reg_addr = AND{4} $_mem8_add1_done, @instr[19:16]
+$_mem8_shift_done, @_mem8_reg_shifted, $NULL = SHIFT_LEFT_N_32 (DELAY{3} $_mem8_add1_done), 0,@instr[15:12], @reg_data_in, 0
+$addr_clear = DELAY{2} $_mem8_shift_done	; Wait until the add starts before clearing the latch
+$mem_addr_ready, @addr, $NULL = ADDER_32BIT $_mem8_shift_done, @_mem8_reg_shifted, @addr, 0
+
+// - Write back
+@reg_addr = AND{4} $is_save, (NOT $is_mem_dest),  @instr[23:20]
+
 // === OPCODES ===
 // --- ALU Operations ---
-#array alu_in_dst	NUM_GPR_BITS
-#array alu_in_src	NUM_GPR_BITS
-#array alu_out	NUM_GPR_BITS
-#array alu_flags	8	// TODO: Flags register format
+$is_MOV = AND $is_ALU, (NOT   @instr[29]), (NOT   @instr[28]), (NOT   @instr[27])
+$is_AND = AND $is_ALU, (NOT   @instr[29]), (NOT   @instr[28]), (DELAY @instr[27])
+$is_OR  = AND $is_ALU, (NOT   @instr[29]), (DELAY @instr[28]), (NOT   @instr[27])
+$is_XOR = AND $is_ALU, (NOT   @instr[29]), (DELAY @instr[28]), (DELAY @instr[27])
+$is_ADD = AND $is_ALU, (DELAY @instr[29]), (NOT   @instr[28]), (NOT   @instr[27])
+$is_SUB = AND $is_ALU, (DELAY @instr[29]), (NOT   @instr[28]), (DELAY @instr[27])
+$is_CMP = AND $is_ALU, (DELAY @instr[29]), (DELAY @instr[28]), (NOT   @instr[27])
+$is_TST = AND $is_ALU, (DELAY @instr[29]), (DELAY @instr[28]), (DELAY @instr[27])
+
+// --- MOV ---
+
+// --- AND ---
+
+// --- ADD ---
+
+; vim: ft=logiccircuit

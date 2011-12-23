@@ -287,6 +287,7 @@ void *ParseOperation(tParser *Parser)
 	{
 		tList *ret = calloc(1, sizeof(tList));
 		AppendList(ret, &inputs);
+		free(inputs.Items);
 		return ret;
 	}
 	

@@ -273,14 +273,14 @@ void CreateGroup(const char *Name, int Size)
  */
 tGroupDef *GetGroup(const char *Name)
 {
-	tGroupDef	*def, *prev;
+	tGroupDef	*def;
 	
 	if( gpCurUnit )
 		def = gpCurUnit->Groups;
 	else
 		def = gpGroups;
 	
-	for( ; def; prev = def, def = def->Next )
+	for( ; def; def = def->Next )
 	{
 		//printf("strcmp(%s, %s)\n", Name, def->Name);
 		if(strcmp(Name, def->Name) == 0)	return def;
@@ -361,6 +361,7 @@ tLink *CreateNamedLink(const char *Name)
 	ret->Value = LinkValue_Create();
 	strcpy(ret->Name, Name);
 	ret->Link = NULL;
+	ret->Backlink = NULL;
 	ret->ReferenceCount = 1;
 	
 	if(prev) {
@@ -426,6 +427,7 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 		else
 			newLink->Name[0] = '\0';
 		newLink->Link = NULL;
+		newLink->Backlink = NULL;
 		newLink->Value = LinkValue_Create();
 		
 		link->Backlink = newLink;	// Set a back link to speed up remapping inputs
@@ -525,7 +527,10 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 			return NULL;
 		}
 		for( i = 0; i < ele->NInputs; i ++ ) {
-			newele->Inputs[i] = ele->Inputs[i]->Backlink;
+			if( ele->Inputs[i]->Backlink )
+				newele->Inputs[i] = ele->Inputs[i]->Backlink;
+			else
+				newele->Inputs[i] = ele->Inputs[i];
 			#if USE_LINKS
 			if( newele->Inputs[i]->Link ) {
 				//printf("linked input %i to %p\n", i, newele->Inputs[i]->Link);
@@ -534,7 +539,10 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 			#endif
 		}
 		for( i = 0; i < ele->NOutputs; i ++ ) {
-			newele->Outputs[i] = ele->Outputs[i]->Backlink;
+			if( newele->Outputs[i]->Backlink )
+				newele->Outputs[i] = ele->Outputs[i]->Backlink;
+			else
+				newele->Outputs[i] = ele->Outputs[i];
 			#if USE_LINKS
 			if( newele->Outputs[i]->Link )
 				newele->Outputs[i] = newele->Outputs[i]->Link;

@@ -62,7 +62,8 @@ $clock = CLOCK{128}
 %rep 16
 #array reg_ %+ i %+ _value NUM_GPR_BITS
 #array reg_ %+ i %+ _newvalue NUM_GPR_BITS
-$reg_ %+ i %+ _ready, @reg_ %+ i %+ _value = MEMORY_BYTE 1, $reg_ %+ i %+ _write, @reg_ %+ i %+ _newvalue	// Actual Register
+// Actual Register
+$reg_ %+ i %+ _ready, @reg_ %+ i %+ _value = MEMORY_BYTE 1, $reg_ %+ i %+ _write, @reg_ %+ i %+ _newvalue
 
 $reg_ %+ i %+ _write = AND @reg_select[i], (DELAY $reg_write)	// Get global Write signal
 $reg_ready = DELAY{delayof_MEMORY_WORD} @reg_select[i]	// Set global ready signal
@@ -79,6 +80,7 @@ $reg_ready = DELAY{delayof_MEMORY_WORD} @reg_select[i]	// Set global ready signa
 	@reg_10_value[NUM_GPR_BITS-1:0], @reg_11_value[NUM_GPR_BITS-1:0]
 #display 1 "R12=%8x R13=%8x R14=%8x R15=%8x" @reg_12_value[NUM_GPR_BITS-1:0], @reg_13_value[NUM_GPR_BITS-1:0], \
 	@reg_14_value[NUM_GPR_BITS-1:0], @reg_15_value[NUM_GPR_BITS-1:0]
+
 // --- FLAGS Pseudo-Register ---
 $NULL, $flags_C = LATCH 1, $flags_C_clear, $flags_C
 #display 1 "CF" $flags_C
@@ -486,3 +488,5 @@ $reg_13_write = PULSE (AND $is_LAI_X, @stage_state[6])
 @addr[15:8] = AND{NUM_GPR_BITS} $is_LAI_X, @stage_state[6], @mem_data_in	// DEBUG
 // - Next Instruction
 $next_instruction = PULSE (AND $is_LAI_X, @stage_state[6])
+
+; vim: ft=logiccircuit

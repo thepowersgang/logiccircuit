@@ -39,6 +39,7 @@ void	PrintDisplayItem(tDisplayItem *dispItem);
  int	gbRunSimulation = 1;
  int	gbStepping = 1;
  int	gbPrintLinks = 0;
+ int	gbPrintStats = 0;
 
 // === CODE ===
 int main(int argc, char *argv[])
@@ -69,9 +70,12 @@ int main(int argc, char *argv[])
 	// Load Circuit file(s)
 	for( i = 1; i < argc; i ++ )
 	{
-		if( argv[i][0] == '-' ) {
+		if( argv[i][0] == '-' )
+		{
 			if( strcmp(argv[i], "-links") == 0 )
 				gbPrintLinks = 1;
+			else if( strcmp(argv[i], "-stats") == 0 )
+				gbPrintStats = 1;
 			else {
 				// ERROR
 			}
@@ -84,6 +88,7 @@ int main(int argc, char *argv[])
 	}
 	
 	// Resolve links
+	printf("Resolving links...\n");
 	for( link = gpLinks; link; link = link->Next )
 	{
 		link->Backlink = NULL;	// Clear the backlink (temp) for later
@@ -188,6 +193,46 @@ int main(int argc, char *argv[])
 				printf("\n");
 		}
 		
+		return 0;
+	}
+
+	if( gbPrintStats )
+	{
+		 int	totalLinks = 0;
+		 int	totalNamedLinks = 0;
+		 int	totalValues = 0;
+		 int	totalElements = 0;
+		printf("Gathering statistics...\n");
+		for( link = gpLinks; link; link = link->Next )
+		{
+			tLink	*link2;
+
+			totalLinks ++;
+			
+			if(link->Name[0])
+			{
+				totalNamedLinks ++;
+			}
+
+			if(link->Backlink)	continue;	// Skip ones already done
+
+			for( link2 = gpLinks; link2; link2 = link2->Next )
+			{
+				if(link2->Backlink)	continue;
+				if(link2->Value != link->Value)	continue;
+				link2->Backlink = link;	// Make backlink non-zero
+			}
+			totalValues ++;
+		}
+		
+		for( ele = gpElements; ele; ele = ele->Next )
+			totalElements ++;
+
+		printf("%i Links (joins)\n", totalLinks);
+		printf("- %i are named\n", totalNamedLinks);
+		printf("%i values (nodes)\n", totalValues);
+		printf("%i elements\n", totalElements);
+
 		return 0;
 	}
 	

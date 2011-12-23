@@ -1,0 +1,90 @@
+//<?php
+// Shift Unit - 8-bit
+#defunit SHIFT_UNIT_8
+#input $pulse, $dir_is_right, @value[8], $carry_in
+#output $ready, @value_out[8], $carry_out
+
+; Shift Right
+$carry_out = DELAY{2} @value[0]
+@value_out[0:6] = AND{7} (DELAY $pulse), (DELAY $dir_is_right), (DELAY @value[1:7])
+@value_out[7] = AND (DELAY $pulse), (DELAY $dir_is_right), (DELAY $carry_in)
+
+; Shift Left
+@value_out[0] = AND (DELAY $pulse), (NOT $dir_is_right), (DELAY $carry_in)
+@value_out[1:7] = AND{7} (DELAY $pulse), (NOT $dir_is_right), (DELAY @value[0:6])
+$carry_out = DELAY{2} @value[7]
+
+#endunit
+
+
+#defunit SHIFT_LEFT_N_8
+#input $pulse, @count[3], @value[8], $carry_in
+#output $ready, @value_out[8], $carry_out
+
+#array count_enable 8
+
+@count_enable = DEMUX{3} 1, @count
+
+%assign i 0
+%rep 8
+ %assign j i
+ %rep 8-i
+@value[i] = AND (DELAY $pulse), @count_enable[j], (DELAY @value[j])
+ %assign j j+1
+ %endrep
+%assign i i+1
+%endrep
+
+#endunit
+
+%macro def_shift_left_n 2
+#defunit SHIFT_LEFT_N_ %+ %1
+#input $pulse, @count[%2], @value[%1], $carry_in
+#output $ready, @value_out[%1], $carry_out
+
+#array count_enable %1
+
+@count_enable = DEMUX{%2} 1, @count
+
+%assign i 0
+%rep %1
+ %assign j i
+ %rep %1-i
+@value[i] = AND (DELAY $pulse), @count_enable[j], (DELAY @value[j])
+ %assign j j+1
+ %endrep
+%assign i i+1
+%endrep
+
+#endunit
+%endmacro
+
+%macro def_rotate_left_n 2
+#defunit ROTATE_LEFT_N_ %+ %1
+#input $pulse, @count[%2], @value[%1]
+#output $ready, @value_out[%1]
+
+#array count_enable %1
+
+@count_enable = DEMUX{%2} $pulse, @count
+%assign i 0
+%rep %1
+  %assign j 0
+  %rep %1
+    %assign k (i+j) % %1
+    @value[i] = AND @count_enable[j], (DELAY  @value[k])
+  %assign j j+1
+  %endrep
+%assign i i+1
+%endrep
+
+#endunit
+%endmacro
+
+
+def_shift_left_n 16, 4
+def_shift_left_n 32, 5
+def_rotate_left_n 16, 4
+def_rotate_left_n 32, 5
+
+; vim: ft=logiccircuit

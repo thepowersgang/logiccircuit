@@ -12,8 +12,8 @@ Addressing Modes (for most commands)
 
 ooooo000 RRRRrrrr xxxxxxxx xxxxxxxx	- <op> R, r
 ooooo001 RRRRvvvv vvvvvvvv vvvvvvvv	- <op> R, imm20
-ooooo010 RRRRssss vvvvvvvv vvvvvvvv	- <op> Rl, imm16 << s
-ooooo011 RRRRssss vvvvvvvv vvvvvvvv	- <op> Rh, imm16 << s
+ooooo010 RRRRssss vvvvvvvv vvvvvvvv	- <op> R, imm16 <<< s
+ooooo011 RRRRssss vvvvvvvv vvvvvvvv	- <op> R, imm16s <<< s
 ooooo100 RRRRrrrr vvvvvvvv vvvvvvvv	- <op> R, [r + imm16s]
 ooooo101 RRRRrrrr iiiissss vvvvvvvv	- <op> R, [r << s + Ri + imm8s]
 ooooo110 RRRRrrrr vvvvvvvv vvvvvvvv	- <op> [r + imm16s], R
