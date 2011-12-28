@@ -248,6 +248,10 @@ int main(int argc, char *argv[])
 	{
 		printf("\x1B[?1047h");
 	}
+	else
+	{
+		gbStepping = 0;
+	}
 	
 	// Execute
 	for( timestamp = 0; gbRunSimulation; timestamp ++ )
