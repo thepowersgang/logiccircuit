@@ -2,7 +2,7 @@
 #
 
 CPPFLAGS = -I ./include/
-CFLAGS = -Wall -Werror -g
+CFLAGS = -Wall -g
 
 OBJ := main.o parse.o build.o
 #OBJ += Element.AND.o Element.OR.o Element.XOR.o
