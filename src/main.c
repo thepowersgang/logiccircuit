@@ -37,6 +37,7 @@ void	PrintDisplayItem(tDisplayItem *dispItem);
 
 // === GLOBALS ===
  int	gbRunSimulation = 1;
+ int	giSimulationSteps = 0;
  int	gbStepping = 1;
  int	gbPrintLinks = 0;
  int	gbPrintStats = 0;
@@ -76,6 +77,10 @@ int main(int argc, char *argv[])
 				gbPrintLinks = 1;
 			else if( strcmp(argv[i], "-stats") == 0 )
 				gbPrintStats = 1;
+			else if( strcmp(argv[i], "-count") == 0 ) {
+				if(i + 1 == argc)	return -1;
+				giSimulationSteps = atoi(argv[++i]);
+			}
 			else {
 				// ERROR
 			}
@@ -239,7 +244,10 @@ int main(int argc, char *argv[])
 	signal(SIGINT, SigINT_Handler);
 	
 	// Go to alternte screen buffer
-	printf("\x1B[?1047h");
+	if( giSimulationSteps == 0 )
+	{
+		printf("\x1B[?1047h");
+	}
 	
 	// Execute
 	for( timestamp = 0; gbRunSimulation; timestamp ++ )
@@ -247,7 +255,10 @@ int main(int argc, char *argv[])
 		tDisplayItem	*dispItem;
 		tBreakpoint	*bp;
 		 int	breakPointFired = 0;
-		
+
+		if( giSimulationSteps && timestamp == giSimulationSteps )
+			break;	
+	
 		// Clear drivers
 		for( link = gpLinks; link; link = link->Next ) {
 			link->Value->NDrivers = 0;
@@ -261,12 +272,16 @@ int main(int argc, char *argv[])
 		}
 
 		// === Show Display ===
-		printf("\x1B[2J");
-		printf("\x1B[H");
+		if(!giSimulationSteps)
+		{
+			printf("\x1B[2J");
+			printf("\x1B[H");
+		}
 		printf("---- %6i ----\n", timestamp);
 		
 		for( dispItem = gpDisplayItems; dispItem; dispItem = dispItem->Next )
 		{
+			ASSERT(dispItem != dispItem->Next);
 			// Check condition (if one condition line is high, the item is displayed)
 			for( i = 0; i < dispItem->Condition.NItems; i ++ )
 			{
@@ -283,6 +298,7 @@ int main(int argc, char *argv[])
 		breakPointFired = 0;
 		for( bp = gpBreakpoints; bp; bp = bp->Next )
 		{
+			ASSERT(bp != bp->Next);
 			// Check condition (if one condition line is high, the item is displayed)
 			for( i = 0; i < bp->Condition.NItems; i ++ )
 			{
@@ -358,15 +374,19 @@ int main(int argc, char *argv[])
 		// === Update elements ===
 		for( ele = gpElements; ele; ele = ele->Next )
 		{
+			ASSERT(ele != ele->Next);
 			ele->Type->Update( ele );
 		}
 		
 		// Set values
-		for( link = gpLinks; link; link = link->Next ) {
+		for( link = gpLinks; link; link = link->Next )
+		{
+			ASSERT(link != link->Next);
 			link->Value->Value = !!link->Value->NDrivers;
 			
 			// Ensure 0 and 1 stay as 0 and 1
-			if( link->Name[0] == '1' ) {
+			if( link->Name[0] == '1' )
+			{
 				link->Value->Value = 1;
 				link->Value->NDrivers = 1;
 			}
@@ -479,7 +499,7 @@ void PrintDisplayItem(tDisplayItem *DispItem)
 						printf("%i", val & (1 << i));
 					break;
 				}
-				
+				count -= tmpCount;
 				tmpCount = BITS_PER_BLOCK;
 			}	while( count >= BITS_PER_BLOCK );
 			#undef BITS_PER_BLOCK

@@ -1,7 +1,14 @@
 /*
  */
+#ifndef _COMMON_H_
+#define _COMMON_H_
 
 #include <link.h>
+
+#define _STR(x)	#x
+#define STR(x)	_STR(x)
+
+#define ASSERT(cnd)	do{if(!(cnd)){fprintf(stderr,"ASSERT at "__FILE__":"STR(__LINE__)" ("#cnd" failed\n");exit(-1);}}while(0)
 
 typedef struct sList	tList;
 typedef struct sDisplayItem	tDisplayItem;
@@ -83,7 +90,5 @@ extern int	MergeLinks(tList *Dest, tList *Src);
  */
 extern tList	*CreateUnit(const char *Name, int NParams, int *Params, tList *Inputs);
 
-
-#if __cplusplus
-}
 #endif
+
