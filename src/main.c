@@ -185,9 +185,13 @@ int main(int argc, char *argv[])
 				if(link2->Backlink)	continue;
 				if(link2->Value != link->Value)	continue;
 				if( link2->Name[0] )
-					printf(" %s", link2->Name);
+					printf(" '%s'", link2->Name);
 				else
+				#if 0
 					printf(" (tLink)%p", link2);
+				#else	// HACK: Relies on change in build.c
+					printf(" '%s'", link2->Name+1);
+				#endif
 				link2->Backlink = link;	// Make backlink non-zero
 				linkCount ++;
 			}

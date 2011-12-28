@@ -321,10 +321,18 @@ void LinkValue_Deref(tLinkValue *Value)
  */
 tLink *CreateAnonLink(void)
 {
+	#if BLANK_ANON_LINKS
 	tLink	*ret = malloc(sizeof(tLink)+1);
+	ret->Name[0] = '\0';
+	#else
+	static int next_anon_id = 0;
+	tLink	*ret = malloc(sizeof(tLink)+1+4+6+1);
+	snprintf(ret->Name+1, 10+1, "anon%06x", next_anon_id);
+	ret->Name[0] = '\0';
+	next_anon_id ++;
+	#endif
 	ret->Value = LinkValue_Create();
 	ret->Link = NULL;
-	ret->Name[0] = '\0';
 	ret->ReferenceCount = 1;
 	
 	if( gpCurUnit ) {
