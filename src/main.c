@@ -322,7 +322,7 @@ int main(int argc, char *argv[])
 		}
 		
 		// === User Input ===
-		if( gbStepping || breakPointFired )
+		if( giSimulationSteps == 0 && ( gbStepping || breakPointFired ) )
 		{
 			for( ;; )
 			{

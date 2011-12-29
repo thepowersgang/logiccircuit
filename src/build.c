@@ -424,6 +424,9 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 		
 		// Only append prefix to named links
 		if( link->Name[0] )	len = prefixLen + strlen(link->Name);
+		#if !BLANK_ANON_LINKS
+		else	len = 3+7;
+		#endif
 		
 		// Create link
 		newLink = malloc( sizeof(tLink) + len + 1 );
@@ -432,8 +435,15 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 			strcpy(newLink->Name, namePrefix);
 			strcat(newLink->Name, link->Name);
 		}
-		else
+		else {
+			#if BLANK_ANON_LINKS
 			newLink->Name[0] = '\0';
+			#else
+			static int next_dup_anon_id;
+			snprintf(newLink->Name, len+1, "dup%07x", next_dup_anon_id);
+			next_dup_anon_id ++;
+			#endif
+		}
 		newLink->Link = NULL;
 		newLink->Backlink = NULL;
 		newLink->Value = LinkValue_Create();

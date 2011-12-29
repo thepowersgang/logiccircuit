@@ -28,7 +28,7 @@ static tElement *_Create(int NParams, int *Param, int NInputs, tLink **Inputs)
 	if(NInputs != 2 + size)	return NULL;
 
 
-	ret = calloc( 1, sizeof(t_element) + (NInputs+1+size)*sizeof(tLink*) );
+	ret = calloc( 1, sizeof(t_element) + (1+size + 2+size + size)*sizeof(tLink*) );
 	if(!ret)	return NULL;
 	
 	ret->CurVal = (void*)&ret->_links[1+size+2+size];
