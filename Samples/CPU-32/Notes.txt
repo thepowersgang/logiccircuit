@@ -1,7 +1,7 @@
 An attempt at designing a CPU to be built using virtual logic gates
 
 32-bit opcodes, usually with 8 operation, 4+4 register, 16 operand
-All data operations (save for in modes 2/3) are 32 bits
+All data operations are 32 bits
 
 
 Normal Format:
@@ -17,7 +17,7 @@ ooooo011 RRRRssss vvvvvvvv vvvvvvvv	- <op> R, imm16s <<< s
 ooooo100 RRRRrrrr vvvvvvvv vvvvvvvv	- <op> R, [r + imm16s]
 ooooo101 RRRRrrrr iiiissss vvvvvvvv	- <op> R, [r << s + Ri + imm8s]
 ooooo110 RRRRrrrr vvvvvvvv vvvvvvvv	- <op> [r + imm16s], R
-ooooo111 RRRRrrrr iiiissss vvvvvvvv	- <op> [r << s + Ri + imm8s], R
+ooooo111 RRRRrrrr iiiissss vvvvvvvv	- <op> [r + Ri << s + imm8s], R
 
 Operations
 00000xxx	- MOV

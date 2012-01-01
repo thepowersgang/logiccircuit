@@ -26,8 +26,8 @@ $is_ROM = AND (DELAY $enable), (NOT   @addr[15]), (NOT   @addr[14]), (NOT   @add
 @ROM_select = DEMUX{4} $is_ROM, (DELAY{2} @addr[0:3])
 
 %macro _ROM_DWORD 2
- %assign i 7
- %rep 8
+ %assign i 31
+ %rep 32
   %if %2 & 1 << i
 @data_output[i] = DELAY @ROM_select[%1/4]
   %endif

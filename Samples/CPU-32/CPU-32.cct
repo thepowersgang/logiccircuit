@@ -190,45 +190,59 @@ $is_reg_dest = NOR $is_op_M16R, $is_op_M8R
 // > Rr
 @reg_addr = (DELAY{4} (AND{4} $is_op_Rr, @instr[19:16]))
 @alu_in_src = AND{32} (DELAY{4+3} $is_op_Rr), @reg_data_in	// Addr AND, Mux, Select
+$alu_data_rdy = DELAY{4+3+1} $is_op_Rr
 // > Ri20
 @alu_in_src[19:0] = AND{20} $is_op_Ri20, @instr[19:0]
+$alu_data_rdy = DELAY{4+1} $is_op_Ri20
 // > Ri16
 $NULL, @alu_in_src[31:0] = ROTATE_LEFT_N_32 $is_op_Ri16, 0,@instr[16:19], \
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
 	@instr[15:0]
+$alu_data_rdy = DELAY{4+1} $is_op_Ri16
 // > Rs16
 $NULL, @alu_in_src[31:0] = ROTATE_LEFT_N_32 $is_op_Rs16, 0,@instr[16:19], \
 	@instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], \
 	@instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], \
 	@instr[15:0]
+$alu_data_rdy = DELAY{4+1} $is_op_Ri16
 // > RM16
 // > RM8
 // > M16R
 // > M8R
-
+#array _mem_add_op1 32
+#array _mem_add_op2 32
+$_mem_add_done, @addr, $NULL = ADDER_32BIT $_mem_add_start, @_mem_add_op1, @_mem_add_op2, 0
 // - Mem16
 $is_mem16_op = OR $is_op_RM16, $is_op_M16R
 @reg_addr = AND{4} $is_mem16_op, @instr[19:16]
-$mem_addr_ready, @addr, $NULL = ADDER_32BIT (DELAY{3} $is_mem16_op), @reg_data_in, \
+@_mem_add_op1 = AND{32} $is_mem16_op, @reg_data_in
+@_mem_add_op2 = AND{32} $is_mem16_op,\
 	@instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], \
 	@instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], \
-	@instr[15:0], \
-	0
+	@instr[15:0]
+$_mem_add_start = PULSE (DELAY{2} $is_mem16_op)
+$mem_addr_ready = AND $is_mem16_op, $_mem_add_done
 // - Mem8
 $is_mem8_op = OR $is_op_RM8, $is_op_M8R
-@reg_addr = AND{4} $is_mem8_op, @instr[11:8]
-; Add index and offset first
-$_mem8_add1_done, @addr, $NULL = ADDER_32BIT (DELAY{3+2} $is_mem8_op), @reg_data_in, \
-	@instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], \
-	@instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], \
-	@instr[15:0], \
-	0
-; Add base (shifted)
+@reg_addr = AND{4} $is_mem8_op, @instr[19:16]
+; Add base and offset first
+@_mem_add_op1 = AND{32} $is_mem8_op, @reg_data_in
+@_mem_add_op2 = AND{32} $is_mem8_op, \
+	@instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], \
+	@instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], \
+	@instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], \
+	@instr[7:0]
+$_mem_add_start = PULSE (DELAY{3+2} $is_mem8_op)
+$_mem8_add1_done = AND $is_mem8_op, $_mem_add_done
+; Add index (shifted)
 #array _mem8_reg_shifted 32
-@reg_addr = AND{4} $_mem8_add1_done, @instr[19:16]
-$_mem8_shift_done, @_mem8_reg_shifted, $NULL = SHIFT_LEFT_N_32 (DELAY{3} $_mem8_add1_done), 0,@instr[15:12], @reg_data_in, 0
-$addr_clear = DELAY{2} $_mem8_shift_done	; Wait until the add starts before clearing the latch
-$mem_addr_ready, @addr, $NULL = ADDER_32BIT $_mem8_shift_done, @_mem8_reg_shifted, @addr, 0
+@reg_addr = AND{4} $_mem8_add1_done, @instr[15:12]
+$_mem8_shift_done, @_mem8_reg_shifted, $NULL = SHIFT_LEFT_N_32 (DELAY{3} $_mem8_add1_done), 0,@instr[11:8], @reg_data_in, 0
+$addr_clear = PULSE (DELAY{2} $_mem8_shift_done)	; Wait until the add starts before clearing the latch
+@_mem_add_op1 = AND{32} $_mem8_shift_done, @_mem8_reg_shifted
+@_mem_add_op2 = AND{32} $_mem8_shift_done, @addr
+$_mem_add_start = PULSE $_mem8_shift_done
+$mem_addr_ready = AND $_mem8_shift_done, $_mem_add_done
 
 // - Write back
 @reg_addr = AND{4} $is_save, (NOT $is_mem_dest),  @instr[23:20]
@@ -245,9 +259,17 @@ $is_CMP = AND $is_ALU, (DELAY @instr[29]), (DELAY @instr[28]), (NOT   @instr[27]
 $is_TST = AND $is_ALU, (DELAY @instr[29]), (DELAY @instr[28]), (DELAY @instr[27])
 
 // --- MOV ---
-
+@alu_out = AND{32} $is_MOV, @alu_in_src
+$next_stage = PULSE $is_MOV
 // --- AND ---
-
+%assign i 0
+%rep NUM_GPR_BITS
+@alu_out[i] = AND $is_AND, @alu_in_src[i], @alu_in_dst[i]
+%assign i i+1
+%endrep
+$next_stage = PULSE $is_AND
 // --- ADD ---
+$flags_C_clear = DELAY{2} $is_ADD
+$next_stage, @alu_out, $flags_C = ADDER_32BIT (PULSE $is_ADD), @alu_in_src, @alu_in_dst, $flags_C
 
 ; vim: ft=logiccircuit
