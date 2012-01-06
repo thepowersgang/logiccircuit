@@ -1,0 +1,92 @@
+
+#defunit CPU32_ADDRESS_DECODE
+#input $trigger, $read_r, $read_m, @instr[32]
+#output $rdy, $is_mem_dest, @dest_addr[32], @op_1[32], @op_2[32]
+
+$pulse = PULSE $trigger
+$op_clear = PULSE $trigger
+$int_addr_clear = PULSE $trigger
+
+$NULL, @dest_addr = LATCH{32} 1, $pulse, @dest_addr
+$NULL, @op_1 = LATCH{32} 1, $op_clear, @op_1
+$NULL, @op_2 = LATCH{32} 1, $op_clear, @op_2
+
+#array int_addr 32
+$NULL, @int_addr = LATCH{32} 1, $int_addr_clear, @int_addr
+
+; Decode
+$is_op_Rr   = AND (NOT   @instr[26]), (NOT   @instr[25]), (NOT   @instr[24])
+$is_op_Ri20 = AND (NOT   @instr[26]), (NOT   @instr[25]), (DELAY @instr[24])
+$is_op_Ri16 = AND (NOT   @instr[26]), (DELAY @instr[25]), (NOT   @instr[24])
+$is_op_Rs16 = AND (NOT   @instr[26]), (DELAY @instr[25]), (DELAY @instr[24])
+$is_op_RM16 = AND (DELAY @instr[26]), (NOT   @instr[25]), (NOT   @instr[24])
+$is_op_RM8  = AND (DELAY @instr[26]), (NOT   @instr[25]), (DELAY @instr[24])
+$is_op_M16R = AND (DELAY @instr[26]), (NOT   @instr[25]), (NOT   @instr[24])
+$is_op_M8R  = AND (DELAY @instr[26]), (NOT   @instr[25]), (DELAY @instr[24])
+
+$is_mem_dest = NAND $is_op_M8R, $is_op_M16R
+@dest_addr = AND $pulse, (NOT $is_mem_dst), @instr[23:20]
+
+; Rr
+$reading_Rr = AND $pulse, $read_m, $is_op_Rr
+$op_2_read = DELAY{4} $reading_Rr
+@reg_addr = AND $reading_Rr, @instr[19:16]
+@op_2 = AND{32} (DELAY{3} $reading_Rr), @reg_data
+
+; Ri20
+$reading_Ri20 = AND $pulse, $read_m, $is_op_Ri20
+$op_2_read = DELAY $reading_Ri20
+@op2[19:0] = AND{20} $reading_Ri20, @instr[19:0]
+
+; Ri16
+$reading_Ri16 = AND $pulse, $read_m, $is_op_Ri16
+$op_2_read, @op2[31:0] = ROTATE_LEFT_N_32 $reading_Ri16, 0,@instr[19:16], \
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, @instr[15:0]
+
+; Rs16
+$reading_Rs16 = AND $pulse, $read_m, $is_op_Rs16
+$op_2_read, @op2[31:0] = ROTATE_LEFT_N_32 $reading_Rs16, 0,@instr[19:16], \
+	@instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], \
+	@instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], \
+	@instr[15:0]
+
+; RM16 / M16R
+$is_M16 = OR $is_op_RM16, $is_op_M16R
+$reading_M16 = AND $pulse, $read_m, $is_op_RM16
+$reading_M16 = AND $pulse, $read_m, $is_op_M16R
+; - Prepare add
+@reg_addr = AND{4} $reading_M16, @instr[19:16]
+@_mem_add_op1 = AND{32} (DELAY{3} $reading_M16), @reg_data
+@_mem_add_op2[31:0] = AND{32} (DELAY{3} $reading_M16), \
+	@instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], \
+	@instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], \
+	@instr[15:0]
+$_mem_add_start = DELAY{4} $reading_M16
+; - Add is done, trigger the read
+$addr_ready = AND $is_M16, $_mem_add_done
+; RM8 / M8R
+$is_M8 = OR $is_op_RM8, $is_op_M8R
+$reading_M8 = AND $pulse, $read_m, $is_op_RM8
+$reading_M8 = AND $pulse, $read_m, $is_op_M8R
+; - Stage 1: add Base + Offset
+@reg_addr = AND{4} $reading_M8, @instr[16:16]
+@_mem_add_op1 = AND{32} (DELAY{3} $reading_M8), @reg_data
+@_mem_add_op2[31:0] = AND{32} (DELAY{3} $reading_M8), \
+	@instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], \
+	@instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], \
+	@instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], \
+	@instr[7:0]
+$_mem_add_start = DELAY{4} $reading_M8
+$_mem8_add_done = AND $is_M8, $_mem_add_done
+; - Stage 2: rotate index
+$_mem8_shift_done, @_mem8_reg_shifted, $NULL = SHIFT_LEFT_N_32 (DELAY{3} $_mem8_add1_done), \
+	0, @instr[11:8], \
+	@reg_data_in, \
+	0
+; - Stage 3: add above two
+
+
+$_mem_add_done, @int_addr, $NULL = ADDER_32BIT $_mem_add_start, @_mem_add_op1, @_mem_add_op2, 0
+#endunit
+
+; vim: ft=logiccircuit

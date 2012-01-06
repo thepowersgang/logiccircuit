@@ -66,6 +66,7 @@ $carry_out = DELAY{2} @value[7]
 
 #array count_enable %1
 
+$ready = DELAY{2} $pulse
 @count_enable = DEMUX{%2} $pulse, @count
 %assign i 0
 %rep %1

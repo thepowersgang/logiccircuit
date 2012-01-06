@@ -249,14 +249,14 @@ $mem_addr_ready = AND $_mem8_shift_done, $_mem_add_done
 
 // === OPCODES ===
 // --- ALU Operations ---
-$is_MOV = AND $is_ALU, (NOT   @instr[29]), (NOT   @instr[28]), (NOT   @instr[27])
-$is_AND = AND $is_ALU, (NOT   @instr[29]), (NOT   @instr[28]), (DELAY @instr[27])
-$is_OR  = AND $is_ALU, (NOT   @instr[29]), (DELAY @instr[28]), (NOT   @instr[27])
-$is_XOR = AND $is_ALU, (NOT   @instr[29]), (DELAY @instr[28]), (DELAY @instr[27])
-$is_ADD = AND $is_ALU, (DELAY @instr[29]), (NOT   @instr[28]), (NOT   @instr[27])
-$is_SUB = AND $is_ALU, (DELAY @instr[29]), (NOT   @instr[28]), (DELAY @instr[27])
-$is_CMP = AND $is_ALU, (DELAY @instr[29]), (DELAY @instr[28]), (NOT   @instr[27])
-$is_TST = AND $is_ALU, (DELAY @instr[29]), (DELAY @instr[28]), (DELAY @instr[27])
+$is_MOV = AND $alu_data_rdy, $is_ALU, (NOT   @instr[29]), (NOT   @instr[28]), (NOT   @instr[27])
+$is_AND = AND $alu_data_rdy, $is_ALU, (NOT   @instr[29]), (NOT   @instr[28]), (DELAY @instr[27])
+$is_OR  = AND $alu_data_rdy, $is_ALU, (NOT   @instr[29]), (DELAY @instr[28]), (NOT   @instr[27])
+$is_XOR = AND $alu_data_rdy, $is_ALU, (NOT   @instr[29]), (DELAY @instr[28]), (DELAY @instr[27])
+$is_ADD = AND $alu_data_rdy, $is_ALU, (DELAY @instr[29]), (NOT   @instr[28]), (NOT   @instr[27])
+$is_SUB = AND $alu_data_rdy, $is_ALU, (DELAY @instr[29]), (NOT   @instr[28]), (DELAY @instr[27])
+$is_CMP = AND $alu_data_rdy, $is_ALU, (DELAY @instr[29]), (DELAY @instr[28]), (NOT   @instr[27])
+$is_TST = AND $alu_data_rdy, $is_ALU, (DELAY @instr[29]), (DELAY @instr[28]), (DELAY @instr[27])
 
 // --- MOV ---
 @alu_out = AND{32} $is_MOV, @alu_in_src

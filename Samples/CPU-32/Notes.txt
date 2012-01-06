@@ -15,7 +15,7 @@ ooooo001 RRRRvvvv vvvvvvvv vvvvvvvv	- <op> R, imm20
 ooooo010 RRRRssss vvvvvvvv vvvvvvvv	- <op> R, imm16 <<< s
 ooooo011 RRRRssss vvvvvvvv vvvvvvvv	- <op> R, imm16s <<< s
 ooooo100 RRRRrrrr vvvvvvvv vvvvvvvv	- <op> R, [r + imm16s]
-ooooo101 RRRRrrrr iiiissss vvvvvvvv	- <op> R, [r << s + Ri + imm8s]
+ooooo101 RRRRrrrr iiiissss vvvvvvvv	- <op> R, [r + Ri << s + imm8s]
 ooooo110 RRRRrrrr vvvvvvvv vvvvvvvv	- <op> [r + imm16s], R
 ooooo111 RRRRrrrr iiiissss vvvvvvvv	- <op> [r + Ri << s + imm8s], R
 
