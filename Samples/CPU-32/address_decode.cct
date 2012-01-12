@@ -1,4 +1,22 @@
-
+;
+; CPU-32 Design
+; - By John Hodge (thePowersGang)
+;
+; address_decode.cct
+; - Decodes and reads values for general operations
+;
+; === USAGE ===
+; INPUT
+; - $trigger : Pulse used to control start decoding
+; - $read_r  : Decode and read the 'R' operand (bits 23:20)
+; - $read_m  : Decode and read the 'm' operand (immediate/register/memory)
+; - @instr   : Instruction data (full 32 bits)
+; OUTPUT
+; - $rdy     : Raised when the operation is completed
+; - $is_mem_dest : Set if the destination is a memory address (as opposed to a register num)
+; - @dest_addr : Destination address / register number (register num is stored in low 4 bits)
+; - @op_1    : First operand (usually R, unless $is_mem_dest is set)
+; - @op_2    : First operand (usually m, unless $is_mem_dest is set)
 #defunit CPU32_ADDRESS_DECODE
 #input $trigger, $read_r, $read_m, @instr[32]
 #output $rdy, $is_mem_dest, @dest_addr[32], @op_1[32], @op_2[32]
@@ -118,7 +136,6 @@ $_swap_ops = AND (PULSE $op_1_read), $is_mem_dest
 @op_2 = AND{32} $_swap_ops, @op_1
 $op_clear = DELAY $_swap_ops
 $rdy = DELAY{3} $_swap_ops
-
 
 #endunit
 
