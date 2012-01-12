@@ -50,7 +50,7 @@ $op_2_read, @op2[31:0] = ROTATE_LEFT_N_32 $reading_Rs16, 0,@instr[19:16], \
 	@instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], \
 	@instr[15:0]
 
-; RM16 / M16R
+; === RM16 / M16R ===
 $is_M16 = OR $is_op_RM16, $is_op_M16R
 $reading_M16 = AND $pulse, $read_m, $is_op_RM16
 $reading_M16 = AND $pulse, $read_m, $is_op_M16R
@@ -64,12 +64,13 @@ $reading_M16 = AND $pulse, $read_m, $is_op_M16R
 $_mem_add_start = DELAY{4} $reading_M16
 ; - Add is done, trigger the read
 $addr_ready = AND $is_M16, $_mem_add_done
-; RM8 / M8R
+; === RM8 / M8R ===
 $is_M8 = OR $is_op_RM8, $is_op_M8R
 $reading_M8 = AND $pulse, $read_m, $is_op_RM8
 $reading_M8 = AND $pulse, $read_m, $is_op_M8R
 ; - Stage 1: add Base + Offset
-@reg_addr = AND{4} $reading_M8, @instr[16:16]
+$NULL, $is_M8_stg1 = LATCH 1, $is_M8_stg1_clear, (PULSE $is_M8)	// Stops looping
+@reg_addr = AND{4} $reading_M8, @instr[19:16]
 @_mem_add_op1 = AND{32} (DELAY{3} $reading_M8), @reg_data
 @_mem_add_op2[31:0] = AND{32} (DELAY{3} $reading_M8), \
 	@instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], \
@@ -77,16 +78,48 @@ $reading_M8 = AND $pulse, $read_m, $is_op_M8R
 	@instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], \
 	@instr[7:0]
 $_mem_add_start = DELAY{4} $reading_M8
-$_mem8_add_done = AND $is_M8, $_mem_add_done
+$_mem8_add1_done = AND $is_M8, $is_M8_stg1, $_mem_add_done
+$is_M8_stg1_clear = $_mem8_add1_done
 ; - Stage 2: rotate index
+@reg_addr = AND{4} $_mem8_add1_done, @instr[15:12]
 $_mem8_shift_done, @_mem8_reg_shifted, $NULL = SHIFT_LEFT_N_32 (DELAY{3} $_mem8_add1_done), \
 	0, @instr[11:8], \
 	@reg_data_in, \
 	0
 ; - Stage 3: add above two
-
-
+@_mem_add_op1 = AND{32} $_mem8_shift_done, @_mem8_reg_shifted
+@_mem_add_op2 = AND{32} $_mem8_shift_done, @int_addr
+$_mem_add_start = PULSE $_mem8_shift_done
+$addr_ready = AND $is_M8, (NOT $is_M8_stg1), $_mem_add_done
+; === Common Adder for Memory ===
 $_mem_add_done, @int_addr, $NULL = ADDER_32BIT $_mem_add_start, @_mem_add_op1, @_mem_add_op2, 0
+
+; === Memory Load ===
+@mem_addr = AND{32} $addr_ready, @int_addr
+@op_2 = AND{32} $mem_ready, (NOT $is_mem_dest), @mem_data_in_
+$op_2_read = DELAY $mem_ready
+@dest_addr = AND{32} $is_mem_dest, @int_addr
+
+; === Skip Op2? ===
+$op_2_read = DELAY (NOT $read_m)
+
+; === Read Op1 ===
+$reading_op1 = AND $read_r, $op2_read
+@reg_addr = AND{4} $reading_op1, @instr[23:20]
+@op_1 = AND{32} (DELAY{3} $reading_op1), @reg_data
+$op_1_read = DELAY{4} $reading_op1
+$rdy = AND $op_1_read, (NOT $is_mem_dest)
+; === Skip Op1? ===
+$op_1_read = AND $op_2_read, (NOT $read_r)
+
+; === Swap if mem dest ===
+$_swap_ops = AND (PULSE $op_1_read), $is_mem_dest
+@op_1 = AND{32} $_swap_ops, @op_2
+@op_2 = AND{32} $_swap_ops, @op_1
+$op_clear = DELAY $_swap_ops
+$rdy = DELAY{3} $_swap_ops
+
+
 #endunit
 
 ; vim: ft=logiccircuit
