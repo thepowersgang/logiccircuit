@@ -41,6 +41,7 @@ void	PrintDisplayItem(tDisplayItem *dispItem);
  int	gbStepping = 1;
  int	gbPrintLinks = 0;
  int	gbPrintStats = 0;
+ int	gbCompress = 1;
 
 // === CODE ===
 int main(int argc, char *argv[])
@@ -205,6 +206,64 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
+	if( gbCompress )
+	{
+		 int	nVal = 0, nLink = 0;
+		printf("Culling links...\n");
+		// Unify
+		for( link = gpLinks; link; link = link->Next )
+			link->Backlink = NULL;
+		for( link = gpLinks; link; link = link->Next )
+		{
+			if(link->Backlink)	continue;	// Skip ones already done
+			for( tLink *link2 = link; link2; link2 = link2->Next )
+			{
+				if(link2->Backlink)	continue;
+				if(link2->Value != link->Value)	continue;
+				link2->Backlink = link;	// Make backlink non-zero
+				nLink ++;
+			}
+			nVal ++;
+		}
+		printf("%i values across %i links\n", nVal, nLink);
+		
+		// Update elements
+		for( ele = gpElements; ele; ele = ele->Next )
+		{
+			for( int i = 0; i < ele->NInputs; i ++ )
+				ele->Inputs[i] = ele->Inputs[i]->Backlink;
+			for( int i = 0; i < ele->NOutputs; i ++ )
+				ele->Outputs[i] = ele->Outputs[i]->Backlink;
+		}
+		
+		// Find and free unused
+		for( link = gpLinks; link; link = link->Next )
+			link->Backlink = NULL;
+		for( ele = gpElements; ele; ele = ele->Next )
+		{
+			for( int i = 0; i < ele->NInputs; i ++ )
+				ele->Inputs[i]->Backlink = (void*)1;
+			for( int i = 0; i < ele->NOutputs; i ++ )
+				ele->Outputs[i]->Backlink = (void*)1;
+		}
+		 int	nPruned = 0;
+		tLink	*prev = &gpLinks;
+		for( link = gpLinks; link; )
+		{
+			tLink *nextlink = link->Next;
+			if(link->Backlink == NULL) {
+				prev->Next = link->Next;
+				free(link);
+				nPruned ++;
+			}
+			else {
+				prev = link;
+			}
+			link = nextlink;
+		}
+		printf("Pruned %i links\n", nPruned);
+	}
+	
 	if( gbPrintStats )
 	{
 		 int	totalLinks = 0;
@@ -212,6 +271,8 @@ int main(int argc, char *argv[])
 		 int	totalValues = 0;
 		 int	totalElements = 0;
 		printf("Gathering statistics...\n");
+		for( link = gpLinks; link; link = link->Next )
+			link->Backlink = NULL;
 		for( link = gpLinks; link; link = link->Next )
 		{
 			tLink	*link2;
@@ -225,7 +286,7 @@ int main(int argc, char *argv[])
 
 			if(link->Backlink)	continue;	// Skip ones already done
 
-			for( link2 = gpLinks; link2; link2 = link2->Next )
+			for( link2 = link; link2; link2 = link2->Next )
 			{
 				if(link2->Backlink)	continue;
 				if(link2->Value != link->Value)	continue;
@@ -244,7 +305,7 @@ int main(int argc, char *argv[])
 
 		return 0;
 	}
-	
+
 	signal(SIGINT, SigINT_Handler);
 	
 	// Go to alternte screen buffer

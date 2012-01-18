@@ -43,7 +43,8 @@ static tElement *_Create(int NParams, int *Param, int NInputs, tLink **Inputs)
 
 static tElement *_Duplicate(tElement *Source)
 {
-	 int	size = sizeof(t_element) + (Source->NOutputs+Source->NInputs)*sizeof(tLink*);
+	t_element *orig = (void*)Source;
+	 int	size = sizeof(t_element) + (Source->NOutputs+Source->NInputs+orig->Size)*sizeof(tLink*);
 	t_element *ret = malloc( size );
 	memcpy(ret, Source, size);
 	ret->Ele.Outputs = &ret->_links[0];
