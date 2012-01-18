@@ -5,6 +5,7 @@
 %include "../adder.cct"
 %include "../subber.cct"
 %include "../shift_register.cct"
+%include "address_decode.cct"
 
 %define	NUM_GPR_BITS	32
 %define	NUM_ADDR_BITS	32
@@ -96,11 +97,10 @@ $NULL, @reg_pc_in = LATCH{32} 1, (PULSE $reg_pc_write), (DELAY @reg_pc_out)
 
 // === Memory ===
 // TODO: Maybe have these lines be arguments of some form
-$mem_ready, @mem_data_in_ = MEMORY_SPACE $mem_enable, @mem_addr, $mem_data_write, @mem_data_out
+$mem_ready, @mem_data_in = MEMORY_SPACE $mem_enable, @mem_addr, $mem_data_write, @mem_data_out
 #display $mem_enable "MemAddr" @mem_addr[NUM_ADDR_BITS-1:0]
 #display $mem_write "MemOut " @mem_data_out[31:0]
-#display $mem_ready "MemIn  " @mem_data_in_[NUM_GPR_BITS-1:0]
-@mem_data_in = DELAY{4} @mem_data_in_	// Line up with stage change (rdy->next->counter->demux->)
+#display $mem_ready "MemIn  " @mem_data_in[NUM_GPR_BITS-1:0]
 
 // === "Temporary" Latches ===
 // @instr, @val and @addr - Temporary "variables" used to hold intermediate values
@@ -171,7 +171,12 @@ $is_UNDEF = NOT (OR $is_ALU)
 
 // === Address Decoding ===
 $alu_data_ready, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src = CPU32_ADDRESS_DECODE \
-	(DELAY $is_stdop), (NOT $is_MOV), 1, @instr
+	(DELAY $is_stdop), (NOT $is_MOV), 1, @instr, \
+	@reg_addr, @reg_data_in, $mem_enable, @mem_addr, $mem_ready, @mem_data_in
+
+#display $alu_data_ready "@alu_addr   = %32x" @alu_addr
+#display $alu_data_ready "@alu_in_dst = %32x" @alu_in_dst
+#display $alu_data_ready "@alu_in_src = %32x" @alu_in_src
 
 // === OPCODES ===
 // --- ALU Operations ---

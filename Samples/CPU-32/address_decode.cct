@@ -19,12 +19,13 @@
 ; - @op_2    : First operand (usually m, unless $is_mem_dest is set)
 ; IMPORTS? (TODO: Are imports possible?)
 ; - @reg_addr[4]  : Register read select (3 unit lag)
-; - @reg_data[32] : Register data
+; - @reg_data_in[32] : Register data
 ; - $mem_enable   : Memory enable line (performs read at @mem_addr)
 ; - $mem_ready    : Set when the memory data is ready
 ; - @mem_addr[32] : Memory address
 #defunit CPU32_ADDRESS_DECODE
-#input $trigger, $read_r, $read_m, @instr[32]
+#input $trigger, $read_r, $read_m, @instr[32], \
+	@reg_addr[4], @reg_data_in[32], $mem_enable, @mem_addr[32], $mem_ready, @mem_data_in[32]
 #output $rdy, $is_mem_dest, @dest_addr[32], @op_1[32], @op_2[32]
 
 $pulse = PULSE $trigger
@@ -49,30 +50,34 @@ $is_op_M16R = AND (DELAY @instr[26]), (NOT   @instr[25]), (NOT   @instr[24])
 $is_op_M8R  = AND (DELAY @instr[26]), (NOT   @instr[25]), (DELAY @instr[24])
 
 $is_mem_dest = NAND $is_op_M8R, $is_op_M16R
-@dest_addr = AND $pulse, (NOT $is_mem_dst), @instr[23:20]
+@dest_addr[3:0] = AND{4} $pulse, (NOT $is_mem_dst), @instr[23:20]
 
 ; Rr
 $reading_Rr = AND $pulse, $read_m, $is_op_Rr
 $op_2_read = DELAY{4} $reading_Rr
-@reg_addr = AND $reading_Rr, @instr[19:16]
-@op_2 = AND{32} (DELAY{3} $reading_Rr), @reg_data
+@reg_addr = AND{4} $reading_Rr, @instr[19:16]
+@op_2 = AND{32} (DELAY{3} $reading_Rr), @reg_data_in
 
 ; Ri20
 $reading_Ri20 = AND $pulse, $read_m, $is_op_Ri20
 $op_2_read = DELAY $reading_Ri20
-@op2[19:0] = AND{20} $reading_Ri20, @instr[19:0]
+@op_2[19:0] = AND{20} $reading_Ri20, @instr[19:0]
 
 ; Ri16
 $reading_Ri16 = AND $pulse, $read_m, $is_op_Ri16
-$op_2_read, @op2[31:0] = ROTATE_LEFT_N_32 $reading_Ri16, 0,@instr[19:16], \
+$op_2_read, @op_2[31:0] = ROTATE_LEFT_N_32 $reading_Ri16, 0,@instr[19:16], \
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, @instr[15:0]
 
 ; Rs16
 $reading_Rs16 = AND $pulse, $read_m, $is_op_Rs16
-$op_2_read, @op2[31:0] = ROTATE_LEFT_N_32 $reading_Rs16, 0,@instr[19:16], \
+$op_2_read, @op_2[31:0] = ROTATE_LEFT_N_32 $reading_Rs16, 0,@instr[19:16], \
 	@instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], \
 	@instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], \
 	@instr[15:0]
+
+#array _mem_add_op1 32
+#array _mem_add_op2 32
+#array _mem8_reg_shifted 32
 
 ; === RM16 / M16R ===
 $is_M16 = OR $is_op_RM16, $is_op_M16R
@@ -80,7 +85,7 @@ $reading_M16 = AND $pulse, $read_m, $is_op_RM16
 $reading_M16 = AND $pulse, $read_m, $is_op_M16R
 ; - Prepare add
 @reg_addr = AND{4} $reading_M16, @instr[19:16]
-@_mem_add_op1 = AND{32} (DELAY{3} $reading_M16), @reg_data
+@_mem_add_op1 = AND{32} (DELAY{3} $reading_M16), @reg_data_in
 @_mem_add_op2[31:0] = AND{32} (DELAY{3} $reading_M16), \
 	@instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], \
 	@instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], \
@@ -95,7 +100,7 @@ $reading_M8 = AND $pulse, $read_m, $is_op_M8R
 ; - Stage 1: add Base + Offset
 $NULL, $is_M8_stg1 = LATCH 1, $is_M8_stg1_clear, (PULSE $is_M8)	// Stops looping
 @reg_addr = AND{4} $reading_M8, @instr[19:16]
-@_mem_add_op1 = AND{32} (DELAY{3} $reading_M8), @reg_data
+@_mem_add_op1 = AND{32} (DELAY{3} $reading_M8), @reg_data_in
 @_mem_add_op2[31:0] = AND{32} (DELAY{3} $reading_M8), \
 	@instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], \
 	@instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], \
@@ -120,7 +125,7 @@ $_mem_add_done, @int_addr, $NULL = ADDER_32BIT $_mem_add_start, @_mem_add_op1, @
 
 ; === Memory Load ===
 @mem_addr = AND{32} $addr_ready, @int_addr
-@op_2 = AND{32} $mem_ready, (NOT $is_mem_dest), @mem_data_in_
+@op_2 = AND{32} $mem_ready, (NOT $is_mem_dest), @mem_data_in
 $op_2_read = DELAY $mem_ready
 @dest_addr = AND{32} $is_mem_dest, @int_addr
 
@@ -130,7 +135,7 @@ $op_2_read = DELAY (NOT $read_m)
 ; === Read Op1 ===
 $reading_op1 = AND $read_r, $op2_read
 @reg_addr = AND{4} $reading_op1, @instr[23:20]
-@op_1 = AND{32} (DELAY{3} $reading_op1), @reg_data
+@op_1 = AND{32} (DELAY{3} $reading_op1), @reg_data_in
 $op_1_read = DELAY{4} $reading_op1
 $rdy = AND $op_1_read, (NOT $is_mem_dest)
 ; === Skip Op1? ===
