@@ -17,6 +17,12 @@
 ; - @dest_addr : Destination address / register number (register num is stored in low 4 bits)
 ; - @op_1    : First operand (usually R, unless $is_mem_dest is set)
 ; - @op_2    : First operand (usually m, unless $is_mem_dest is set)
+; IMPORTS? (TODO: Are imports possible?)
+; - @reg_addr[4]  : Register read select (3 unit lag)
+; - @reg_data[32] : Register data
+; - $mem_enable   : Memory enable line (performs read at @mem_addr)
+; - $mem_ready    : Set when the memory data is ready
+; - @mem_addr[32] : Memory address
 #defunit CPU32_ADDRESS_DECODE
 #input $trigger, $read_r, $read_m, @instr[32]
 #output $rdy, $is_mem_dest, @dest_addr[32], @op_1[32], @op_2[32]
