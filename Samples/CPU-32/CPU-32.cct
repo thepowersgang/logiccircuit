@@ -135,9 +135,9 @@ $NULL, $reg_pc_valid  = LATCH 1, $reg_pc_invalidate, $reg_pc_valid
 // STAGE0 - Opcode Fetch
 #display @stage_state[0] "Opcode fetch" 1
 // Reset all values
-$instr_clear = DELAY @stage_state[0]	// Clear the instruction cache
-$val_clear   = DELAY @stage_state[0]	// Clear the value cache
-$addr_clear  = DELAY @stage_state[0]	// Clear the address cache
+$instr_clear = PULSE @stage_state[0]	// Clear the instruction cache
+$val_clear   = PULSE @stage_state[0]	// Clear the value cache
+$addr_clear  = PULSE @stage_state[0]	// Clear the address cache
 // Read opcode from memory
 // - Memory read will update the stage to #2
 // - ANDing with $reg_pc_valid causes the read to not be attempted until
@@ -145,12 +145,9 @@ $addr_clear  = DELAY @stage_state[0]	// Clear the address cache
 @mem_addr = DELAY (AND{NUM_ADDR_BITS} @stage_state[0], $reg_pc_valid, @reg_pc_in)	// Set memory address to PC
 $mem_enable   = PULSE (AND @stage_state[0], $reg_pc_valid)	// Enable memory for read
 $increment_pc = PULSE (AND @stage_state[0], $reg_pc_valid)	// Increment the program counter too
-$next_stage = AND @stage_state[0], $mem_ready	// Next stage when memory ready
 
-// === STAGE1 - Instruction fetched, save in latch ===
-#display @stage_state[1] "Instruction Save" 1
-@instr = AND{32} @stage_state[1], @mem_data_in	// Save the opcode byte
-$next_stage = PULSE (DELAY{3} @stage_state[1])	// Wait for latch to hold and for instructions to decode
+@instr = AND{32} @stage_state[0], $mem_ready, @mem_data_in	// Save the opcode
+$next_stage = PULSE (DELAY{3} (AND @stage_state[0], $mem_ready))	// Wait for latch to hold and for instructions to decode
 
 // =======================
 // === Opcode Decoding ===
@@ -161,8 +158,8 @@ $next_stage = PULSE (DELAY{3} @stage_state[1])	// Wait for latch to hold and for
 #array alu_out	NUM_GPR_BITS
 #array alu_flags	8	// TODO: Flags register format
 
-#display @stage_state[2] "Opcode decode" 1
-%define decode_enable	(NOT @stage_state[0], @stage_state[1])
+#display @stage_state[1] "Opcode decode" 1
+%define decode_enable	(OR @stage_num)
 $is_ALU = AND decode_enable, (NOT @instr[31]), (NOT @instr[30])
 
 // === Handle Undefined Opcodes ===
@@ -170,13 +167,15 @@ $is_UNDEF = NOT (OR $is_ALU)
 ; $next_instruction = AND @stage_state[2], $is_UNDEF
 
 // === Address Decoding ===
-$alu_data_ready, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src = CPU32_ADDRESS_DECODE \
-	(DELAY $is_stdop), (NOT $is_MOV), 1, @instr, \
+$no_decode_r = AND decode_enable,(NOT @instr[31]),(NOT @instr[30]),(NOT   @instr[29]),(NOT   @instr[28]),(NOT   @instr[27])
+
+$alu_data_rdy, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src = CPU32_ADDRESS_DECODE \
+	(DELAY $is_ALU), $no_decode_r, 1, @instr, \
 	@reg_addr, @reg_data_in, $mem_enable, @mem_addr, $mem_ready, @mem_data_in
 
-#display $alu_data_ready "@alu_addr   = %32x" @alu_addr
-#display $alu_data_ready "@alu_in_dst = %32x" @alu_in_dst
-#display $alu_data_ready "@alu_in_src = %32x" @alu_in_src
+#display $alu_data_rdy "@alu_addr   = %32x" @alu_addr[31:0]
+#display $alu_data_rdy "@alu_in_dst = %32x" @alu_in_dst[31:0]
+#display $alu_data_rdy "@alu_in_src = %32x" @alu_in_src[31:0]
 
 // === OPCODES ===
 // --- ALU Operations ---
@@ -190,16 +189,35 @@ $is_CMP = AND $alu_data_rdy, $is_ALU, (DELAY @instr[29]), (DELAY @instr[28]), (N
 $is_TST = AND $alu_data_rdy, $is_ALU, (DELAY @instr[29]), (DELAY @instr[28]), (DELAY @instr[27])
 
 // --- MOV ---
+#display $is_MOV "MOV *0x%32x = 0x%32x" @alu_addr[31:0], @alu_in_src[31:0]
 @alu_out = AND{32} $is_MOV, @alu_in_src
 $next_stage = PULSE $is_MOV
 // --- AND ---
+#display $is_AND "AND *0x%32x = 0x%32x & 0x%32x" @alu_addr[31:0], @alu_in_dst[31:0], @alu_in_src[31:0]
 %assign i 0
 %rep NUM_GPR_BITS
 @alu_out[i] = AND $is_AND, @alu_in_src[i], @alu_in_dst[i]
 %assign i i+1
 %endrep
 $next_stage = PULSE $is_AND
+// --- OR  ---
+#display $is_OR "OR *0x%32x = 0x%32x & 0x%32x" @alu_addr[31:0], @alu_in_dst[31:0], @alu_in_src[31:0]
+%assign i 0
+%rep NUM_GPR_BITS
+@alu_out[i] = OR $is_OR, @alu_in_src[i], @alu_in_dst[i]
+%assign i i+1
+%endrep
+$next_stage = PULSE $is_OR
+// --- XOR ---
+#display $is_XOR "XOR *0x%32x = 0x%32x & 0x%32x" @alu_addr[31:0], @alu_in_dst[31:0], @alu_in_src[31:0]
+%assign i 0
+%rep NUM_GPR_BITS
+@alu_out[i] = XOR $is_XOR, @alu_in_src[i], @alu_in_dst[i]
+%assign i i+1
+%endrep
+$next_stage = PULSE $is_XOR
 // --- ADD ---
+#display $is_ADD "ADD *0x%32x = 0x%32x + 0x%32x" @alu_addr[31:0], @alu_in_dst[31:0], @alu_in_src[31:0]
 $flags_C_clear = DELAY{2} $is_ADD
 $next_stage, @alu_out, $flags_C = ADDER_32BIT (PULSE $is_ADD), @alu_in_src, @alu_in_dst, $flags_C
 

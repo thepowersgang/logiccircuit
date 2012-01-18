@@ -306,6 +306,8 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
+	// TODO: Support saving tree to a file
+
 	signal(SIGINT, SigINT_Handler);
 	
 	// Go to alternte screen buffer
