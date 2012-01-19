@@ -36,7 +36,7 @@ $is_ROM = AND (DELAY $enable), (NOT   @addr[15]), (NOT   @addr[14]), (NOT   @add
 %endmacro
 
 // === ROM Contents ===
-_ROM_DWORD 0x0000, 0x09131337	; AND R1, 0x31337
+_ROM_DWORD 0x0000, 0x11131337	; OR R1, 0x31337
 _ROM_DWORD 0x0004, 0x40FFFFFC	; JMP .+0xFFFFFC (-4)
 
 // 1 delay for DEMUX, 1 for data

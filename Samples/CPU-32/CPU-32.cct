@@ -63,9 +63,10 @@ $clock = CLOCK{128}
 %rep 16
 #array reg_ %+ i %+ _value NUM_GPR_BITS
 #array reg_ %+ i %+ _newvalue NUM_GPR_BITS
-$reg_ %+ i %+ _ready, @reg_ %+ i %+ _value = LATCH{NUM_GPR_BITS} 1, (PULSE $reg_ %+ i %+ _write), (DELAY @reg_ %+ i %+ _newvalue)	// Actual Register
+$reg_ %+ i %+ _ready, @reg_ %+ i %+ _value = LATCH{NUM_GPR_BITS} 1, (PULSE $reg_ %+ i %+ _clear), (DELAY{2} @reg_ %+ i %+ _newvalue)	// Actual Register
 
-$reg_ %+ i %+ _write = AND @reg_select[i], (DELAY $reg_write)	// Get global Write signal
+@reg_ %+ i %+ _newvalue = AND{NUM_GPR_BITS} @reg_select[i], (DELAY @reg_data_in)
+$reg_ %+ i %+ _clear = AND @reg_select[i], (PULSE $reg_write)	// Get global Write signal
 $reg_ready = DELAY{2} @reg_select[i]	// Set global ready signal
 
 @reg_ %+ i %+ _newvalue = AND{NUM_GPR_BITS} @reg_select[i], (DELAY @reg_data_out)	// Get global input
@@ -91,8 +92,7 @@ $NULL, $flags_Z = LATCH 1, $flags_Z_clear, $flags_Z
 
 // --- Program Counter ---
 #display $reg_pc_write "New PC 0x%32x" @reg_pc_out[31:0]
-$NULL, @reg_pc_in = LATCH{32} 1, (PULSE $reg_pc_write), (DELAY @reg_pc_out)
-
+$NULL, @reg_pc_in = LATCH{32} 1, (PULSE $reg_pc_write), (DELAY{2} @reg_pc_out)
 
 
 // === Memory ===
@@ -170,8 +170,8 @@ $is_UNDEF = NOT (OR $is_ALU)
 $no_decode_r = AND decode_enable,(NOT @instr[31]),(NOT @instr[30]),(NOT   @instr[29]),(NOT   @instr[28]),(NOT   @instr[27])
 
 $alu_data_rdy, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src = CPU32_ADDRESS_DECODE \
-	(DELAY $is_ALU), $no_decode_r, 1, @instr, \
-	@reg_addr, @reg_data_in, $mem_enable, @mem_addr, $mem_ready, @mem_data_in
+	(PULSE $is_ALU), (PULSE @stage_state[3]), $no_decode_r, 1, @instr, \
+	$reg_enable, @reg_addr, @reg_data_in, $mem_enable, @mem_addr, $mem_ready, @mem_data_in
 
 #display $alu_data_rdy "@alu_addr   = %32x" @alu_addr[31:0]
 #display $alu_data_rdy "@alu_in_dst = %32x" @alu_in_dst[31:0]
@@ -201,21 +201,21 @@ $next_stage = PULSE $is_MOV
 %endrep
 $next_stage = PULSE $is_AND
 // --- OR  ---
-#display $is_OR "OR *0x%32x = 0x%32x & 0x%32x" @alu_addr[31:0], @alu_in_dst[31:0], @alu_in_src[31:0]
+#display $is_OR "OR *0x%32x = 0x%32x | 0x%32x" @alu_addr[31:0], @alu_in_dst[31:0], @alu_in_src[31:0]
 %assign i 0
 %rep NUM_GPR_BITS
-@alu_out[i] = OR $is_OR, @alu_in_src[i], @alu_in_dst[i]
+@alu_out[i] = AND $is_OR, (OR @alu_in_src[i], @alu_in_dst[i])
 %assign i i+1
 %endrep
-$next_stage = PULSE $is_OR
+$next_stage = PULSE (DELAY $is_OR)
 // --- XOR ---
 #display $is_XOR "XOR *0x%32x = 0x%32x & 0x%32x" @alu_addr[31:0], @alu_in_dst[31:0], @alu_in_src[31:0]
 %assign i 0
 %rep NUM_GPR_BITS
-@alu_out[i] = XOR $is_XOR, @alu_in_src[i], @alu_in_dst[i]
+@alu_out[i] = AND $is_XOR, (XOR @alu_in_src[i], @alu_in_dst[i])
 %assign i i+1
 %endrep
-$next_stage = PULSE $is_XOR
+$next_stage = PULSE (DELAY $is_XOR)
 // --- ADD ---
 #display $is_ADD "ADD *0x%32x = 0x%32x + 0x%32x + %i" @alu_addr[31:0], @alu_in_dst[31:0], @alu_in_src[31:0], $flags_C
 $flags_C_clear = DELAY{2} $is_ADD
@@ -236,6 +236,7 @@ $next_stage, @alu_out, $flags_C = ADDER_32BIT (PULSE $is_ADD), @alu_in_src, @alu
 @alu_out[i] = AND $is_TST, @alu_in_src[i], @alu_in_dst[i]
 %assign i i+1
 %endrep
+$alu_nosave = DELAY $is_TST
 $next_stage = PULSE $is_TST
 
 // === Save ALU Data ===
@@ -243,6 +244,7 @@ $next_stage = PULSE $is_TST
 $alu_save = AND @stage_state[2], $is_ALU
 // --- Save to memory
 $_alu_save_mem = AND $alu_save, (NOT $alu_nosave), $addr_is_mem
+#display $_alu_save_mem "Memory 0x%32x = 0x%32x" @alu_addr[31:0], @alu_out[31:0]
 @mem_addr     = AND{32} $_alu_save_mem, @alu_addr
 @mem_data_out = AND{32} $_alu_save_mem, @alu_out
 $mem_write  = DELAY $_alu_save_mem
@@ -250,12 +252,16 @@ $mem_enable = DELAY $_alu_save_mem
 $next_stage = PULSE (AND $_alu_save_mem, $mem_ready)
 // --- Save to register
 $_alu_save_reg = AND $alu_save, (NOT $alu_nosave), (NOT $addr_is_mem)
+#display $_alu_save_reg "Register 0x%4x = 0x%32x" @alu_addr[3:0], @alu_out[31:0]
 @reg_addr[3:0] = AND{4} $_alu_save_reg, @alu_addr[3:0]
 @reg_data_out = AND{32} $_alu_save_reg, @alu_out
 $reg_write = DELAY $_alu_save_reg
+$reg_enable = DELAY $_alu_save_reg
 $next_stage = PULSE (DELAY{4} $_alu_save_reg)	// wait for update :)
 // --- Don't save
-$next_stage = PULSE (AND $alu_save, $alu_nosave)
+$_alu_save_none = AND $alu_save, $alu_nosave
+#display $_alu_save_none "Not saving 0x%32x" @alu_out[31:0]
+$next_stage = PULSE $_alu_save_none
 
 // === ALU Done ===
 #display @stage_state[3] "ALU Complete" 1
