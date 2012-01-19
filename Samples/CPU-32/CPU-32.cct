@@ -125,7 +125,7 @@ $reg_pc_invalidate = $increment_pc	// Invalidate PC when increment is called
 // Add 1 to the PC register (if $increment_pc is set)
 // - Assigning to reg_pc_(write|out) causes it to update the register
 //   once done
-$reg_pc_write, @reg_pc_out, $NULL = ADDER_32BIT $increment_pc, @reg_pc_in, (CONST{32,0x1} 1), 0
+$reg_pc_write, @reg_pc_out, $NULL = ADDER_32BIT $increment_pc, @reg_pc_in, (CONST{32,0x4} 1), 0
 $reg_pc_valid = DELAY{6} $reg_pc_write	// TODO: Fine tune this to the write delay of a word register
 $reg_pc_valid = PULSE 1	// Raise at CPU init
 $NULL, $reg_pc_valid  = LATCH 1, $reg_pc_invalidate, $reg_pc_valid
@@ -217,8 +217,48 @@ $next_stage = PULSE $is_OR
 %endrep
 $next_stage = PULSE $is_XOR
 // --- ADD ---
-#display $is_ADD "ADD *0x%32x = 0x%32x + 0x%32x" @alu_addr[31:0], @alu_in_dst[31:0], @alu_in_src[31:0]
+#display $is_ADD "ADD *0x%32x = 0x%32x + 0x%32x + %i" @alu_addr[31:0], @alu_in_dst[31:0], @alu_in_src[31:0], $flags_C
 $flags_C_clear = DELAY{2} $is_ADD
 $next_stage, @alu_out, $flags_C = ADDER_32BIT (PULSE $is_ADD), @alu_in_src, @alu_in_dst, $flags_C
+// --- SUB --- (TODO: Use ADD's adder)
+#display $is_SUB "SUB *0x%32x = 0x%32x - 0x%32x" @alu_addr[31:0], @alu_in_dst[31:0], @alu_in_src[31:0]
+;$flags_C_clear = DELAY{2} $is_SUB
+;$next_stage, @alu_out, $flags_C = ADDER_32BIT (PULSE $is_SUB), @alu_in_src, (NOT @alu_in_dst), (NOT $flags_C)
+// --- CMP --
+#display $is_CMP "CMP 0x%32x - 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
+;$flags_C_clear = DELAY{2} $is_CMP
+;$alu_nosave = DELAY $is_CMP
+;$next_stage, @alu_out, $flags_C = ADDER_32BIT (PULSE $is_CMP), @alu_in_src, (NOT @alu_in_dst), (NOT $flags_C)
+// --- TST --
+#display $is_TST "TST 0x%32x & 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
+%assign i 0
+%rep NUM_GPR_BITS
+@alu_out[i] = AND $is_TST, @alu_in_src[i], @alu_in_dst[i]
+%assign i i+1
+%endrep
+$next_stage = PULSE $is_TST
+
+// === Save ALU Data ===
+#display @stage_state[2] "Data save" 1
+$alu_save = AND @stage_state[2], $is_ALU
+// --- Save to memory
+$_alu_save_mem = AND $alu_save, (NOT $alu_nosave), $addr_is_mem
+@mem_addr     = AND{32} $_alu_save_mem, @alu_addr
+@mem_data_out = AND{32} $_alu_save_mem, @alu_out
+$mem_write  = DELAY $_alu_save_mem
+$mem_enable = DELAY $_alu_save_mem
+$next_stage = PULSE (AND $_alu_save_mem, $mem_ready)
+// --- Save to register
+$_alu_save_reg = AND $alu_save, (NOT $alu_nosave), (NOT $addr_is_mem)
+@reg_addr[3:0] = AND{4} $_alu_save_reg, @alu_addr[3:0]
+@reg_data_out = AND{32} $_alu_save_reg, @alu_out
+$reg_write = DELAY $_alu_save_reg
+$next_stage = PULSE (DELAY{4} $_alu_save_reg)	// wait for update :)
+// --- Don't save
+$next_stage = PULSE (AND $alu_save, $alu_nosave)
+
+// === ALU Done ===
+#display @stage_state[3] "ALU Complete" 1
+$stage_reset = PULSE (AND $is_ALU, @stage_state[3])
 
 ; vim: ft=logiccircuit
