@@ -34,6 +34,11 @@ Operations
 01010xxx R=0	- PUSH op2
 01010xxx R=1	- POP op2
 
+10000000 RRRRrrrr ssssssss ssssssss	- STRB R, [r + imm16s]
+10000001 RRRRrrrr ssssssss ssssssss	- STRW R, [r + imm16s]
+10000010 RRRRrrrr ssssssss ssssssss	- LDRB R, [r + imm16s]
+10000010 RRRRrrrr ssssssss ssssssss	- LDRW R, [r + imm16s]
+
 
 
 

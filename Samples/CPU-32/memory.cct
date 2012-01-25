@@ -6,8 +6,8 @@
 %include "../memory_bank.cct"
 
 #defunit MEMORY_SPACE
-#input $enable, @addr[32], $data_write, @data_input[32]
-#output $ready, @data_output[32]
+#input $enable, @addr[32], $data_write, @data_input[32], @size[2]
+#output $ready, @data_output[32], $fault_ac
 
 #array ROM_select	16
 
@@ -19,27 +19,76 @@
 ;#display $is_ROM "ROM 0x000?    " @ROM_select[0] 
 ;#display $is_ROM "ROM 0x001?    " @ROM_select[1]
 
+$size_32 = AND (NOT   @size[1]), (NOT   @size[0])
+$size_16 = AND (NOT   @size[1]), (DELAY @size[0])
+$size_8  = AND (DELAY @size[1]), (NOT   @size[0])
+$_data_write = DELAY{2} $data_write
+
+#array _data_word_mask	32
+#array _data_word_in	32
+#array _data_word_out	32
+$_write_enable = AND $_data_write, $size_32
+@_data_word_mask = AND{32} $_data_write, $size_32, 1*32
+@_data_word_in   = AND{32} $_data_write, $size_32, @data_input
+@_data_word_mask[ 0:15] = AND{16} $_data_write, $size_16, (NOT   @addr[0]), 1*16
+@_data_word_in  [ 0:15] = AND{16} $_data_write, $size_16, (NOT   @addr[0]), @data_input[0:15]
+@_data_word_mask[16:31] = AND{16} $_data_write, $size_16, (DELAY @addr[0]), 1*16
+@_data_word_in  [16:31] = AND{16} $_data_write, $size_16, (DELAY @addr[0]), @data_input[0:15]
+@_data_word_mask[ 0: 7] = AND{8} $_data_write, $size_8, (NOT   @addr[1]), (NOT   @addr[0]), 1*8
+@_data_word_in  [ 0: 7] = AND{8} $_data_write, $size_8, (NOT   @addr[1]), (NOT   @addr[0]), @data_input[0:7]
+@_data_word_mask[ 8:15] = AND{8} $_data_write, $size_8, (NOT   @addr[1]), (DELAY @addr[0]), 1*8
+@_data_word_in  [ 8:15] = AND{8} $_data_write, $size_8, (NOT   @addr[1]), (DELAY @addr[0]), @data_input[0:7]
+@_data_word_mask[16:23] = AND{8} $_data_write, $size_8, (DELAY @addr[1]), (NOT   @addr[0]), 1*8
+@_data_word_in  [16:23] = AND{8} $_data_write, $size_8, (DELAY @addr[1]), (NOT   @addr[0]), @data_input[0:7]
+@_data_word_mask[24:31] = AND{8} $_data_write, $size_8, (DELAY @addr[1]), (DELAY @addr[0]), 1*8
+@_data_word_in  [24:31] = AND{8} $_data_write, $size_8, (DELAY @addr[1]), (DELAY @addr[0]), @data_input[0:7]
+
+// DRAM
+// 0x10000000 0x1FFFFFFF
+// 
+
 // ROM area
 //  Reserved range: 0xF000 - 0xFFFF
-//  Size: 16 bytes
+//  HACK! Actually at 0x0000 - 0x003F atm
+//  Size: 64 bytes (16 words)
 $is_ROM = AND (DELAY $enable), (NOT   @addr[15]), (NOT   @addr[14]), (NOT   @addr[13]), (NOT   @addr[12])
-@ROM_select = DEMUX{4} $is_ROM, (DELAY{2} @addr[0:3])
+// $ready, @data_output = ROM{12,32} $is_ROM, @addr[0:11]
+@ROM_select = DEMUX{4} $is_ROM, (DELAY{2} @addr[5:2])
 
 %macro _ROM_DWORD 2
  %assign i 31
  %rep 32
   %if %2 & 1 << i
-@data_output[i] = DELAY @ROM_select[%1/4]
+@_data_word_out[i] = DELAY @ROM_select[%1/4]
   %endif
   %assign i i-1
  %endrep
 %endmacro
 
 // === ROM Contents ===
+// - Address is in 32-bit words
 _ROM_DWORD 0x0000, 0x11131337	; OR R1, 0x31337
-_ROM_DWORD 0x0004, 0x40FFFFFC	; JMP .+0xFFFFFC (-4)
+_ROM_DWORD 0x0001, 0x010FFFFF	; MOV R0, 0xFFFFF
+_ROM_DWORD 0x0002, 0x40FFFFFC	; JMP .+0xFFFFFC (-4)
+_ROM_DWORD 0x0003, 0x40FFFFF8	; JMP .+0xFFFFF8 (-8)
+_ROM_DWORD 0x0004, 0x40FFFFF4	; JMP .+0xFFFFF4 (-12)
 
 // 1 delay for DEMUX, 1 for data
-$ready = DELAY{2} $is_ROM
+$_data_rdy = DELAY{2} $is_ROM
+
+// 32-bit output
+$fault_ac = AND $size_32, (OR @addr[0], @addr[1])
+@data_output = AND{32} $size_32, $_data_rdy, @_data_word_out
+
+// 16-bit
+$fault_ac = AND $size_16, @addr[0]
+@data_output[0:15] = AND{16} $size_16, $_data_rdy, (NOT   @addr[1]), @_data_word_out[ 0:15]
+@data_output[0:15] = AND{16} $size_16, $_data_rdy, (DELAY @addr[1]), @_data_word_out[16:31]
+
+// 8-bit
+@data_output[0:7] = AND{8} $size_8, $_data_rdy, (NOT   @addr[1]), (NOT   @addr[0]), @_data_word_out[ 0: 7]
+@data_output[0:7] = AND{8} $size_8, $_data_rdy, (NOT   @addr[1]), (DELAY @addr[0]), @_data_word_out[ 8:15]
+@data_output[0:7] = AND{8} $size_8, $_data_rdy, (DELAY @addr[1]), (NOT   @addr[0]), @_data_word_out[16:23]
+@data_output[0:7] = AND{8} $size_8, $_data_rdy, (DELAY @addr[1]), (DELAY @addr[0]), @_data_word_out[24:31]
 
 #endunit

@@ -237,20 +237,35 @@ int ParseValue(tParser *Parser, tList *destList)
 		break;
 	
 	// Constant
-	// TODO: Implement
 	case TOK_NUMBER:
 		{
 			 int	num = atoi(Parser->TokenStr);
+			 int	count = 1;
 			if( num < 0 || num > 1 ) {
 				SyntaxWarning(Parser, "Non-boolean constant value (%i) used\n", num);
 			}
 			
-//			if(LookAhead() == 
+			if( GetToken(Parser) == TOK_STAR )
+			{
+				GetToken(Parser);
+				SyntaxAssert(Parser, Parser->Token, TOK_NUMBER);
+				count = atoi(Parser->TokenStr);
+				if( count == 0 ) {
+					SyntaxWarning(Parser, "Zero count in repeated constant");
+				}
+			}
+			else {
+				PutBack(Parser);
+			}
 			
-			if( num == 0 )
-				AppendLine( destList, "0" );
-			else
-				AppendLine( destList, "1" );
+			if( num == 0 ) {
+				while(count --)
+					AppendLine( destList, "0" );
+			}
+			else {
+				while(count --)
+					AppendLine( destList, "1" );
+			}
 		}
 		break;
 	
