@@ -166,15 +166,16 @@ $is_CND = AND decode_enable, (NOT @instr[31]), (DELAY @instr[30]), (NOT @instr[2
 
 // === Handle Undefined Opcodes ===
 $is_UNDEF = NOT (OR $is_ALU)
+#display $is_UNDEF "UNDEFINED INSTRUCTION!" 0
 ; $next_instruction = AND @stage_state[1], $is_UNDEF
 
 // === Address Decoding ===
 $no_decode_r = AND decode_enable,(NOT @instr[31]),(NOT @instr[30]),(NOT   @instr[29]),(NOT   @instr[28]),(NOT   @instr[27])
-$decode_start = PULSE $is_ALU
+$decode_start = DELAY $is_ALU
 $decode_clear = PULSE @stage_state[3]
 
 $alu_data_rdy, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src = CPU32_ADDRESS_DECODE \
-	$decode_start, $decode_clear, $no_decode_r, 1, @instr, \
+	$decode_start, $decode_clear, (NOT $no_decode_r), 1, @instr, \
 	$reg_enable, @reg_addr, @reg_data_in, $mem_enable, @mem_addr, $mem_ready, @mem_data_in
 
 #display $alu_data_rdy "@alu_addr   = %32x" @alu_addr[31:0]

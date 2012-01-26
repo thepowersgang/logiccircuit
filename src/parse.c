@@ -163,6 +163,51 @@ int ParseNumber(tParser *Parser)
 }
 
 /**
+ */
+int ParseValue_GroupRange(tParser *Parser, tList *destList, const char *GroupName)
+{
+	int	start, end;
+       do
+       {
+	       start = ParseNumber( Parser );
+	       
+	       if( GetToken(Parser) == TOK_COLON )
+	       {
+		       // Item Range
+		       end = ParseNumber( Parser );
+		       
+		       if( end > start )
+		       {
+			       // Count up
+			       for( ; start <= end; start ++ )
+			       {
+				       if( AppendGroupItem(destList, GroupName, start) )
+					       SyntaxError(Parser, "Error referencing group item %s[%i]", GroupName, start);
+			       }
+		       }
+		       else
+		       {
+			       // Count down
+			       for( ; start >= end; start -- )
+			       {
+				       if( AppendGroupItem(destList, GroupName, start) )
+					       SyntaxError(Parser, "Error referencing group item %s[%i]", GroupName, start);
+			       }
+		       }
+		       
+		       GetToken(Parser);
+	       }
+	       else
+	       {
+		       // Single item
+		       if( AppendGroupItem(destList, GroupName, start) )
+			       SyntaxError(Parser, "Error referencing group item %s[%i]", GroupName, start);
+	       }
+       } while(Parser->Token == TOK_COMMA);
+       SyntaxAssert(Parser, Parser->Token, TOK_SQUARE_CLOSE);
+}
+
+/**
  * \brief Parse a "value" (Constant, Line or Group)
  * \return Zero on success, 1 if no value is found
  */
@@ -183,49 +228,7 @@ int ParseValue(tParser *Parser, tList *destList)
 		// Single line? (@group[i])
 		if( GetToken(Parser) == TOK_SQUARE_OPEN )
 		{
-			 int	start, end;
-			do
-			{
-				//SyntaxAssert(Parser, GetToken(Parser), TOK_NUMBER);
-				//start = atoi(Parser->TokenStr);
-				start = ParseNumber( Parser );
-				
-				if( GetToken(Parser) == TOK_COLON )
-				{
-					// Item Range
-					//SyntaxAssert(Parser, GetToken(Parser), TOK_NUMBER);
-					//end = atoi(Parser->TokenStr);
-					end = ParseNumber( Parser );
-					
-					if( end > start )
-					{
-						// Count up
-						for( ; start <= end; start ++ )
-						{
-							if( AppendGroupItem(destList, tmpName, start) )
-								SyntaxError(Parser, "Error referencing group item %s[%i]", tmpName, start);
-						}
-					}
-					else
-					{
-						// Count down
-						for( ; start >= end; start -- )
-						{
-							if( AppendGroupItem(destList, tmpName, start) )
-								SyntaxError(Parser, "Error referencing group item %s[%i]", tmpName, start);
-						}
-					}
-					
-					GetToken(Parser);
-				}
-				else
-				{
-					// Single item
-					if( AppendGroupItem(destList, tmpName, start) )
-						SyntaxError(Parser, "Error referencing group item");
-				}
-			} while(Parser->Token == TOK_COMMA);
-			SyntaxAssert(Parser, Parser->Token, TOK_SQUARE_CLOSE);
+			ParseValue_GroupRange(Parser, destList, tmpName)
 		}
 		// Entire group.
 		else {
