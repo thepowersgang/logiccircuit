@@ -69,9 +69,9 @@ $is_ROM = AND (DELAY $enable), (NOT   @addr[15]), (NOT   @addr[14]), (NOT   @add
 // - Address is in 32-bit words
 _ROM_DWORD 0x0000, 0x11131337	; OR R1, 0x31337
 _ROM_DWORD 0x0001, 0x010FFFFF	; MOV R0, 0xFFFFF
-_ROM_DWORD 0x0002, 0x40FFFFFC	; JMP .+0xFFFFFC (-4)
-_ROM_DWORD 0x0003, 0x40FFFFF8	; JMP .+0xFFFFF8 (-8)
-_ROM_DWORD 0x0004, 0x40FFFFF4	; JMP .+0xFFFFF4 (-12)
+_ROM_DWORD 0x0002, 0x21000001	; ADD R0, 0x00001
+_ROM_DWORD 0x0003, 0x23F0FFF8	; ADD PC, -8
+_ROM_DWORD 0x0004, 0x23F0FFF4	; JMP .+0xFFFC (-4) (ADD R15, 0xFFFC signed)
 
 // 1 delay for DEMUX, 1 for data
 $_data_rdy = DELAY{2} $is_ROM
@@ -93,3 +93,4 @@ $fault_ac = AND $size_16, @addr[0]
 @data_output[0:7] = AND{8} $size_8, $_data_rdy, (DELAY @addr[1]), (DELAY @addr[0]), @_data_word_out[24:31]
 
 #endunit
+; vim: ft=logiccircuit

@@ -41,8 +41,6 @@
 #display 1 "NextS  " $next_stage
 #display 1 "PC    = 0x%32x" @reg_pc_in[NUM_ADDR_BITS-1:0]
 #display 1 "instr = 0x%32x" @instr[31:0]
-#display 1 "val   = 0x%32x" @val[NUM_GPR_BITS-1:0]
-#display 1 "addr  = 0x%32x" @addr[NUM_ADDR_BITS-1:0]
 #display 1 "NextI  " $next_instruction
 
 // Instruction clock (used to ensure synchronisation)
@@ -53,7 +51,6 @@
 // NOTE: Unused really
 $clock = CLOCK{128}
 
-
 // === Registers ===
 // --- General Purpose Registers ---
 // Registers can be accessed directly (by the @reg_*_value groups), or
@@ -63,7 +60,10 @@ $clock = CLOCK{128}
 %rep 16
 #array reg_ %+ i %+ _value NUM_GPR_BITS
 #array reg_ %+ i %+ _newvalue NUM_GPR_BITS
-$reg_ %+ i %+ _ready, @reg_ %+ i %+ _value = LATCH{NUM_GPR_BITS} 1, (PULSE $reg_ %+ i %+ _clear), (DELAY{2} @reg_ %+ i %+ _newvalue)	// Actual Register
+
+// Actual register
+$reg_ %+ i %+ _ready, @reg_ %+ i %+ _value = \
+	 LATCH{NUM_GPR_BITS} 1, (PULSE $reg_ %+ i %+ _clear), (DELAY{2} @reg_ %+ i %+ _newvalue)
 
 @reg_ %+ i %+ _newvalue = AND{NUM_GPR_BITS} @reg_select[i], (DELAY @reg_data_in)
 $reg_ %+ i %+ _clear = AND @reg_select[i], (PULSE $reg_write)	// Get global Write signal
@@ -73,6 +73,26 @@ $reg_ready = DELAY{2} @reg_select[i]	// Set global ready signal
 @reg_data_in = AND{NUM_GPR_BITS} @reg_select[i], @reg_ %+ i %+ _value	// Set global output
 %assign i i+1
 %endrep
+
+// --- FLAGS Pseudo-Register ---
+$NULL, $flags_C = LATCH 1, $flags_C_clear, $flags_C
+$NULL, $flags_O = LATCH 1, $flags_O_clear, $flags_O
+$NULL, $flags_Z = LATCH 1, $flags_Z_clear, $flags_Z
+#display 1 "CF" $flags_C
+#display 1 "OF" $flags_O
+#display 1 "ZF" $flags_Z
+
+#display $reg_enable "Register Addr" @reg_addr[0:3]
+#display $reg_write  "Register Value New %32x" @reg_data_out[NUM_GPR_BITS-1:0]
+#display $reg_ready  "Register Value %32x" @reg_data_in[NUM_GPR_BITS-1:0]
+
+// --- Program Counter ---
+#display $reg_pc_write "New PC 0x%32x" @reg_pc_out[31:0]
+$reg_15_clear = PULSE $reg_pc_write
+@reg_15_newvalue = AND{32} (PULSE $reg_pc_write), (DELAY @reg_pc_out)
+@reg_pc_in = @reg_15_value
+
+// --- Register Display ---
 #display 1 "R 0=%32x R 1=%32x R 2=%32x R 3=%32x" @reg_0_value[NUM_GPR_BITS-1:0], @reg_1_value[NUM_GPR_BITS-1:0], \
 	@reg_2_value[NUM_GPR_BITS-1:0], @reg_3_value[NUM_GPR_BITS-1:0]
 #display 1 "R 4=%32x R 5=%32x R 6=%32x R 7=%32x" @reg_4_value[NUM_GPR_BITS-1:0], @reg_5_value[NUM_GPR_BITS-1:0], \
@@ -81,18 +101,6 @@ $reg_ready = DELAY{2} @reg_select[i]	// Set global ready signal
 	@reg_10_value[NUM_GPR_BITS-1:0], @reg_11_value[NUM_GPR_BITS-1:0]
 #display 1 "R12=%32x R13=%32x R14=%32x R15=%32x" @reg_12_value[NUM_GPR_BITS-1:0], @reg_13_value[NUM_GPR_BITS-1:0], \
 	@reg_14_value[NUM_GPR_BITS-1:0], @reg_15_value[NUM_GPR_BITS-1:0]
-// --- FLAGS Pseudo-Register ---
-$NULL, $flags_C = LATCH 1, $flags_C_clear, $flags_C
-$NULL, $flags_Z = LATCH 1, $flags_Z_clear, $flags_Z
-#display 1 "CF" $flags_C
-#display 1 "ZF" $flags_Z
-
-#display $reg_enable "Register Addr %4b" @reg_addr[3:0]
-#display $reg_write "Register Value %32x" @reg_data_out[NUM_GPR_BITS-1:0]
-
-// --- Program Counter ---
-#display $reg_pc_write "New PC 0x%32x" @reg_pc_out[31:0]
-$NULL, @reg_pc_in = LATCH{32} 1, (PULSE $reg_pc_write), (DELAY{2} @reg_pc_out)
 
 
 // === Memory ===
@@ -108,8 +116,6 @@ $mem_ready, @mem_data_in, $fault_ac = MEMORY_SPACE $mem_enable, @mem_addr, $mem_
 // to be moved to other locations
 #display 1 "instr_clear=%1i, val_clear=%1i" $instr_clear, $val_clear
 $NULL, @instr = LATCH{32} 1, $instr_clear, @instr
-$NULL, @val   = LATCH{NUM_GPR_BITS} 1, $val_clear, @val
-$NULL, @addr  = LATCH{NUM_ADDR_BITS} 1, $addr_clear, @addr
 //$NULL, $next_instruction  = LATCH 1, $nextinstr_clear, $next_instruction
 
 // === Timing control (stages) ===
@@ -140,7 +146,6 @@ $instr_clear = PULSE @stage_state[0]	// Clear the instruction cache
 $val_clear   = PULSE @stage_state[0]	// Clear the value cache
 $addr_clear  = PULSE @stage_state[0]	// Clear the address cache
 // Read opcode from memory
-// - Memory read will update the stage to #2
 // - ANDing with $reg_pc_valid causes the read to not be attempted until
 //   PC is marked as valid
 @mem_addr = DELAY (AND{NUM_ADDR_BITS} @stage_state[0], $reg_pc_valid, @reg_pc_in)	// Set memory address to PC
@@ -149,6 +154,7 @@ $increment_pc = PULSE (AND @stage_state[0], $reg_pc_valid)	// Increment the prog
 
 @instr = AND{32} @stage_state[0], $mem_ready, @mem_data_in	// Save the opcode
 $next_stage = PULSE (DELAY{3} (AND @stage_state[0], $mem_ready))	// Wait for latch to hold and for instructions to decode
+$next_stage = PULSE $reg_pc_valid
 
 // =======================
 // === Opcode Decoding ===
@@ -157,26 +163,26 @@ $next_stage = PULSE (DELAY{3} (AND @stage_state[0], $mem_ready))	// Wait for lat
 #array alu_in_dst	NUM_GPR_BITS
 #array alu_in_src	NUM_GPR_BITS
 #array alu_out	NUM_GPR_BITS
-#array alu_flags	8	// TODO: Flags register format
 
 #display @stage_state[1] "Opcode decode" 1
-%define decode_enable	(OR @stage_num)
-$is_ALU = AND decode_enable, (NOT @instr[31]), (NOT @instr[30])
-$is_CND = AND decode_enable, (NOT @instr[31]), (DELAY @instr[30]), (NOT @instr[29]), (NOT @instr[28])
+$decode_enable = OR @stage_state[2:15]
+$is_ALU = AND $decode_enable, (NOT @instr[31]), (NOT @instr[30])
+$is_CND = AND $decode_enable, (NOT @instr[31]), (DELAY @instr[30]), (NOT @instr[29]), (NOT @instr[28])
 
 // === Handle Undefined Opcodes ===
-$is_UNDEF = NOT (OR $is_ALU)
+$is_UNDEF = AND $decode_enable, (NOR $is_ALU)
 #display $is_UNDEF "UNDEFINED INSTRUCTION!" 0
 ; $next_instruction = AND @stage_state[1], $is_UNDEF
 
-// === Address Decoding ===
-$no_decode_r = AND decode_enable,(NOT @instr[31]),(NOT @instr[30]),(NOT   @instr[29]),(NOT   @instr[28]),(NOT   @instr[27])
+// === Address/Operand Decoding ===
+$no_decode_r = AND $decode_enable, (NOR @instr[31:27])
 $decode_start = DELAY $is_ALU
 $decode_clear = PULSE @stage_state[3]
 
 $alu_data_rdy, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src = CPU32_ADDRESS_DECODE \
 	$decode_start, $decode_clear, (NOT $no_decode_r), 1, @instr, \
-	$reg_enable, @reg_addr, @reg_data_in, $mem_enable, @mem_addr, $mem_ready, @mem_data_in
+	$reg_enable, @reg_addr, $reg_ready, @reg_data_in, \
+	$mem_enable, @mem_addr, $mem_ready, @mem_data_in
 
 #display $alu_data_rdy "@alu_addr   = %32x" @alu_addr[31:0]
 #display $alu_data_rdy "@alu_in_dst = %32x" @alu_in_dst[31:0]
@@ -221,19 +227,28 @@ $next_stage = PULSE (DELAY $is_OR)
 %assign i i+1
 %endrep
 $next_stage = PULSE (DELAY $is_XOR)
+// --- Operation Adder ---
+#array alu_adder_op2	32
+$next_stage, @alu_out, $flags_C = ADDER_32BIT $alu_adder_pulse, @alu_in_src, @alu_adder_op2, $alu_adder_CF
 // --- ADD ---
 #display $is_ADD "ADD *0x%32x = 0x%32x + 0x%32x + %i" @alu_addr[31:0], @alu_in_dst[31:0], @alu_in_src[31:0], $flags_C
 $flags_C_clear = DELAY{2} $is_ADD
-$next_stage, @alu_out, $flags_C = ADDER_32BIT (PULSE $is_ADD), @alu_in_src, @alu_in_dst, $flags_C
-// --- SUB --- (TODO: Use ADD's adder)
+$alu_adder_pulse = PULSE $is_ADD
+@alu_adder_op2   = AND{32} $is_ADD, @alu_in_dst
+$alu_adder_CF    = AND $is_ADD, $flags_C
+// --- SUB ---
 #display $is_SUB "SUB *0x%32x = 0x%32x - 0x%32x" @alu_addr[31:0], @alu_in_dst[31:0], @alu_in_src[31:0]
-;$flags_C_clear = DELAY{2} $is_SUB
-;$next_stage, @alu_out, $flags_C = ADDER_32BIT (PULSE $is_SUB), @alu_in_src, (NOT @alu_in_dst), (NOT $flags_C)
+$flags_C_clear = DELAY{3} $is_SUB
+$alu_adder_pulse = DELAY (PULSE $is_SUB)
+@alu_adder_op2   = AND{32} $is_SUB, (NOT @alu_in_dst)
+$alu_adder_CF    = AND $is_SUB, (NOT $flags_C)
 // --- CMP --
 #display $is_CMP "CMP 0x%32x - 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
-;$flags_C_clear = DELAY{2} $is_CMP
-;$alu_nosave = DELAY $is_CMP
-;$next_stage, @alu_out, $flags_C = ADDER_32BIT (PULSE $is_CMP), @alu_in_src, (NOT @alu_in_dst), (NOT $flags_C)
+$flags_C_clear = DELAY{3} $is_CMP
+$alu_adder_pulse = DELAY (PULSE $is_SUB)
+@alu_adder_op2   = AND{32} $is_CMP, (NOT @alu_in_dst)
+$alu_adder_CF    = AND $is_CMP, (NOT $flags_C)
+$alu_nosave = DELAY $is_CMP
 // --- TST --
 #display $is_TST "TST 0x%32x & 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
 %assign i 0
@@ -245,8 +260,13 @@ $alu_nosave = DELAY $is_TST
 $next_stage = PULSE $is_TST
 
 // === Save ALU Data ===
+// TODO: Handle flag updates
+// --- Save --
 #display @stage_state[2] "Data save" 1
 $alu_save = AND @stage_state[2], $is_ALU
+// --- Flags ---
+$flags_Z_clear = PULSE $alu_save
+$flags_Z = AND $alu_save, (NOR @alu_out)
 // --- Save to memory
 $_alu_save_mem = AND $alu_save, (NOT $alu_nosave), $addr_is_mem
 #display $_alu_save_mem "Memory 0x%32x = 0x%32x" @alu_addr[31:0], @alu_out[31:0]
