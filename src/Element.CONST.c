@@ -32,7 +32,7 @@ static tElement *_Create(int NParams, int *Params, int NInputs, tLink **Inputs)
 	t_element *ret = calloc( 1, sizeof(t_element) + (busSize+1)*sizeof(tLink*) );
 	if(!ret)	return NULL;
 	ret->Value = Params[1];
-	ret->Ele.NInputs = 0;
+	ret->Ele.NInputs = 1;
 	ret->Ele.NOutputs = busSize;
 	ret->Ele.Inputs = &ret->_links[0];
 	ret->Ele.Outputs = &ret->_links[1];

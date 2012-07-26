@@ -2,7 +2,7 @@
 #
 
 CPPFLAGS = -I ./include/
-CFLAGS = -Wall -g -std=c99
+CFLAGS = -Wall -g -std=gnu99
 
 OBJ := main.o parse.o build.o
 OBJ += Elements.Logic.o Element.NOT.o

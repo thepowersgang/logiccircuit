@@ -34,6 +34,8 @@ extern void	LinkValue_Deref(tLinkValue *Value);
 void	ReadCommand(int MaxCmd, char *Command, int MaxArg, char *Argument);
 void	SigINT_Handler(int Signum);
 void	PrintDisplayItem(tDisplayItem *dispItem);
+void	CompressLinks(void);
+void	WriteCompiledVersion(const char *Path, int bBinary);
 
 // === GLOBALS ===
  int	gbRunSimulation = 1;
@@ -197,73 +199,15 @@ int main(int argc, char *argv[])
 				linkCount ++;
 			}
 			printf(" (Used %i times)", linkCount);
-			//if( linkCount <= 2 )
-			//	printf("\r");
-			//else
-				printf("\n");
+			printf("\n");
 		}
 		
 		return 0;
 	}
 
 	if( gbCompress )
-	{
-		 int	nVal = 0, nLink = 0;
-		printf("Culling links...\n");
-		// Unify
-		for( link = gpLinks; link; link = link->Next )
-			link->Backlink = NULL;
-		for( link = gpLinks; link; link = link->Next )
-		{
-			if(link->Backlink)	continue;	// Skip ones already done
-			for( tLink *link2 = link; link2; link2 = link2->Next )
-			{
-				if(link2->Backlink)	continue;
-				if(link2->Value != link->Value)	continue;
-				link2->Backlink = link;	// Make backlink non-zero
-				nLink ++;
-			}
-			nVal ++;
-		}
-		printf("%i values across %i links\n", nVal, nLink);
-		
-		// Update elements
-		for( ele = gpElements; ele; ele = ele->Next )
-		{
-			for( int i = 0; i < ele->NInputs; i ++ )
-				ele->Inputs[i] = ele->Inputs[i]->Backlink;
-			for( int i = 0; i < ele->NOutputs; i ++ )
-				ele->Outputs[i] = ele->Outputs[i]->Backlink;
-		}
-		
-		// Find and free unused
-		for( link = gpLinks; link; link = link->Next )
-			link->Backlink = NULL;
-		for( ele = gpElements; ele; ele = ele->Next )
-		{
-			for( int i = 0; i < ele->NInputs; i ++ )
-				ele->Inputs[i]->Backlink = (void*)1;
-			for( int i = 0; i < ele->NOutputs; i ++ )
-				ele->Outputs[i]->Backlink = (void*)1;
-		}
-		 int	nPruned = 0;
-		tLink	*prev = &gpLinks;
-		for( link = gpLinks; link; )
-		{
-			tLink *nextlink = link->Next;
-			if(link->Backlink == NULL) {
-				prev->Next = link->Next;
-				free(link);
-				nPruned ++;
-			}
-			else {
-				prev = link;
-			}
-			link = nextlink;
-		}
-		printf("Pruned %i links\n", nPruned);
-	}
-	
+		CompressLinks();	
+
 	if( gbPrintStats )
 	{
 		 int	totalLinks = 0;
@@ -307,6 +251,10 @@ int main(int argc, char *argv[])
 	}
 
 	// TODO: Support saving tree to a file
+	if( 0 ) {
+		WriteCompiledVersion("cct.binary", 1);
+		WriteCompiledVersion("cct.ascii", 0);
+	}
 
 	signal(SIGINT, SigINT_Handler);
 	
@@ -586,5 +534,138 @@ void PrintDisplayItem(tDisplayItem *DispItem)
 		printf("%i", DispItem->Values.Items[lineNum]->Value->Value);
 	}
 	printf("\n");
+}
+
+void CompressLinks(void)
+{
+	 int	nVal = 0, nLink = 0;
+	tLink	*link;
+	tElement	*ele;
+	printf("Culling links...\n");
+	// Unify
+	for( link = gpLinks; link; link = link->Next )
+		link->Backlink = NULL;
+	for( link = gpLinks; link; link = link->Next )
+	{
+		if(link->Backlink)	continue;	// Skip ones already done
+		for( tLink *link2 = link; link2; link2 = link2->Next )
+		{
+			if(link2->Backlink)	continue;
+			if(link2->Value != link->Value)	continue;
+			link2->Backlink = link;	// Make backlink non-zero
+			nLink ++;
+		}
+		nVal ++;
+	}
+	printf("%i values across %i links\n", nVal, nLink);
+	
+	// Update elements
+	for( ele = gpElements; ele; ele = ele->Next )
+	{
+		for( int i = 0; i < ele->NInputs; i ++ )
+			ele->Inputs[i] = ele->Inputs[i]->Backlink;
+		for( int i = 0; i < ele->NOutputs; i ++ )
+			ele->Outputs[i] = ele->Outputs[i]->Backlink;
+	}
+	
+	// Find and free unused
+	for( link = gpLinks; link; link = link->Next )
+		link->Backlink = NULL;
+	for( ele = gpElements; ele; ele = ele->Next )
+	{
+		for( int i = 0; i < ele->NInputs; i ++ )
+			ele->Inputs[i]->Backlink = (void*)1;
+		for( int i = 0; i < ele->NOutputs; i ++ )
+			ele->Outputs[i]->Backlink = (void*)1;
+	}
+	 int	nPruned = 0;
+	tLink	*prev = (tLink*)&gpLinks;
+	for( link = gpLinks; link; )
+	{
+		tLink *nextlink = link->Next;
+		if(link->Backlink == NULL) {
+			prev->Next = link->Next;
+			free(link);
+			nPruned ++;
+		}
+		else {
+			prev = link;
+		}
+		link = nextlink;
+	}
+	printf("Pruned %i links\n", nPruned);
+}
+
+void WriteCompiledVersion(const char *Path, int bBinary)
+{
+	 int	n_links = 0;
+	 int	n_eletypes = 0;
+	 int	n_elements = 0;
+	FILE	*fp;
+	tLink	*link;
+	tElement	*ele;
+	 int	i;
+	
+	if( !gbCompress )	CompressLinks();
+	
+	
+	for( link = gpLinks; link; link = link->Next ) {
+		link->Backlink = (void*)(intptr_t)n_links;	// Save
+		n_links ++;
+	}
+	for( ele = gpElements; ele; ele = ele->Next )
+		n_elements ++;
+	for( tElementDef *ed = gpElementDefs; ed; ed = ed->Next )
+		n_eletypes ++;
+
+	void _Write16(FILE *fp, uint16_t val) {
+		fputc(val & 0xFF, fp);
+		fputc(val >> 8, fp);
+	}
+	
+	fp = fopen(Path, "wb");
+	
+	if( bBinary ) {
+		_Write16(fp, n_links);
+		_Write16(fp, n_eletypes);
+		_Write16(fp, n_elements);
+
+		// Element type names
+		for( tElementDef *ed = gpElementDefs; ed; ed = ed->Next )
+			fwrite(ed->Name, 1, strlen(ed->Name)+1, fp);
+	}
+	else {
+		fprintf(fp, "%04x %04x\n", n_links, n_elements);
+	}
+	
+	// Element info
+	for( ele = gpElements; ele; ele = ele->Next )
+	{
+		if( bBinary ) {
+			_Write16(fp, ele->NInputs);
+			_Write16(fp, ele->NOutputs);
+//			_Write16(fp, ele->NParams);
+			for( i = 0; i < ele->NInputs; i ++ )
+				_Write16(fp, (intptr_t)ele->Inputs[i]->Backlink);
+			for( i = 0; i < ele->NOutputs; i ++ )
+				_Write16(fp, (intptr_t)ele->Outputs[i]->Backlink);
+//			for( i = 0; i < ele->NParams; i ++ )
+//				_Write32(fp, ele->Params[i]);
+		}
+		else {
+			fprintf(fp,
+				"%s %02x %02x %02x",
+				ele->Type->Name, 0, ele->NInputs, ele->NOutputs
+				);
+			// TODO: Params
+			for( i = 0; i < ele->NInputs; i ++ )
+				fprintf(fp, " %04x", (int)(intptr_t)ele->Inputs[i]->Backlink);
+			for( i = 0; i < ele->NOutputs; i ++ )
+				fprintf(fp, " %04x", (int)(intptr_t)ele->Outputs[i]->Backlink);
+			fprintf(fp, "\n");
+		}
+	}
+	
+	fclose(fp);
 }
 

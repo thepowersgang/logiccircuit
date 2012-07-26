@@ -219,7 +219,22 @@ int ParseValue(tParser *Parser, tList *destList)
 	switch( Parser->Token )
 	{
 	case TOK_LINE:
-		AppendLine(destList, Parser->TokenStr);
+		tmpName = strdup( Parser->TokenStr );
+		// Repeated line?
+		if( GetToken(Parser) == TOK_STAR ) {
+			 int	count = ParseNumber(Parser);
+			if( count < 0 )
+				SyntaxError(Parser, "Can't have a negative line repeat");
+			while(count --) {
+				AppendLine(destList, tmpName);
+			}
+		}
+		// Single
+		else {
+			PutBack(Parser);
+			AppendLine(destList, tmpName);
+		}
+		free(tmpName);
 		break;
 	
 	// Group (@name)
@@ -228,7 +243,7 @@ int ParseValue(tParser *Parser, tList *destList)
 		// Single line? (@group[i])
 		if( GetToken(Parser) == TOK_SQUARE_OPEN )
 		{
-			ParseValue_GroupRange(Parser, destList, tmpName)
+			ParseValue_GroupRange(Parser, destList, tmpName);
 		}
 		// Entire group.
 		else {

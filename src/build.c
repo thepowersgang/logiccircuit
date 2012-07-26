@@ -176,7 +176,7 @@ tBreakpoint *AddBreakpoint(const char *Name, const tList *Condition)
 tDisplayItem *AddDisplayItem(const char *Name, const tList *Condition, const tList *Values)
 {
 	tDisplayItem	*dispItem, *prev = NULL;
-	 int	pos, i;
+	 int	namelen, i;
 	tDisplayItem	**listHead;
 	
 	
@@ -191,18 +191,16 @@ tDisplayItem *AddDisplayItem(const char *Name, const tList *Condition, const tLi
 			return NULL;
 		}
 	}
-	
+
 	// Create new
-	pos = strlen(Name)+1;
-	dispItem = malloc( sizeof(tDisplayItem) + pos + (Condition->NItems+Values->NItems)*sizeof(tLink*) );
+	namelen = strlen(Name)+1;
+	dispItem = malloc( sizeof(tDisplayItem) + namelen + (Condition->NItems+Values->NItems)*sizeof(tLink*) );
 	dispItem->Condition.NItems = Condition->NItems;
-	dispItem->Condition.Items = (void*)&dispItem->Label[pos];
+	dispItem->Condition.Items = (void*)&dispItem->Label[namelen];
+	dispItem->Values.NItems = Values->NItems;
+	dispItem->Values.Items = dispItem->Condition.Items + Condition->NItems;
 	for( i = 0; i < Condition->NItems; i ++ )
 		dispItem->Condition.Items[i] = Condition->Items[i];
-	pos += Condition->NItems * sizeof(tLink*);
-	
-	dispItem->Values.NItems = Values->NItems;
-	dispItem->Values.Items = (void*)&dispItem->Label[pos];
 	for( i = 0; i < Values->NItems; i ++ )
 		dispItem->Values.Items[i] = Values->Items[i];
 	
@@ -321,16 +319,8 @@ void LinkValue_Deref(tLinkValue *Value)
  */
 tLink *CreateAnonLink(void)
 {
-	#if BLANK_ANON_LINKS
 	tLink	*ret = malloc(sizeof(tLink)+1);
 	ret->Name[0] = '\0';
-	#else
-	static int next_anon_id = 0;
-	tLink	*ret = malloc(sizeof(tLink)+1+4+6+1);
-	snprintf(ret->Name+1, 10+1, "anon%06x", next_anon_id);
-	ret->Name[0] = '\0';
-	next_anon_id ++;
-	#endif
 	ret->Value = LinkValue_Create();
 	ret->Link = NULL;
 	ret->ReferenceCount = 1;
@@ -421,29 +411,24 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 	{
 		tLink	*def, *prev = NULL;
 		 int	len = 0;
+		 int	bPrefix = 1;
 		
 		// Only append prefix to named links
-		if( link->Name[0] )	len = prefixLen + strlen(link->Name);
-		#if !BLANK_ANON_LINKS
-		else	len = 3+7;
-		#endif
+		if( link->Name[0] == '\0' )	bPrefix = 0;
+		if( link->Name[0] == '0' && link->Name[1] == '\0' )	bPrefix = 0;
+		if( link->Name[0] == '1' && link->Name[1] == '\0' )	bPrefix = 0;
+		
+		len = strlen(link->Name);
+		if( bPrefix )	len += prefixLen;
 		
 		// Create link
 		newLink = malloc( sizeof(tLink) + len + 1 );
+		newLink->Name[0] = '\0';
 		// Only append prefix to named links
-		if( link->Name[0] ) {
+		if( bPrefix ) {
 			strcpy(newLink->Name, namePrefix);
-			strcat(newLink->Name, link->Name);
 		}
-		else {
-			#if BLANK_ANON_LINKS
-			newLink->Name[0] = '\0';
-			#else
-			static int next_dup_anon_id;
-			snprintf(newLink->Name, len+1, "dup%07x", next_dup_anon_id);
-			next_dup_anon_id ++;
-			#endif
-		}
+		strcat(newLink->Name, link->Name);
 		newLink->Link = NULL;
 		newLink->Backlink = NULL;
 		newLink->Value = LinkValue_Create();
@@ -507,7 +492,7 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 		
 		strcpy(newName, namePrefix);
 		strcat(newName, dispItem->Label);
-		
+
 		newItem = AddDisplayItem(newName, &dispItem->Condition, &dispItem->Values);
 		if( !newItem ) {
 			fprintf(stderr, "Warning: AddDisplayItem('%s', %p, %p) failed\n",
