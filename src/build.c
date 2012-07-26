@@ -188,7 +188,6 @@ int Test_AddAssertion(const tList *Condition, const tList *Values, const tList *
 int Test_CloseTest(void)
 {
 	if(!gpCurTest)	return -1;
-	printf("Test '%s' closed\n", gpCurTest->Name);
 	gpCurTest = NULL;
 	return 0;
 }

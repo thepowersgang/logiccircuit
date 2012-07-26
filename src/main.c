@@ -291,15 +291,16 @@ int main(int argc, char *argv[])
 						continue ;
 					
 					// Failed
-					printf("\n - Assertion %i failed\n", assertion_num+1);
+					printf("\n - Assertion %i failed", assertion_num+1);
+					printf("\n  if ");
+					for( i = 0; i < a->Condition.NItems; i ++ )
+						printf( "%s(%i) ", a->Condition.Items[i]->Name, a->Condition.Items[i]->Value->Value);
+					printf("assert ");
 					for( i = 0; i < a->Expected.NItems; i ++ )
 						printf( "%i", a->Expected.Items[i]->Value->Value);
 					printf(" != ");
 					for( i = 0; i < a->Values.NItems; i ++ )
 						printf( "%i", a->Values.Items[i]->Value->Value);
-					printf("\n only if ");
-					for( i = 0; i < a->Condition.NItems; i ++ )
-						printf( "%s(%i) ", a->Condition.Items[i]->Name, a->Condition.Items[i]->Value->Value);
 					bFailure = 1;
 				}
 				

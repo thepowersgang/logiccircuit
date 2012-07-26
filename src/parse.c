@@ -614,7 +614,6 @@ int ParseLine(tParser *Parser)
 				GetToken(Parser);
 			} while(Parser->Token == TOK_COMMA);
 			PutBack(Parser);	// Put back non-comma token
-			printf("%s\n", expected.Items[0]->Name);
 	
 			Test_AddAssertion(&cond, &have, &expected);
 			List_Free(&cond);
