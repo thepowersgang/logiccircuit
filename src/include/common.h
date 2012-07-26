@@ -50,9 +50,10 @@ typedef struct sTestCase
 	tLink	*Links;
 	struct sGroupDef	*Groups;
 	struct sElement	*Elements;
-	
+
 	tAssertion	*Assertions;
 	
+	tLink	*CompletionCondition;
 	 int	MaxLength;
 	char	Name[];
 } tTestCase;
@@ -67,6 +68,7 @@ extern int	Unit_IsInUnit(void);
 
 extern int	Test_CreateTest(int MaxLength, const char *Name, int NameLength);
 extern int	Test_AddAssertion(const tList *Condition, const tList *Values, const tList *Expected);
+extern int	Test_AddCompletion(const tList *Condition);
 extern int	Test_CloseTest(void);
 extern int	Test_IsInTest(void);
 

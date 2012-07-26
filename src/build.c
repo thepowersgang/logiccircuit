@@ -40,6 +40,9 @@ typedef struct sUnitTemplate
 	char	Name[];
 }	tUnitTemplate;
 
+tLinkValue	gValue_Zero;
+tLinkValue	gValue_One;
+
 // === GLOBALS ===
 tLink	*gpLinks = NULL;
 tGroupDef	*gpGroups = NULL;
@@ -145,8 +148,13 @@ int Test_CreateTest(int MaxLength, const char *Name, int NameLength)
 	memcpy(gpCurTest->Name, Name, NameLength);
 	gpCurTest->Name[NameLength] = '\0';
 
-	gpCurTest->Next = gpTests;
-	gpTests = gpCurTest;
+	tTestCase *p;
+	for( p = gpTests; p && p->Next; p = p->Next )
+		;
+	if(p)
+		p->Next = gpCurTest;
+	else
+		gpTests = gpCurTest;
 	
 	return 0;
 }
@@ -182,6 +190,20 @@ int Test_AddAssertion(const tList *Condition, const tList *Values, const tList *
 		gpCurTest->Assertions = a;
 	a->Next = NULL;
 
+	return 0;
+}
+
+int Test_AddCompletion(const tList *Condition)
+{
+	if( !gpCurTest )
+		return -1;
+	if( Condition->NItems != 1 )
+		return -1;
+	
+	if( gpCurTest->CompletionCondition )
+		return -1;
+	
+	gpCurTest->CompletionCondition = Condition->Items[0];
 	return 0;
 }
 
@@ -291,7 +313,7 @@ tDisplayItem *AddDisplayItem(const char *Name, const tList *Condition, const tLi
 void CreateGroup(const char *Name, int Size)
 {
 	tGroupDef	*ret, *def, *prev = NULL;
-	
+
 	ret = malloc( sizeof(tGroupDef) + 1 + strlen(Name) + 1 );
 	ret->Size = Size;
 	ret->Name[0] = '@';
@@ -410,7 +432,7 @@ tLink *CreateAnonLink(void)
 tLink *CreateNamedLink(const char *Name)
 {
 	tLink	*ret, *def, *prev = NULL;
-	
+
 	if( gpCurUnit )
 		def = gpCurUnit->Links;
 	else
@@ -423,11 +445,20 @@ tLink *CreateNamedLink(const char *Name)
 	}
 	
 	ret = malloc(sizeof(tLink) + strlen(Name) + 1);
-	ret->Value = LinkValue_Create();
 	strcpy(ret->Name, Name);
 	ret->Link = NULL;
 	ret->Backlink = NULL;
 	ret->ReferenceCount = 1;
+
+	if( Name[0] == '0' && Name[1] == '\0' ) {
+		ret->Value = &gValue_Zero;
+	}
+	else if( Name[0] == '1' && Name[1] == '\0' ) {
+		ret->Value = &gValue_One;
+	}
+	else
+		ret->Value = LinkValue_Create();
+	
 	
 	if(prev) {
 		ret->Next = prev->Next;

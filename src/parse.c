@@ -167,44 +167,45 @@ int ParseNumber(tParser *Parser)
 int ParseValue_GroupRange(tParser *Parser, tList *destList, const char *GroupName)
 {
 	int	start, end;
-       do
-       {
-	       start = ParseNumber( Parser );
-	       
-	       if( GetToken(Parser) == TOK_COLON )
-	       {
-		       // Item Range
-		       end = ParseNumber( Parser );
-		       
-		       if( end > start )
-		       {
-			       // Count up
-			       for( ; start <= end; start ++ )
-			       {
-				       if( AppendGroupItem(destList, GroupName, start) )
-					       SyntaxError(Parser, "Error referencing group item %s[%i]", GroupName, start);
-			       }
-		       }
-		       else
-		       {
-			       // Count down
-			       for( ; start >= end; start -- )
-			       {
-				       if( AppendGroupItem(destList, GroupName, start) )
-					       SyntaxError(Parser, "Error referencing group item %s[%i]", GroupName, start);
-			       }
-		       }
-		       
-		       GetToken(Parser);
-	       }
-	       else
-	       {
-		       // Single item
-		       if( AppendGroupItem(destList, GroupName, start) )
-			       SyntaxError(Parser, "Error referencing group item %s[%i]", GroupName, start);
-	       }
-       } while(Parser->Token == TOK_COMMA);
-       SyntaxAssert(Parser, Parser->Token, TOK_SQUARE_CLOSE);
+	do
+	{
+		start = ParseNumber( Parser );
+
+		if( GetToken(Parser) == TOK_COLON )
+		{
+			// Item Range
+			end = ParseNumber( Parser );
+
+			if( end > start )
+			{
+				// Count up
+				for( int i = start; i <= end; i ++ )
+				{
+					if( AppendGroupItem(destList, GroupName, i) )
+						SyntaxError(Parser, "Error referencing group item %s[%i]", GroupName, start);
+				}
+			}
+			else
+			{
+				// Count down
+				for( int i = start; i >= end; i -- )
+				{
+					if( AppendGroupItem(destList, GroupName, i) )
+						SyntaxError(Parser, "Error referencing group item %s[%i]", GroupName, i);
+				}
+			}
+
+			GetToken(Parser);
+		}
+		else
+		{
+			// Single item
+			if( AppendGroupItem(destList, GroupName, start) )
+				SyntaxError(Parser, "Error referencing group item %s[%i]", GroupName, start);
+		}
+	} while(Parser->Token == TOK_COMMA);
+	SyntaxAssert(Parser, Parser->Token, TOK_SQUARE_CLOSE);
+	return 0;
 }
 
 /**
@@ -257,7 +258,8 @@ int ParseValue(tParser *Parser, tList *destList)
 	// Constant
 	case TOK_NUMBER:
 		{
-			uint64_t	num = atoll(Parser->TokenStr);
+			uint64_t	num = strtoll(Parser->TokenStr, NULL, 0);
+//			uint64_t	num = atoll(Parser->TokenStr);
 			 int	count = 1;
 			 int	start = 0;
 			 int	end = 0;
@@ -619,6 +621,21 @@ int ParseLine(tParser *Parser)
 			List_Free(&cond);
 			List_Free(&have);
 			List_Free(&expected);
+		}
+		else if( strcmp(Parser->TokenStr, "#testcomplete") == 0 )
+		{
+			tList cond = {0};
+			
+			// Sanity check please
+			if( !Test_IsInTest() )
+				SyntaxError(Parser, "#testassert outside of a test");
+			
+			// Condition (single value)
+			ParseValue(Parser, &cond);
+			
+			Test_AddCompletion(&cond);
+			
+			List_Free(&cond);
 		}
 		else if( strcmp(Parser->TokenStr, "#endtestcase") == 0 ) {
 			if( !Test_IsInTest() )

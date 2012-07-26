@@ -33,11 +33,13 @@ extern void	LinkValue_Deref(tLinkValue *Value);
 
 // === PROTOTYPES ===
 void	RunSimulationStep(void);
+void	ShowDisplayItems(void);
 void	ReadCommand(int MaxCmd, char *Command, int MaxArg, char *Argument);
 void	SigINT_Handler(int Signum);
 void	PrintDisplayItem(tDisplayItem *dispItem);
 void	CompressLinks(void);
 void	WriteCompiledVersion(const char *Path, int bBinary);
+void	DumpList(const tList *List, int bShowNames);
 
 // === GLOBALS ===
  int	gbRunSimulation = 1;
@@ -104,11 +106,10 @@ int main(int argc, char *argv[])
 	printf("Resolving links...\n");
 	for( link = gpLinks; link; link = link->Next )
 	{
-		link->Backlink = NULL;	// Clear the backlink (temp) for later
-		
 		// Expand n-deep linking
-		while( link->Link && link->Link->Link )
+		while( link->Link && link->Link->Link ) {
 			link->Link = link->Link->Link;
+		}
 		
 		if( link->Link )
 		{
@@ -125,10 +126,9 @@ int main(int argc, char *argv[])
 		if( !link->Name[0] )
 			continue;
 		
-//		printf("- %p %s\n", link, link->Name);
 	}
 	
-	#if 1
+	#if USE_LINKS || PRINT_ELEMENTS
 	for( ele = gpElements; ele; ele = ele->Next )
 	{
 		#if PRINT_ELEMENTS
@@ -272,6 +272,8 @@ int main(int argc, char *argv[])
 			while( steps_elapsed != test->MaxLength && !bFailure )
 			{
 				RunSimulationStep();
+			//	ShowDisplayItems();
+				steps_elapsed ++;
 			
 				 int	assertion_num = 0;	
 				for( tAssertion *a = test->Assertions; a; a = a->Next, assertion_num ++ )
@@ -293,24 +295,22 @@ int main(int argc, char *argv[])
 					// Failed
 					printf("\n - Assertion %i failed", assertion_num+1);
 					printf("\n  if ");
-					for( i = 0; i < a->Condition.NItems; i ++ )
-						printf( "%s(%i) ", a->Condition.Items[i]->Name, a->Condition.Items[i]->Value->Value);
-					printf("assert ");
-					for( i = 0; i < a->Expected.NItems; i ++ )
-						printf( "%i", a->Expected.Items[i]->Value->Value);
-					printf(" != ");
-					for( i = 0; i < a->Values.NItems; i ++ )
-						printf( "%i", a->Values.Items[i]->Value->Value);
+					DumpList(&a->Condition, 1);
+					printf("assert actual ");
+					DumpList(&a->Values, 0);
+					printf(" == expected ");
+					DumpList(&a->Expected, 0);
 					bFailure = 1;
 				}
 				
-				steps_elapsed ++;
+				if( test->CompletionCondition && GetLink(test->CompletionCondition) )
+					break;
 			}
 			if( bFailure == 1 ) {
 				printf("\nTest '%s' failed in %i steps\n", test->Name, steps_elapsed);
 			}
 			else {
-				printf("Passed\n");
+				printf("Passed in %i\n", steps_elapsed);
 			}
 		}
 		
@@ -332,7 +332,6 @@ int main(int argc, char *argv[])
 	// Execute
 	for( timestamp = 0; gbRunSimulation; timestamp ++ )
 	{
-		tDisplayItem	*dispItem;
 		tBreakpoint	*bp;
 		 int	breakPointFired = 0;
 
@@ -359,21 +358,8 @@ int main(int argc, char *argv[])
 		}
 		printf("---- %6i ----\n", timestamp);
 		
-		for( dispItem = gpDisplayItems; dispItem; dispItem = dispItem->Next )
-		{
-			ASSERT(dispItem != dispItem->Next);
-			// Check condition (if one condition line is high, the item is displayed)
-			for( i = 0; i < dispItem->Condition.NItems; i ++ )
-			{
-				if( GetLink(dispItem->Condition.Items[i]) ) {
-					break;
-				}
-			}
-			if( i == dispItem->Condition.NItems )	continue;
-			
-			PrintDisplayItem(dispItem);
-		}
-		
+		ShowDisplayItems();
+	
 		// Check breakpoints
 		breakPointFired = 0;
 		for( bp = gpBreakpoints; bp; bp = bp->Next )
@@ -462,6 +448,22 @@ int main(int argc, char *argv[])
 
 void RunSimulationStep(void)
 {
+	for( tLink *link = gpLinks; link; link = link->Next )
+	{
+		ASSERT(link != link->Next);
+		link->Value->NDrivers = 0;
+		if( link->Name[0] == '1' )
+		{
+			link->Value->Value = 1;
+			link->Value->NDrivers = 1;
+		}
+		else if( link->Name[0] == '0' )
+		{
+			link->Value->Value = 0;
+			link->Value->NDrivers = 0;
+		}
+	}
+	
 	// === Update elements ===
 	for( tElement *ele = gpElements; ele; ele = ele->Next )
 	{
@@ -484,12 +486,50 @@ void RunSimulationStep(void)
 		else if( link->Name[0] == '0' )
 		{
 			link->Value->Value = 0;
-			link->Value->NDrivers = 0;
 		}
-		else
+	}
+	
+	for( tLink *link = gpLinks; link; link = link->Next )
+	{
+		ASSERT(link != link->Next);
+		link->Value->NDrivers = 0;
+		if( link->Name[0] == '1' )
 		{
+			ASSERT( link->Value->Value );
+			link->Value->Value = 1;
+			link->Value->NDrivers = 1;
+		}
+		else if( link->Name[0] == '0' )
+		{
+			ASSERT( !link->Value->Value );
+			link->Value->Value = 0;
 			link->Value->NDrivers = 0;
 		}
+//		if( link->Name[0] ) {
+//			printf("%s %p = %i\n", link->Name, link->Value, link->Value->Value);
+//		}
+	}
+}
+
+void ShowDisplayItems(void)
+{
+	 int	i;
+	for( tDisplayItem *dispItem = gpDisplayItems; dispItem; dispItem = dispItem->Next )
+	{
+		ASSERT(dispItem != dispItem->Next);
+		// Check condition (if one condition line is high, the item is displayed)
+		for( i = 0; i < dispItem->Condition.NItems; i ++ )
+		{
+//			printf("%s(%p %i)\n", dispItem->Condition.Items[i]->Name,
+//				dispItem->Condition.Items[i]->Value,
+//				dispItem->Condition.Items[i]->Value->Value);
+			if( GetLink(dispItem->Condition.Items[i]) ) {
+				break;
+			}
+		}
+		if( i == dispItem->Condition.NItems )	continue;
+		
+		PrintDisplayItem(dispItem);
 	}
 }
 
@@ -615,18 +655,19 @@ void CompressLinks(void)
 	tLink	*link;
 	tElement	*ele;
 	printf("Culling links...\n");
+	
 	// Unify
 	for( link = gpLinks; link; link = link->Next )
 		link->Backlink = NULL;
 	for( link = gpLinks; link; link = link->Next )
 	{
+		nLink ++;
 		if(link->Backlink)	continue;	// Skip ones already done
 		for( tLink *link2 = link; link2; link2 = link2->Next )
 		{
 			if(link2->Backlink)	continue;
 			if(link2->Value != link->Value)	continue;
 			link2->Backlink = link;	// Make backlink non-zero
-			nLink ++;
 		}
 		nVal ++;
 	}
@@ -640,8 +681,28 @@ void CompressLinks(void)
 		for( int i = 0; i < ele->NOutputs; i ++ )
 			ele->Outputs[i] = ele->Outputs[i]->Backlink;
 	}
+	// Update display conditions
+	void _compactList(tList *list) {
+	//	for( int i = 0; i < list->NItems; i ++ )
+	//		list->Items[i] = list->Items[i]->Backlink;
+	}
+	for( tDisplayItem *disp = gpDisplayItems; disp; disp = disp->Next )
+	{
+		_compactList(&disp->Condition);
+		_compactList(&disp->Values);
+	}
+	for( tTestCase *test = gpTests; test; test = test->Next )
+	{
+		for( tAssertion *a = test->Assertions; a; a = a->Next )
+		{
+			_compactList(&a->Condition);
+			_compactList(&a->Values);
+			_compactList(&a->Expected);
+		}
+	}
 	
 	// Find and free unused
+	// - NULL all backlinks as an "unused" flag
 	for( link = gpLinks; link; link = link->Next )
 		link->Backlink = NULL;
 	for( ele = gpElements; ele; ele = ele->Next )
@@ -651,6 +712,27 @@ void CompressLinks(void)
 		for( int i = 0; i < ele->NOutputs; i ++ )
 			ele->Outputs[i]->Backlink = (void*)1;
 	}
+	void _markList(tList *list) {
+		for( int i = 0; i < list->NItems; i ++ )
+			list->Items[i]->Backlink = (void*)1;
+	}
+	for( tDisplayItem *disp = gpDisplayItems; disp; disp = disp->Next )
+	{
+		_markList(&disp->Condition);
+		_markList(&disp->Values);
+	}
+	for( tTestCase *test = gpTests; test; test = test->Next )
+	{
+		for( tAssertion *a = test->Assertions; a; a = a->Next )
+		{
+			_markList(&a->Condition);
+			_markList(&a->Values);
+			_markList(&a->Expected);
+		}
+	}
+	
+	// Free any with a NULL backlink
+	#if 0
 	 int	nPruned = 0;
 	tLink	*prev = (tLink*)&gpLinks;
 	for( link = gpLinks; link; )
@@ -667,6 +749,7 @@ void CompressLinks(void)
 		link = nextlink;
 	}
 	printf("Pruned %i links\n", nPruned);
+	#endif
 }
 
 void WriteCompiledVersion(const char *Path, int bBinary)
@@ -741,4 +824,17 @@ void WriteCompiledVersion(const char *Path, int bBinary)
 	
 	fclose(fp);
 }
+
+void DumpList(const tList *List, int bShowNames)
+{
+	if( bShowNames ) {
+		for( int i = 0; i < List->NItems; i ++ )
+			printf( "%s(%i) ", List->Items[i]->Name, List->Items[i]->Value->Value);
+	}
+	else {
+		for( int i = 0; i < List->NItems; i ++ )
+			printf( "%i", List->Items[i]->Value->Value);
+	}
+}
+
 

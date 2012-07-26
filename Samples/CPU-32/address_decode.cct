@@ -49,6 +49,9 @@ $op_1_read = DELAY $op_1_read	// Reduces latency when starting
 #display (AND $trigger, $read_r) "op_1" @op_1[31:0]
 #display (AND $trigger, $read_m) "op_2" @op_2[31:0]
 #display $is_mem_dest "Memory Destination" 0
+#display $trigger "mode" @instr[26:24]
+#display $trigger "R" @instr[23:20]
+#display $trigger "m" @instr[19:16]
 
 #array int_addr 32
 $NULL, @int_addr = LATCH{32} 1, $int_addr_clear, @int_addr
@@ -70,8 +73,8 @@ $is_mem_dest = AND $is_op_M8R, $is_op_M16R
 $reading_Rr = AND $pulse, $read_m, $is_op_Rr
 $op_2_read_set = AND $read_m, $is_op_Rr, $reg_ready
 $reg_enable = DELAY $reading_Rr
-@reg_addr = AND{4} $reading_Rr, @instr[19:16]
-@op_2 = AND{32} $read_m, $is_op_Rr, $reg_ready, @reg_data_in
+@reg_addr[3:0] = AND{4} $reading_Rr, @instr[19:16]
+@op_2 = AND{32} $read_m, $is_op_Rr, (NOT $reading_op1), $reg_ready, @reg_data_in
 
 ; Ri20
 $reading_Ri20 = AND $pulse, $read_m, $is_op_Ri20
@@ -148,7 +151,7 @@ $op_2_read = AND $pulse, (NOT $read_m)
 $reading_op1 = AND $read_r, $op_2_read
 #display $reading_op1 "Reading OP1" 0
 $reg_enable = DELAY $reading_op1
-@reg_addr = AND{4} $reading_op1, @instr[23:20]
+@reg_addr[3:0] = AND{4} $reading_op1, @instr[23:20]
 @op_1 = AND{32} $reading_op1, $reg_ready, @reg_data_in
 $op_1_read = AND $reading_op1, $reg_ready
 ; === Skip Op1? ===
