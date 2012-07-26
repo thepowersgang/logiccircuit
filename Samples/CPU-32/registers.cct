@@ -1,0 +1,38 @@
+// 32-bit CPU
+
+#defunit REGISTER_BANK_16_32
+#input $enable, @reg_addr[4], $reg_write, @reg_data_in[32]
+#output $ready, @reg_data_out[32]
+
+#array reg_select	16
+
+@reg_select = DEMUX{4} $enable, @reg_addr
+
+%assign i 0
+%rep 16
+#array reg_ %+ i %+ _value 32
+#array reg_ %+ i %+ _newvalue 32
+
+$reg_ %+ i %+ _write = AND @reg_select[i], (DELAY $reg_write)
+@reg_ %+ i %+ _newvalue = AND{32} @reg_select[i], $reg_write, @reg_data_in
+$reg_ %+ i %+ _ready, @reg_ %+ i %+ _value = LATCH{32} 1, $reg_ %+ i %+ _write, @reg_ %+ i %+ _newvalue
+@reg_data_out = AND{32} @reg_select[i], @reg_ %+ i %+ _value
+
+%assign i i+1
+%endrep
+
+$ready = DELAY{4} $enable	// DEMUX, _write, LATCH, AND
+
+// --- Register Display ---
+#display 1 "R 0=%32x R 1=%32x R 2=%32x R 3=%32x" @reg_0_value[32-1:0], @reg_1_value[32-1:0], \
+	@reg_2_value[32-1:0], @reg_3_value[32-1:0]
+#display 1 "R 4=%32x R 5=%32x R 6=%32x R 7=%32x" @reg_4_value[32-1:0], @reg_5_value[32-1:0], \
+	@reg_6_value[32-1:0], @reg_7_value[32-1:0]
+#display 1 "R 8=%32x R 9=%32x R10=%32x R11=%32x" @reg_8_value[32-1:0], @reg_9_value[32-1:0], \
+	@reg_10_value[32-1:0], @reg_11_value[32-1:0]
+#display 1 "R12=%32x R13=%32x R14=%32x R15=%32x" @reg_12_value[32-1:0], @reg_13_value[32-1:0], \
+	@reg_14_value[32-1:0], @reg_15_value[32-1:0]
+
+#endunit
+
+; vim: ft=logiccircuit
