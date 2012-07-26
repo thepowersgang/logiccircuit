@@ -65,7 +65,7 @@ int Unit_DefineUnit(const char *Name)
 	tUnitTemplate	*tpl, *prev = NULL;
 	
 	// Nesting is a no-no
-	if(gpCurUnit) {
+	if(gpCurUnit || gpCurTest) {
 		return -1;
 	}
 	
@@ -140,7 +140,7 @@ int Unit_IsInUnit(void)
 // --------------------------------------------------------------------
 int Test_CreateTest(int MaxLength, const char *Name, int NameLength)
 {
-	if( gpCurTest )
+	if( gpCurTest || gpCurUnit )
 		return -1;
 	
 	gpCurTest = calloc(1, sizeof(tTestCase) + NameLength + 1);
@@ -169,7 +169,9 @@ int Test_AddAssertion(const tList *Condition, const tList *Values, const tList *
 		return -1;
 	}
 
-	tAssertion *a = malloc( sizeof(tAssertion) + (Condition->NItems + Values->NItems + Expected->NItems)*sizeof(tLink*) );
+	tAssertion *a = malloc( sizeof(tAssertion)
+		+ (Condition->NItems + Values->NItems + Expected->NItems)*sizeof(tLink*) );
+	
 	a->Condition.NItems = Condition->NItems;
 	a->Expected.NItems = Values->NItems;
 	a->Values.NItems = Expected->NItems;
@@ -230,6 +232,10 @@ tBreakpoint *AddBreakpoint(const char *Name, const tList *Condition)
 	
 	if( gpCurUnit )
 		listHead = &gpCurUnit->Breakpoints;
+	else if( gpCurTest ) {
+		// TODO: Breakpoints in tests?
+		return NULL;
+	}
 	else
 		listHead = &gpBreakpoints;
 	
@@ -271,6 +277,9 @@ tDisplayItem *AddDisplayItem(const char *Name, const tList *Condition, const tLi
 	
 	if( gpCurUnit )
 		listHead = &gpCurUnit->DisplayItems;
+	else if( gpCurTest ) {
+		return NULL;
+	}
 	else
 		listHead = &gpDisplayItems;
 	
@@ -312,6 +321,7 @@ tDisplayItem *AddDisplayItem(const char *Name, const tList *Condition, const tLi
  */
 void CreateGroup(const char *Name, int Size)
 {
+	tGroupDef	**listhead;
 	tGroupDef	*ret, *def, *prev = NULL;
 
 	ret = malloc( sizeof(tGroupDef) + 1 + strlen(Name) + 1 );
@@ -320,17 +330,21 @@ void CreateGroup(const char *Name, int Size)
 	strcpy(&ret->Name[1], Name);
 	
 	if( gpCurUnit )
-		def = gpCurUnit->Groups;
+		listhead = &gpCurUnit->Groups;
+	else if( gpCurTest )
+		listhead = &gpCurTest->Groups;
 	else
-		def = gpGroups;
+		listhead = &gpGroups;
 	
 	//printf("ret->Name = '%s', def = %p\n", ret->Name, def);
-	for( ; def; prev = def, def = def->Next )
+	for( def = *listhead; def; prev = def, def = def->Next )
 	{
 		if(strcmp(ret->Name, def->Name) == 0) {
 			fprintf(stderr, "ERROR: Redefinition of %s\n", ret->Name);
 			if( gpCurUnit )
 				fprintf(stderr, " in unit '%s'\n", gpCurUnit->Name);
+			else if( gpCurTest )
+				fprintf(stderr, " in test '%s'\n", gpCurTest->Name);
 			else
 				fprintf(stderr, " in root scope\n");
 			free(ret);
@@ -343,13 +357,9 @@ void CreateGroup(const char *Name, int Size)
 		ret->Next = prev->Next;
 		prev->Next = ret;
 	}
-	else if( gpCurUnit ) {
-		ret->Next = gpCurUnit->Groups;
-		gpCurUnit->Groups = ret;
-	}
 	else {
-		ret->Next = gpGroups;
-		gpGroups = ret;
+		ret->Next = *listhead;
+		*listhead = ret;
 	}
 	
 //	printf("'%s' added to %s\n", ret->Name, (gpCurUnit?gpCurUnit->Name:"."));
@@ -364,6 +374,8 @@ tGroupDef *GetGroup(const char *Name)
 	
 	if( gpCurUnit )
 		def = gpCurUnit->Groups;
+	else if( gpCurTest )
+		def = gpCurTest->Groups;
 	else
 		def = gpGroups;
 	
@@ -408,20 +420,22 @@ void LinkValue_Deref(tLinkValue *Value)
  */
 tLink *CreateAnonLink(void)
 {
+	tLink	**first;
 	tLink	*ret = malloc(sizeof(tLink)+1);
 	ret->Name[0] = '\0';
 	ret->Value = LinkValue_Create();
 	ret->Link = NULL;
 	ret->ReferenceCount = 1;
-	
-	if( gpCurUnit ) {
-		ret->Next = gpCurUnit->Links;
-		gpCurUnit->Links = ret;
-	}
-	else {
-		ret->Next = gpLinks;
-		gpLinks = ret;
-	}
+
+
+	if( gpCurUnit )
+		first = &gpCurUnit->Links;
+	else if( gpCurTest )
+		first = &gpCurTest->Links;
+	else
+		first = &gpLinks;
+	ret->Next = *first;
+	*first = ret;
 	
 	return ret;
 }
@@ -431,14 +445,17 @@ tLink *CreateAnonLink(void)
  */
 tLink *CreateNamedLink(const char *Name)
 {
+	tLink	**first;
 	tLink	*ret, *def, *prev = NULL;
 
 	if( gpCurUnit )
-		def = gpCurUnit->Links;
+		first = &gpCurUnit->Links;
+	else if( gpCurTest )
+		first = &gpCurTest->Links;
 	else
-		def = gpLinks;
+		first = &gpLinks;
 	
-	for( ; def; prev = def, def = def->Next )
+	for(def = *first; def; prev = def, def = def->Next )
 	{
 		if(strcmp(Name, def->Name) == 0)	return def;
 		if(strcmp(Name, def->Name) < 0)	break;
@@ -465,14 +482,8 @@ tLink *CreateNamedLink(const char *Name)
 		prev->Next = ret;
 	}
 	else {
-		if( gpCurUnit ) {
-			ret->Next = gpCurUnit->Links;
-			gpCurUnit->Links = ret;
-		}
-		else {
-			ret->Next = gpLinks;
-			gpLinks = ret;
-		}
+		ret->Next = *first;
+		*first = ret;
 	}
 	
 	return ret;
@@ -483,6 +494,9 @@ tLink *CreateNamedLink(const char *Name)
  */
 tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 {
+	tElement	**listhead;
+	tLink	**linkhead;
+	
 	tLink	*link, *newLink;
 	tElement	*ele;
 	tDisplayItem	*dispItem;
@@ -500,6 +514,19 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 		return NULL;
 	}
 	
+	if( gpCurUnit ) {
+		listhead = &gpCurUnit->Elements;
+		linkhead = &gpCurUnit->Links;
+	}
+	else if( gpCurTest ) {
+		listhead = &gpCurTest->Elements;
+		linkhead = &gpCurTest->Links;
+	}
+	else {
+		listhead = &gpElements;
+		linkhead = &gpLinks;
+	}
+
 	// Create the prefix to add to the name
 	snprintf(namePrefix, prefixLen+1, "%s#%i", Unit->Name, Unit->InstanceCount);
 	Unit->InstanceCount ++;
@@ -534,7 +561,7 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 		link->Backlink = newLink;	// Set a back link to speed up remapping inputs
 		
 		// Append to the current list
-		def = gpCurUnit ? gpCurUnit->Links : gpLinks;
+		def = *linkhead;
 		for( ; def; prev = def, def = def->Next )
 		{
 			if(strcmp(newLink->Name, def->Name) < 0)	break;
@@ -543,13 +570,9 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 			newLink->Next = prev->Next;
 			prev->Next = newLink;
 		}
-		else if( gpCurUnit ) {
-			newLink->Next = gpCurUnit->Links;
-			gpCurUnit->Links = newLink;
-		}
 		else {
-			newLink->Next = gpLinks;
-			gpLinks = newLink;
+			newLink->Next = *linkhead;
+			*linkhead = newLink;
 		}
 	}
 	
@@ -650,14 +673,8 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 			#endif
 		}
 		
-		if( gpCurUnit ) {
-			newele->Next = gpCurUnit->Elements;
-			gpCurUnit->Elements = newele;
-		}
-		else {
-			gpLastElement->Next = newele;
-			gpLastElement = newele;
-		}
+		newele->Next = *listhead;
+		*listhead = newele;
 	}
 	
 	// Create output return
@@ -675,21 +692,22 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
  */
 tList *CreateUnit(const char *Name, int NParams, int *Params, tList *Inputs)
 {
+	tElement	**listhead;
+	
 	tElement	*ele;
 	tList	*ret = NULL;
 	 int	i;
 	tElementDef	*def;
-	tUnitTemplate	*tpl;
 	
 	// First, check for template units (#defunit)
-	for( tpl = gpUnits; tpl; tpl = tpl->Next )
+	for( tUnitTemplate *tpl = gpUnits; tpl; tpl = tpl->Next )
 	{
 		// We can't recurse, so also check that
 		if( tpl != gpCurUnit && strcmp(Name, tpl->Name) == 0 ) {
 			return AppendUnit(tpl, Inputs);
 		}
 	}
-	
+
 	// Next, check for builtins
 	for( def = gpElementDefs; def; def = def->Next )
 	{
@@ -697,6 +715,14 @@ tList *CreateUnit(const char *Name, int NParams, int *Params, tList *Inputs)
 			break;
 	}
 	if(!def)	return NULL;
+	
+	// Determine current list
+	if( gpCurUnit )
+		listhead = &gpCurUnit->Elements;
+	else if( gpCurTest )
+		listhead = &gpCurTest->Elements;
+	else
+		listhead = &gpElements;
 	
 	// Sanity check input numbers
 	if( Inputs->NItems < def->MinInput ) {
@@ -721,14 +747,8 @@ tList *CreateUnit(const char *Name, int NParams, int *Params, tList *Inputs)
 	}
 	
 	// Append to element list
-	if( gpCurUnit ) {
-		ele->Next = gpCurUnit->Elements;
-		gpCurUnit->Elements = ele;
-	}
-	else {
-		gpLastElement->Next = ele;
-		gpLastElement = ele;
-	}
+	ele->Next = *listhead;
+	*listhead = ele;
 	
 	// Create return list
 	ret = malloc( sizeof(tList) + ele->NOutputs*sizeof(tLink*) );

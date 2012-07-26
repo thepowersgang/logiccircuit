@@ -4,6 +4,7 @@
 #define _COMMON_H_
 
 #include <link.h>
+#include <element.h>
 
 #define _STR(x)	#x
 #define STR(x)	_STR(x)
@@ -71,6 +72,9 @@ extern int	Test_AddAssertion(const tList *Condition, const tList *Values, const 
 extern int	Test_AddCompletion(const tList *Condition);
 extern int	Test_CloseTest(void);
 extern int	Test_IsInTest(void);
+
+extern tLink	*gpLinks;
+extern tElement	*gpElements;
 
 /**
  * \brief Add a display item

@@ -2,7 +2,6 @@
  * 
  */
 #include <common.h>
-#include <element.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -14,8 +13,6 @@
 
 // === IMPORTS ===
 extern tElementDef	*gpElementDefs;
-extern tLink	*gpLinks;
-extern tElement	*gpElements;
 extern tBreakpoint	*gpBreakpoints;
 extern tDisplayItem	*gpDisplayItems;
 extern tTestCase	*gpTests;
@@ -32,7 +29,7 @@ extern void	LinkValue_Deref(tLinkValue *Value);
 } while(0)
 
 // === PROTOTYPES ===
-void	RunSimulationStep(void);
+void	RunSimulationStep(tTestCase *Root);
 void	ShowDisplayItems(void);
 void	ReadCommand(int MaxCmd, char *Command, int MaxArg, char *Argument);
 void	SigINT_Handler(int Signum);
@@ -40,6 +37,8 @@ void	PrintDisplayItem(tDisplayItem *dispItem);
 void	CompressLinks(void);
 void	WriteCompiledVersion(const char *Path, int bBinary);
 void	DumpList(const tList *List, int bShowNames);
+void	ResolveLinks(tLink *First);
+void	ResolveEleLinks(tElement *First);
 
 // === GLOBALS ===
  int	gbRunSimulation = 1;
@@ -104,78 +103,13 @@ int main(int argc, char *argv[])
 	
 	// Resolve links
 	printf("Resolving links...\n");
-	for( link = gpLinks; link; link = link->Next )
+	ResolveLinks(gpLinks);
+	ResolveEleLinks(gpElements);
+	for( tTestCase *test = gpTests; test; test = test->Next )
 	{
-		// Expand n-deep linking
-		while( link->Link && link->Link->Link ) {
-			link->Link = link->Link->Link;
-		}
-		
-		if( link->Link )
-		{
-			LinkValue_Ref(link->Link->Value);
-			LinkValue_Deref(link->Value);
-			link->Value = link->Link->Value;
-		}
-		
-		// Zero out
-		link->Value->NDrivers = 0;
-		link->Value->Value = 0;
-		
-		// Ignore unamed
-		if( !link->Name[0] )
-			continue;
-		
+		ResolveLinks(test->Links);
+		ResolveEleLinks(test->Elements);
 	}
-	
-	#if USE_LINKS || PRINT_ELEMENTS
-	for( ele = gpElements; ele; ele = ele->Next )
-	{
-		#if PRINT_ELEMENTS
-		printf("%p %s", ele, ele->Type->Name);
-		#endif
-		for( i = 0; i < ele->NInputs; i ++ )
-		{
-			#if USE_LINKS
-			// Expand links
-			if( ele->Inputs[i]->Link ) {
-				link = ele->Inputs[i]->Link;
-				ele->Inputs[i]->ReferenceCount --;
-				if( !ele->Inputs[i]->ReferenceCount )
-					free( ele->Inputs[i] );
-				ele->Inputs[i] = link;
-			}
-			#endif
-			#if PRINT_ELEMENTS
-			printf(" %p(%s)", ele->Inputs[i], ele->Inputs[i]->Name);
-			#endif
-		}
-		#if PRINT_ELEMENTS
-		printf("   ==>");
-		#endif
-		for( i = 0; i < ele->NOutputs; i ++ ) {
-			#if USE_LINKS
-			// Expand links
-			if( ele->Outputs[i]->Link ) {
-				link = ele->Outputs[i]->Link;
-				// Just asking for a memory leak, but this can be in use elsewhere
-				// TODO: Reference counting
-				ele->Outputs[i]->ReferenceCount --;
-				if( !ele->Outputs[i]->ReferenceCount )
-					free( ele->Outputs[i] );
-				ele->Outputs[i] = link;
-			}
-			#endif
-			#if PRINT_ELEMENTS
-			printf(" %p(%s)", ele->Outputs[i], ele->Outputs[i]->Name);
-			#endif
-		}
-		#if PRINT_ELEMENTS
-		printf("\n");
-		#endif
-	}
-	#endif
-	
 	
 	// Print links
 	// > Scan all links and find ones that share a value pointer 
@@ -271,7 +205,7 @@ int main(int argc, char *argv[])
 			printf("Test '%s'... ", test->Name);
 			while( steps_elapsed != test->MaxLength && !bFailure )
 			{
-				RunSimulationStep();
+				RunSimulationStep(test);
 			//	ShowDisplayItems();
 				steps_elapsed ++;
 			
@@ -437,7 +371,7 @@ int main(int argc, char *argv[])
 			}
 		}
 		
-		RunSimulationStep();
+		RunSimulationStep(NULL);
 	}
 	
 	// Swap back to main buffer
@@ -446,9 +380,21 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
-void RunSimulationStep(void)
+void RunSimulationStep(tTestCase *Root)
 {
-	for( tLink *link = gpLinks; link; link = link->Next )
+	tLink	**links;
+	tElement	**elements;
+	
+	if( Root ) {
+		links = &Root->Links;
+		elements = &Root->Elements;
+	}
+	else {
+		links = &gpLinks;
+		elements = &gpElements;
+	}
+	
+	for( tLink *link = *links; link; link = link->Next )
 	{
 		ASSERT(link != link->Next);
 		link->Value->NDrivers = 0;
@@ -465,14 +411,14 @@ void RunSimulationStep(void)
 	}
 	
 	// === Update elements ===
-	for( tElement *ele = gpElements; ele; ele = ele->Next )
+	for( tElement *ele = *elements; ele; ele = ele->Next )
 	{
 		ASSERT(ele != ele->Next);
 		ele->Type->Update( ele );
 	}
 	
 	// Set values
-	for( tLink *link = gpLinks; link; link = link->Next )
+	for( tLink *link = *links; link; link = link->Next )
 	{
 		ASSERT(link != link->Next);
 		link->Value->Value = !!link->Value->NDrivers;
@@ -837,4 +783,52 @@ void DumpList(const tList *List, int bShowNames)
 	}
 }
 
+void ResolveLinks(tLink *First)
+{
+	for( tLink *link = First; link; link = link->Next )
+	{
+		// Expand n-deep linking
+		while( link->Link && link->Link->Link ) {
+			link->Link = link->Link->Link;
+		}
+		
+		if( link->Link )
+		{
+			LinkValue_Ref(link->Link->Value);
+			LinkValue_Deref(link->Value);
+			link->Value = link->Link->Value;
+		}
+		
+		// Zero out
+		link->Value->NDrivers = 0;
+		link->Value->Value = 0;
+	}
+}
+
+void ResolveEleLinks(tElement *First)
+{
+	tLink	*link;	
+	for( tElement *ele = First; ele; ele = ele->Next )
+	{
+		for( int i = 0; i < ele->NInputs; i ++ )
+		{
+			// Is it direct?
+			if( !ele->Inputs[i]->Link )
+				continue ;
+			
+			link = ele->Inputs[i]->Link;
+			// TODO: Reference counting
+			ele->Inputs[i] = link;
+		}
+		for( int i = 0; i < ele->NOutputs; i ++ )
+		{
+			if( !ele->Outputs[i]->Link )
+				continue ;
+			
+			link = ele->Outputs[i]->Link;
+			ele->Outputs[i] = link;
+		}
+	}
+
+}
 
