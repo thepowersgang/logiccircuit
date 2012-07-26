@@ -35,6 +35,28 @@ struct sDisplayItem
 	char	Label[];	//!< Display label
 };
 
+typedef struct sAssertion
+{
+	struct sAssertion	*Next;
+	tList	Condition;
+	tList	Values;
+	tList	Expected;
+} tAssertion;
+
+typedef struct sTestCase
+{
+	struct sTestCase	*Next;
+	
+	tLink	*Links;
+	struct sGroupDef	*Groups;
+	struct sElement	*Elements;
+	
+	tAssertion	*Assertions;
+	
+	 int	MaxLength;
+	char	Name[];
+} tTestCase;
+
 extern int	Unit_DefineUnit(const char *Name);
 extern int	Unit_AddSingleInput(const char *Name);
 extern int	Unit_AddGroupInput(const char *Name, int Size);
@@ -42,6 +64,11 @@ extern int	Unit_AddSingleOutput(const char *Name);
 extern int	Unit_AddGroupOutput(const char *Name, int Size);
 extern int	Unit_CloseUnit(void);
 extern int	Unit_IsInUnit(void);
+
+extern int	Test_CreateTest(int MaxLength, const char *Name, int NameLength);
+extern int	Test_AddAssertion(const tList *Condition, const tList *Values, const tList *Expected);
+extern int	Test_CloseTest(void);
+extern int	Test_IsInTest(void);
 
 /**
  * \brief Add a display item

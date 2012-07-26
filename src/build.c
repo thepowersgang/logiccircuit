@@ -47,9 +47,11 @@ tElement	*gpElements;
 tElement	*gpLastElement = (tElement*)&gpElements;
 tElementDef	*gpElementDefs;
 tUnitTemplate	*gpUnits;
-tUnitTemplate	*gpCurUnit;
+tTestCase	*gpTests;
 tBreakpoint	*gpBreakpoints;
 tDisplayItem	*gpDisplayItems;
+tUnitTemplate	*gpCurUnit;
+tTestCase	*gpCurTest;
 
 // === CODE ===
 /**
@@ -131,6 +133,72 @@ int Unit_IsInUnit(void)
 {
 	return !!gpCurUnit;
 }
+
+// --------------------------------------------------------------------
+int Test_CreateTest(int MaxLength, const char *Name, int NameLength)
+{
+	if( gpCurTest )
+		return -1;
+	
+	gpCurTest = calloc(1, sizeof(tTestCase) + NameLength + 1);
+	gpCurTest->MaxLength = MaxLength;
+	memcpy(gpCurTest->Name, Name, NameLength);
+	gpCurTest->Name[NameLength] = '\0';
+
+	gpCurTest->Next = gpTests;
+	gpTests = gpCurTest;
+	
+	return 0;
+}
+
+int Test_AddAssertion(const tList *Condition, const tList *Values, const tList *Expected)
+{
+	if(!gpCurTest)
+		return -1;
+	
+	if( Values->NItems != Expected->NItems ) {
+		printf("Count mismatch in assertion (%i != %i)\n", Values->NItems, Expected->NItems);
+		return -1;
+	}
+
+	tAssertion *a = malloc( sizeof(tAssertion) + (Condition->NItems + Values->NItems + Expected->NItems)*sizeof(tLink*) );
+	a->Condition.NItems = Condition->NItems;
+	a->Expected.NItems = Values->NItems;
+	a->Values.NItems = Expected->NItems;
+	a->Condition.Items = (void*)(a + 1);
+	memcpy(a->Condition.Items, Condition->Items, Condition->NItems*sizeof(tLink*));
+	a->Expected.Items = a->Condition.Items + Condition->NItems;
+	memcpy(a->Expected.Items, Expected->Items, Expected->NItems*sizeof(tLink*));
+	a->Values.Items = a->Expected.Items + Expected->NItems;
+	memcpy(a->Values.Items, Values->Items, Values->NItems*sizeof(tLink*));
+
+	// Append on to the end of the assertion list
+	tAssertion *p;
+	for( p = gpCurTest->Assertions; p && p->Next; p = p->Next )
+		;
+	if(p)
+		p->Next = a;
+	else
+		gpCurTest->Assertions = a;
+	a->Next = NULL;
+
+	return 0;
+}
+
+int Test_CloseTest(void)
+{
+	if(!gpCurTest)	return -1;
+	printf("Test '%s' closed\n", gpCurTest->Name);
+	gpCurTest = NULL;
+	return 0;
+}
+
+int Test_IsInTest(void)
+{
+	return !!gpCurTest;
+}
+
+// --------------------------------------------------------------------
 
 tBreakpoint *AddBreakpoint(const char *Name, const tList *Condition)
 {

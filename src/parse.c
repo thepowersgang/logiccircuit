@@ -249,7 +249,7 @@ int ParseValue(tParser *Parser, tList *destList)
 		else {
 			PutBack(Parser);
 			if( AppendGroup(destList, tmpName) )
-				SyntaxError(Parser, "Error referencing group");
+				SyntaxError(Parser, "Error referencing group %s", tmpName);
 		}
 		free(tmpName);
 		break;
@@ -257,12 +257,24 @@ int ParseValue(tParser *Parser, tList *destList)
 	// Constant
 	case TOK_NUMBER:
 		{
-			 int	num = atoi(Parser->TokenStr);
+			uint64_t	num = atoll(Parser->TokenStr);
 			 int	count = 1;
-			if( num < 0 || num > 1 ) {
-				SyntaxWarning(Parser, "Non-boolean constant value (%i) used\n", num);
+			 int	start = 0;
+			 int	end = 0;
+
+			if( GetToken(Parser) == TOK_SQUARE_OPEN )
+			{
+				SyntaxAssert(Parser, GetToken(Parser), TOK_NUMBER);
+				start = atoi(Parser->TokenStr);
+				SyntaxAssert(Parser, GetToken(Parser), TOK_COLON);
+				SyntaxAssert(Parser, GetToken(Parser), TOK_NUMBER);
+				end = atoi(Parser->TokenStr);
+				SyntaxAssert(Parser, GetToken(Parser), TOK_SQUARE_CLOSE);
 			}
-			
+			else {
+				PutBack(Parser);
+			}		
+	
 			if( GetToken(Parser) == TOK_STAR )
 			{
 				GetToken(Parser);
@@ -275,15 +287,35 @@ int ParseValue(tParser *Parser, tList *destList)
 			else {
 				PutBack(Parser);
 			}
-			
-			if( num == 0 ) {
-				while(count --)
-					AppendLine( destList, "0" );
+
+			if( start == 0 && end == 0 ) {
+				if( num < 0 || num > 1 ) {
+					SyntaxWarning(Parser, "Non-boolean constant value (%i) used\n", num);
+					num = 1;
+				}
 			}
 			else {
-				while(count --)
-					AppendLine( destList, "1" );
+				if( start >= 64 || end >= 64 ) {
+					SyntaxWarning(Parser, "Start/end greater than 63 (%i-%i) used\n", start, end);
+				}
+//				start = max(start, 64-1);
+//				end   = max(end,   64-1);
 			}
+
+			while( count -- )
+			{
+				if( start > end )
+				{
+					for( int i = start; i >= end; i -- )
+						AppendLine( destList, (num & (1 << i)) ? "1" : "0" );
+				}
+				else
+				{
+					for( int i = start; i <= end; i ++ )
+						AppendLine( destList, (num & (1 << i)) ? "1" : "0" );
+				}
+			}
+
 		}
 		break;
 	
@@ -538,6 +570,61 @@ int ParseLine(tParser *Parser)
 		
 			free(title);
 			List_Free(&cond);
+		}
+		// TODO: Test cases
+		else if( strcmp(Parser->TokenStr, "#testcase") == 0 ) {
+			int max_length;
+			// Max Cycles - Number
+			max_length = ParseNumber(Parser);
+			// Name - String
+			SyntaxAssert(Parser, GetToken(Parser), TOK_STRING);
+			
+			if( Test_IsInTest() )
+				SyntaxError(Parser, "#testcase can't be nested");
+			Test_CreateTest(max_length, Parser->TokenStr+1, Parser->TokenLength-2);
+		}
+		else if( strcmp(Parser->TokenStr, "#testassert") == 0 ) {
+			tList	cond = {0}, have = {0}, expected = {0};
+			
+			// Sanity check please
+			if( !Test_IsInTest() )
+				SyntaxError(Parser, "#testassert outside of a test");
+			
+			// Condition (single value)
+			ParseValue(Parser, &cond);
+			
+			// Values to check
+			do {
+				if( ParseValue(Parser, &have) ) {
+					SyntaxError(Parser,
+						"Unexpected %s, expected %s",
+						casTOKEN_NAMES[TOK_T_VALUE], casTOKEN_NAMES[ Parser->Token ]);
+				}
+				GetToken(Parser);
+			} while(Parser->Token == TOK_COMMA);
+			PutBack(Parser);	// Put back non-comma token
+
+			// Expected values
+			do {
+				if( ParseValue(Parser, &expected) ) {
+					SyntaxError(Parser,
+						"Unexpected %s, expected %s",
+						casTOKEN_NAMES[TOK_T_VALUE], casTOKEN_NAMES[ Parser->Token ]);
+				}
+				GetToken(Parser);
+			} while(Parser->Token == TOK_COMMA);
+			PutBack(Parser);	// Put back non-comma token
+			printf("%s\n", expected.Items[0]->Name);
+	
+			Test_AddAssertion(&cond, &have, &expected);
+			List_Free(&cond);
+			List_Free(&have);
+			List_Free(&expected);
+		}
+		else if( strcmp(Parser->TokenStr, "#endtestcase") == 0 ) {
+			if( !Test_IsInTest() )
+				SyntaxError(Parser, "#endtestcase without #testcase");
+			Test_CloseTest();
 		}
 		else {
 			SyntaxError(Parser, "Unknown meta-statement '%s'",

@@ -18,6 +18,7 @@ extern tLink	*gpLinks;
 extern tElement	*gpElements;
 extern tBreakpoint	*gpBreakpoints;
 extern tDisplayItem	*gpDisplayItems;
+extern tTestCase	*gpTests;
 
 extern int ParseFile(const char *Filename);
 extern void	LinkValue_Ref(tLinkValue *Value);
@@ -31,6 +32,7 @@ extern void	LinkValue_Deref(tLinkValue *Value);
 } while(0)
 
 // === PROTOTYPES ===
+void	RunSimulationStep(void);
 void	ReadCommand(int MaxCmd, char *Command, int MaxArg, char *Argument);
 void	SigINT_Handler(int Signum);
 void	PrintDisplayItem(tDisplayItem *dispItem);
@@ -44,6 +46,7 @@ void	WriteCompiledVersion(const char *Path, int bBinary);
  int	gbPrintLinks = 0;
  int	gbPrintStats = 0;
  int	gbCompress = 1;
+ int	gbRunTests = 0;
 
 // === CODE ===
 int main(int argc, char *argv[])
@@ -80,6 +83,8 @@ int main(int argc, char *argv[])
 				gbPrintLinks = 1;
 			else if( strcmp(argv[i], "-stats") == 0 )
 				gbPrintStats = 1;
+			else if( strcmp(argv[i], "-test") == 0 )
+				gbRunTests = 1;
 			else if( strcmp(argv[i], "-count") == 0 ) {
 				if(i + 1 == argc)	return -1;
 				giSimulationSteps = atoi(argv[++i]);
@@ -255,6 +260,61 @@ int main(int argc, char *argv[])
 		WriteCompiledVersion("cct.binary", 1);
 		WriteCompiledVersion("cct.ascii", 0);
 	}
+	
+	if( gbRunTests )
+	{
+		printf("Running tests...\n");
+		for( tTestCase *test = gpTests; test; test = test->Next )
+		{
+			 int	steps_elapsed = 0;
+			 int	bFailure = 0;
+			printf("Test '%s'... ", test->Name);
+			while( steps_elapsed != test->MaxLength && !bFailure )
+			{
+				RunSimulationStep();
+			
+				 int	assertion_num = 0;	
+				for( tAssertion *a = test->Assertions; a; a = a->Next, assertion_num ++ )
+				{
+					 int	i;
+					if( !GetLink(a->Condition.Items[0]) )
+						continue ;
+					
+					// Check that Expected == Actual
+					for( i = 0; i < a->Expected.NItems; i ++ )
+					{
+						if( GetLink(a->Expected.Items[i]) != GetLink(a->Values.Items[i]) )
+							break;
+					}
+					// Assertion passed
+					if( i == a->Expected.NItems )
+						continue ;
+					
+					// Failed
+					printf("\n - Assertion %i failed\n", assertion_num+1);
+					for( i = 0; i < a->Expected.NItems; i ++ )
+						printf( "%i", a->Expected.Items[i]->Value->Value);
+					printf(" != ");
+					for( i = 0; i < a->Values.NItems; i ++ )
+						printf( "%i", a->Values.Items[i]->Value->Value);
+					printf("\n only if ");
+					for( i = 0; i < a->Condition.NItems; i ++ )
+						printf( "%s(%i) ", a->Condition.Items[i]->Name, a->Condition.Items[i]->Value->Value);
+					bFailure = 1;
+				}
+				
+				steps_elapsed ++;
+			}
+			if( bFailure == 1 ) {
+				printf("\nTest '%s' failed in %i steps\n", test->Name, steps_elapsed);
+			}
+			else {
+				printf("Passed\n");
+			}
+		}
+		
+		return 0;
+	}
 
 	signal(SIGINT, SigINT_Handler);
 	
@@ -390,34 +450,46 @@ int main(int argc, char *argv[])
 			}
 		}
 		
-		// === Update elements ===
-		for( ele = gpElements; ele; ele = ele->Next )
-		{
-			ASSERT(ele != ele->Next);
-			ele->Type->Update( ele );
-		}
-		
-		// Set values
-		for( link = gpLinks; link; link = link->Next )
-		{
-			ASSERT(link != link->Next);
-			link->Value->Value = !!link->Value->NDrivers;
-			
-			// Ensure 0 and 1 stay as 0 and 1
-			if( link->Name[0] == '1' )
-			{
-				link->Value->Value = 1;
-				link->Value->NDrivers = 1;
-			}
-			else if( link->Name[0] == '0' )
-				link->Value->Value = 0;
-		}
+		RunSimulationStep();
 	}
 	
 	// Swap back to main buffer
 	printf("\x1B[?1047l");
 	
 	return 0;
+}
+
+void RunSimulationStep(void)
+{
+	// === Update elements ===
+	for( tElement *ele = gpElements; ele; ele = ele->Next )
+	{
+		ASSERT(ele != ele->Next);
+		ele->Type->Update( ele );
+	}
+	
+	// Set values
+	for( tLink *link = gpLinks; link; link = link->Next )
+	{
+		ASSERT(link != link->Next);
+		link->Value->Value = !!link->Value->NDrivers;
+		
+		// Ensure 0 and 1 stay as 0 and 1
+		if( link->Name[0] == '1' )
+		{
+			link->Value->Value = 1;
+			link->Value->NDrivers = 1;
+		}
+		else if( link->Name[0] == '0' )
+		{
+			link->Value->Value = 0;
+			link->Value->NDrivers = 0;
+		}
+		else
+		{
+			link->Value->NDrivers = 0;
+		}
+	}
 }
 
 void ReadCommand(int MaxCmd, char *Command, int MaxArg, char *Argument)

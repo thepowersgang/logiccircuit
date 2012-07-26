@@ -1,0 +1,42 @@
+%include "../adder.cct"
+%include "../shift_register.cct"
+%include "address_decode.cct"
+
+;#testfixture
+
+;#endtestfixure
+
+#testcase 100 "R10, Imm24"
+
+#array dest_addr 32
+#array op1 32
+#array op2 32
+#array _ra 4
+#array _rd 32
+#array _ma 32
+#array _md 32
+
+; Pseudo register file
+; - R10 = 0x12345678
+@_rd[31:0] = AND{32} (DELAY $_re), (DELAY @_ra[3]), (NOT @_ra[2]), (DELAY @_ra[1]), (NOT @_ra[0]), (0x12345678[31:0])
+$_rr = DELAY{2} $_re
+; - Only R10 is allowed to be accessed
+#testassert $_re @_ra[3:0] 10[3:0]
+; Simulated memory
+; - Assert that memory is never accessed
+#testassert 1	$_me	0
+
+$done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
+	(DELAY 1), 0, 1, 1, 0xFA123456[0:31], \
+	$_re, @_ra, $_rr, @_rd, \
+	$_me, @_ma, $_mr, @_md
+
+; Final output
+#testassert $done  $imd 0
+#testassert $done  @dest_addr[31:0] 10[31:0]
+#testassert $done  @op1[31:0] 0x12345678[31:0]
+#testassert $done  @op2[31:0] 0x00123456[31:0]
+
+#endtestcase
+
+; vim: ft=logiccircuit
