@@ -46,16 +46,25 @@ $carry_out = DELAY{2} @value[7]
 
 #array count_enable %1
 
-@count_enable = DEMUX{%2} 1, @count
+$ready = DELAY{2} $pulse
+@count_enable = DEMUX{%2} $pulse, @count
 
 %assign i 0
 %rep %1
- %assign j i
- %rep %1-i
-@value_out[i] = AND (DELAY $pulse), @count_enable[j], (DELAY @value[j])
- %assign j j+1
- %endrep
-%assign i i+1
+  %assign j 0
+  %rep i
+@value_out[j] = AND @count_enable[i], (DELAY $carry_in)
+    %assign j j+1
+  %endrep
+  %rep %1-i
+    %assign src ((j-i) % %1)
+@value_out[j] = AND @count_enable[i], (DELAY @value[src])
+    %assign j j+1
+  %endrep
+  %if i != 0
+$carry_out = AND @count_enable[i], (DELAY @value[%1-i])
+  %endif
+  %assign i i+1
 %endrep
 
 #endunit
@@ -93,9 +102,6 @@ $ready = DELAY{1} $pulse
 
 $ready = DELAY{2} $pulse
 @count_enable = DEMUX{%2} $pulse, @count
-//#display $pulse "count" @count
-//#display $pulse "count_enable %6i (pulse = %1i)" %1[5:0],$pulse,@count_enable
-//#display $ready "value_out" @value_out
 %assign i 0
 %rep %1
   %assign j 0
@@ -116,9 +122,33 @@ def_shift_left_n 32, 5
 def_rotate_left_n 16, 4
 def_rotate_left_n 32, 5
 
+#testcase 10 "Shift Left 32 - None"
+#array _out 32
+$rdy, @_out, $carry = SHIFT_LEFT_N_32 (DELAY 1), 0[0:4], 0x01234567[0:31], 0
+#testassert $rdy @_out[31:0] 0x01234567[31:0]
+#testassert $rdy $carry 0
+#testcomplete $rdy
+#endtestcase
+
+#testcase 10 "Shift Left 32 - 31"
+#array _out 32
+$rdy, @_out, $carry = SHIFT_LEFT_N_32 (DELAY 1), 31[0:4], 0x01234567[0:31], 0
+#testassert $rdy @_out[31:0] 0x80000000[31:0]
+#testassert $rdy $carry 1
+#testcomplete $rdy
+#endtestcase
+
+#testcase 10 "Shift Left 32 - 16 Fill"
+#array _out 32
+$rdy, @_out, $carry = SHIFT_LEFT_N_32 (DELAY 1), 16[0:4], 0x01234567[0:31], 1
+#testassert $rdy @_out[31:0] 0x4567FFFF[31:0]
+#testassert $rdy $carry 1
+#testcomplete $rdy
+#endtestcase
+
 #testcase 10 "Rotate Left 32 - None"
 #array _out 32
-$rdy, @_out = ROTATE_LEFT_N_32 (DELAY 1), 0[4:0], 0x01234567[0:31]
+$rdy, @_out = ROTATE_LEFT_N_32 (DELAY 1), 0[0:4], 0x01234567[0:31]
 #testassert $rdy @_out[31:0] 0x01234567[31:0]
 #testcomplete $rdy
 #endtestcase

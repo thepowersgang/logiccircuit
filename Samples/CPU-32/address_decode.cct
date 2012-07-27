@@ -131,19 +131,22 @@ $is_M8_stg1_clear = $_mem8_add1_done
 ; - Stage 2: rotate index
 $reg_enable = DELAY $_mem8_add1_done
 @reg_addr[3:0] = AND{4} $_mem8_add1_done, @instr[15:12]
-$_mem8_shift_done, @_mem8_reg_shifted, $NULL = SHIFT_LEFT_N_32 (DELAY{3} $_mem8_add1_done), \
-	@instr[8:11],0, \
-	@reg_data_in, \
+$_mem8_shift_trigger = AND $reg_ready, (NOT $is_M8_stg1), $is_M8
+#display $_mem8_shift_trigger "mem8_shift input" (DELAY @reg_data_in)
+$_mem8_shift_done, @_mem8_reg_shifted, $NULL = SHIFT_LEFT_N_32 $_mem8_shift_trigger,\
+	@instr[8:11],0, (DELAY @reg_data_in), \
 	0
+#display $_mem8_shift_done "@_mem8_reg_shifted = %32x" @_mem8_reg_shifted[31:0]
 ; - Stage 3: add above two
 @_mem_add_op1 = AND{32} $_mem8_shift_done, @_mem8_reg_shifted
 @_mem_add_op2 = AND{32} $_mem8_shift_done, @int_addr
 $_mem_add_start = PULSE $_mem8_shift_done
+$int_addr_clear = PULSE $_mem8_shift_done
 $addr_ready = AND $is_M8, (NOT $is_M8_stg1), $_mem_add_done
 ; === Common Adder for Memory ===
-//#display $_mem_add_start "add 0x%32x and 0x%32x" @_mem_add_op1[31:0], @_mem_add_op2[31:0]
+#display $_mem_add_start "add 0x%32x and 0x%32x" @_mem_add_op1[31:0], @_mem_add_op2[31:0]
 $_mem_add_done, @int_addr, $NULL = ADDER_32BIT $_mem_add_start, @_mem_add_op1, @_mem_add_op2, 0
-//#display $_mem_add_done "add gave 0x%32x" @int_addr[31:0]
+#display $_mem_add_done "add gave 0x%32x" @int_addr[31:0]
 
 ; === Memory Load ===
 @dest_addr = AND{32} $addr_ready, $is_mem_dest, @int_addr
