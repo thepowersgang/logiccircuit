@@ -108,4 +108,33 @@ $done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
 
 #endtestcase
 
+; ---------------------------------------------------------------------
+; Tests Imm16s decode
+; - Also uses $read_r = 0 to make test simpler
+#testcase 100 "Decode - R-, Imm16s << 12"
+#array dest_addr 32
+#array op1 32
+#array op2 32
+#array _ra 4
+#array _rd 32
+#array _ma 32
+#array _md 32
+
+; No register/memory accesses allowed
+#testassert 1	$_re	0
+#testassert 1	$_me	0
+
+$done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
+	(DELAY 1), 0, 0, 1, 0xF30C8777[0:31], \
+	$_re, @_ra, $_rr, @_rd, \
+	$_me, @_ma, $_mr, @_md
+
+; Final output
+#testassert $done  $imd 0
+#testassert $done  @dest_addr[31:0] 0[31:0]
+#testassert $done  @op2[31:0] 0xFF8777FF[31:0]
+#testcomplete $done
+
+#endtestcase
+
 ; vim: ft=logiccircuit
