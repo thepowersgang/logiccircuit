@@ -93,8 +93,6 @@ $ready = DELAY{1} $pulse
 
 $ready = DELAY{2} $pulse
 @count_enable = DEMUX{%2} $pulse, @count
-#display 1 "count" @count
-#display 1 "count_enable %6i (pulse = %1i)" %1[5:0],$pulse,@count_enable
 %assign i 0
 %rep %1
   %assign j 0

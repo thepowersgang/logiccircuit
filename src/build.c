@@ -170,6 +170,8 @@ int Unit_CloseUnit(void)
 	{
 		_merge(bp->Condition.Items, bp->Condition.NItems);
 	}
+	_merge(gpCurUnit->Inputs.Items, gpCurUnit->Inputs.NItems);
+	_merge(gpCurUnit->Outputs.Items, gpCurUnit->Outputs.NItems);
 
 	// Remove any unused links
 	 int	nTrimmed = 0;
@@ -564,7 +566,7 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 	tList	*ret;
 	 int	i;
 
-	printf("Importing %s\n", Unit->Name);
+//	printf("Importing %s\n", Unit->Name);
 	
 	// Check input counts
 	if( Inputs->NItems != Unit->Inputs.NItems ) {
@@ -718,17 +720,17 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 			fprintf(stderr, "Error in creating copy of %s", ele->Type->Name);
 			return NULL;
 		}
-		if(ele->NInputs > 2) {
-			printf("Duplicated '%s' %p -> %p\n", ele->Type->Name, ele, newele);
-		}
+//		if(ele->NInputs > 2) {
+//			printf("Duplicated '%s' %p -> %p\n", ele->Type->Name, ele, newele);
+//		}
 
 		for( i = 0; i < ele->NInputs; i ++ ) {
 			if( ele->Inputs[i]->Backlink ) {
 				if( ele->NInputs > 2 )
-					printf("IN  %p %s -> %p %s\n",
-						ele->Inputs[i], ele->Inputs[i]->Name,
-						ele->Inputs[i]->Backlink, ele->Inputs[i]->Backlink->Name
-						);
+//					printf("IN  %p %s -> %p %s\n",
+//						ele->Inputs[i], ele->Inputs[i]->Name,
+//						ele->Inputs[i]->Backlink, ele->Inputs[i]->Backlink->Name
+//						);
 				newele->Inputs[i] = ele->Inputs[i]->Backlink;
 			}
 			else
@@ -736,16 +738,16 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 		}
 		for( i = 0; i < ele->NOutputs; i ++ ) {
 			if( ele->Outputs[i]->Backlink ) {
-				if( ele->NInputs > 2)
-					printf("OUT %p %s -> %p %s\n",
-						ele->Outputs[i], ele->Outputs[i]->Name,
-						ele->Outputs[i]->Backlink, ele->Outputs[i]->Backlink->Name
-						);
+//				if( ele->NInputs > 2)
+//					printf("OUT %p %s -> %p %s\n",
+//						ele->Outputs[i], ele->Outputs[i]->Name,
+//						ele->Outputs[i]->Backlink, ele->Outputs[i]->Backlink->Name
+//						);
 				newele->Outputs[i] = ele->Outputs[i]->Backlink;
 			}
 			else {
-				printf("No backlink on %s output %i %p (%s)\n",
-					ele->Type->Name, i, ele->Outputs[i], ele->Outputs[i]->Name);
+//				printf("No backlink on %s output %i %p (%s)\n",
+//					ele->Type->Name, i, ele->Outputs[i], ele->Outputs[i]->Name);
 				newele->Outputs[i] = ele->Outputs[i];
 			}
 		}

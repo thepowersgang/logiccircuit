@@ -64,8 +64,8 @@ static void _Update(tElement *Ele)
 	if( GetLink(Ele->Inputs[0]) )
 		RaiseLink(Ele->Outputs[val]);
 	
-	printf("%p DEMUX val=%i, ENABLE=%i, %s->NDrivers=%i\n",
-		Ele, val, GetLink(Ele->Inputs[0]), Ele->Outputs[val]->Name, Ele->Outputs[val]->Value->NDrivers);
+//	printf("%p DEMUX val=%i, ENABLE=%i, %s->NDrivers=%i\n",
+//		Ele, val, GetLink(Ele->Inputs[0]), Ele->Outputs[val]->Name, Ele->Outputs[val]->Value->NDrivers);
 }
 
 tElementDef gElement_DEMUX = {
