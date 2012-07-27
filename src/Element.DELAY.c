@@ -89,9 +89,12 @@ static void _Update(tElement *Ele)
 		
 		for( i = 0; i < Ele->NInputs; i ++ )
 		{
-			//printf("DELAY{%i} Cache[%i] = %i\n",
-			//	this->Delay,
-			//	readOfs + i, this->Cache[ readOfs + i ]);
+//			printf("DELAY{%i} Cache[%i] = %i (update [%i] = (%p %s)%i)\n",
+//				this->Delay+1,
+//				readOfs + i, this->Cache[ readOfs + i ],
+//				writeOfs + i,
+//				Ele->Inputs[i], Ele->Inputs[i]->Name, GetLink(Ele->Inputs[i])
+//				);
 			if( this->Cache[ readOfs + i ] )
 				RaiseLink(Ele->Outputs[i]);
 	
