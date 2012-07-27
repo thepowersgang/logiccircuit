@@ -1,8 +1,12 @@
-// Full Adder
-// - Delay of 2
+;
+; Adders
+;
 %ifndef _ADDER_CCT
 %define _ADDER_CCT
 
+;
+; 1-bit full adder
+;
 #defunit ADDER
 #input $val1, $val2, $carry_in
 #output $ret, $carry_out
@@ -12,7 +16,17 @@ $carry_out = OR (AND $val1, $val2), (AND $val1, $carry_in), (AND $val2, $carry_i
 
 #endunit
 
-// TODO: Determine the timings
+#testcase 4 "Full Adder"
+$en = PULSE 1
+$ret, $carry = ADDER $en, $en, $en
+#testassert (DELAY{2} $en) $ret 1
+#testassert (DELAY{2} $en) $carry 1
+#testcomplete (DELAY{2} $en)
+#endtestcase
+
+;
+; 4-bit Carry-Bypass adder
+;
 #defunit ADDER_4BYPASS
 #input $carry_in, @val1[4], @val2[4]
 #output $carry_out, @ret[4]
@@ -34,8 +48,10 @@ $carry_out = AND @p, $carry_in
 
 #endunit
 
-// 4-Bit Ripple-Carry Adder
-// Delay of 11 (4*ADDER + 3)
+;
+; 4-Bit Ripple-Carry Adder
+; Delay of 9 (4*ADDER + 3)
+;
 #defunit ADDER_4BIT_RIPPLE
 #input $enable, @val1[4], @val2[4], $carry_in
 #output $ready, @ret[4], $carry_out
@@ -47,22 +63,38 @@ $carry_out = AND @p, $carry_in
 @_ret[2], @carry[2] = ADDER (DELAY{4} @val1[2], @val2[2]), @carry[1]
 @_ret[3], @carry[3] = ADDER (DELAY{6} @val1[3], @val2[3]), @carry[2]
 
-//#display $enable "actual _ret" @_ret[3:0]
-//#display (DELAY{10} $enable) "delayed _ret" @_ret[3], (DELAY{2} @_ret[2]), (DELAY{4} @_ret[1]), (DELAY{6} @_ret[0])
+@ret[0] = AND (DELAY{8} $enable), (DELAY{6} @_ret[0])
+@ret[1] = AND (DELAY{8} $enable), (DELAY{4} @_ret[1])
+@ret[2] = AND (DELAY{8} $enable), (DELAY{2} @_ret[2])
+@ret[3] = AND (DELAY{8} $enable), @_ret[3]
 
-@ret[0] = AND (DELAY{10} $enable), (DELAY{6} @_ret[0])
-@ret[1] = AND (DELAY{10} $enable), (DELAY{4} @_ret[1])
-@ret[2] = AND (DELAY{10} $enable), (DELAY{2} @_ret[2])
-@ret[3] = AND (DELAY{10} $enable), @_ret[3]
-
-$carry_out = AND (DELAY{10} $enable), @carry[3]
-
-$ready = DELAY{11} $enable
+$carry_out = AND (DELAY{8} $enable), @carry[3]
+$ready = DELAY{9} $enable
 
 #endunit
 
+; NOTE: Test should take ADDER_4BIT_RIPPLE + 2 = 11
+#testcase 12 "Adder 4 Ripple - 15+15+1"
+#array ret 4
+$en = PULSE 1
+$done, @ret, $carry = ADDER_4BIT_RIPPLE (DELAY $en), (AND{4+4+1} $en, 15[0:3], 15[0:3], 1)
+#testassert $done @ret[3:0] 15[3:0]
+#testassert $done $carry 1
+#testcomplete $done
+#endtestcase
 
-// Unit Carry-Lookahead Adder
+#testcase 12 "Adder 4 Ripple - 10+4+0"
+#array ret 4
+$en = PULSE 1
+$done, @ret, $carry = ADDER_4BIT_RIPPLE (DELAY $en), (AND{4+4+1} $en, 10[0:3], 4[0:3], 0)
+#testassert $done @ret[3:0] 14[3:0]
+#testassert $done $carry 0
+#testcomplete $done
+#endtestcase
+
+;
+; One bit carry-lookahead adder
+;
 #defunit ADDER_CL
 #input $a, $b, $c	; A, B, Carry In
 #output $s, $p, $g	; Sum, Propogate, Generate
@@ -78,6 +110,7 @@ $g = AND $b, $c
 
 // 4-Bit Carry-Lookahead Adder
 // Delay of ??
+// NOTE: Incomplete
 #defunit ADDER_4BIT_CL
 #input $enable, @val1[4], @val2[4], $carry_in
 #output $ready, @ret[4], $carry_out
@@ -148,4 +181,15 @@ $ready = DELAY{2} $ready_first
 
 #endunit
 
+
+#testcase 20 "Adder CS 32"
+#array ret 32
+$done, @ret, $carry = ADDER_32BIT 1, 0x12345678[0:31], 0xF0EDCBA0[0:31], 1
+#testassert $done @ret[31:0] 0x03222219[31:0]	// (0x12345678 + 0xF0EDCBA0 + 1) % 2**32
+#testassert $done $carry 1
+#testcomplete $done
+#endtestcase
+
 %endif
+
+; vim: ft=logiccircuit
