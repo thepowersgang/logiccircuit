@@ -128,6 +128,68 @@ int Unit_AddGroupOutput(const char *Name, int Size)
 int Unit_CloseUnit(void)
 {
 	if(!gpCurUnit)	return -1;
+
+	// Reduce all links to at most 1 level deep
+	for(tLink *link = gpCurUnit->Links; link; link = link->Next)
+	{
+		while(link->Link && link->Link->Link)
+			link->Link = link->Link->Link;
+		if(link->Link)
+		{
+			// Join values
+			LinkValue_Ref(link->Link->Value);
+			LinkValue_Deref(link->Value);
+			link->Value = link->Link->Value;
+		}
+		
+		link->Backlink = NULL;
+	}
+
+	void _merge(tLink **Links, int Count)
+	{
+		for( int i = 0; i < Count; i ++ )
+		{
+			if(Links[i]->Link)
+				Links[i] = Links[i]->Link;
+			Links[i]->Backlink = (void*)1;
+		}
+	}
+
+	// Reduce to a single layer
+	for(tElement *ele = gpCurUnit->Elements; ele; ele = ele->Next)
+	{
+		_merge(ele->Inputs,  ele->NInputs);
+		_merge(ele->Outputs, ele->NOutputs);
+	}
+	for( tDisplayItem *disp = gpCurUnit->DisplayItems; disp; disp = disp->Next )
+	{
+		_merge(disp->Condition.Items, disp->Condition.NItems);
+		_merge(disp->Values.Items, disp->Values.NItems);
+	}
+	for( tBreakpoint *bp = gpCurUnit->Breakpoints; bp; bp = bp->Next )
+	{
+		_merge(bp->Condition.Items, bp->Condition.NItems);
+	}
+
+	// Remove any unused links
+	 int	nTrimmed = 0;
+	for(tLink *link = gpCurUnit->Links, *prev = (void*)&gpCurUnit->Links; link; )
+	{
+		if( link->Backlink )
+		{
+			link->Backlink = NULL;
+			prev = link;
+			link = link->Next;
+			continue ;
+		}
+		
+		prev->Next = link->Next;
+		free(link);
+		link = prev->Next;
+		nTrimmed ++;
+	}
+	printf("Trimmed %i links in close of '%s'\n", nTrimmed, gpCurUnit->Name);
+
 	gpCurUnit = NULL;
 	return 0;
 }
@@ -277,9 +339,8 @@ tDisplayItem *AddDisplayItem(const char *Name, const tList *Condition, const tLi
 	
 	if( gpCurUnit )
 		listHead = &gpCurUnit->DisplayItems;
-	else if( gpCurTest ) {
-		return NULL;
-	}
+	else if( gpCurTest )
+		listHead = &gpCurTest->DisplayItems;
 	else
 		listHead = &gpDisplayItems;
 	
@@ -426,7 +487,7 @@ tLink *CreateAnonLink(void)
 	ret->Value = LinkValue_Create();
 	ret->Link = NULL;
 	ret->ReferenceCount = 1;
-
+	ret->Backlink = NULL;
 
 	if( gpCurUnit )
 		first = &gpCurUnit->Links;
@@ -498,13 +559,12 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 	tLink	**linkhead;
 	
 	tLink	*link, *newLink;
-	tElement	*ele;
 	tDisplayItem	*dispItem;
 	tBreakpoint	*bp;
 	tList	*ret;
-	 int	prefixLen = snprintf(NULL, 0, "%s#%i#", Unit->Name, Unit->InstanceCount);
-	char	namePrefix[prefixLen+1];
 	 int	i;
+
+	printf("Importing %s\n", Unit->Name);
 	
 	// Check input counts
 	if( Inputs->NItems != Unit->Inputs.NItems ) {
@@ -528,13 +588,14 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 	}
 
 	// Create the prefix to add to the name
+	 int	prefixLen = snprintf(NULL, 0, "%s#%i", Unit->Name, Unit->InstanceCount);
+	char	namePrefix[prefixLen+1];
 	snprintf(namePrefix, prefixLen+1, "%s#%i", Unit->Name, Unit->InstanceCount);
 	Unit->InstanceCount ++;
 	
 	// Create duplicates of all links (renamed)
 	for( link = Unit->Links; link; link = link->Next )
 	{
-		tLink	*def, *prev = NULL;
 		 int	len = 0;
 		 int	bPrefix = 1;
 		
@@ -561,10 +622,11 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 		link->Backlink = newLink;	// Set a back link to speed up remapping inputs
 		
 		// Append to the current list
-		def = *linkhead;
-		for( ; def; prev = def, def = def->Next )
+		tLink	*prev = NULL;
+		for( tLink *def = *linkhead; def; prev = def, def = def->Next )
 		{
-			if(strcmp(newLink->Name, def->Name) < 0)	break;
+			if(strcmp(newLink->Name, def->Name) < 0)
+				break;
 		}
 		if(prev) {
 			newLink->Next = prev->Next;
@@ -574,18 +636,24 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 			newLink->Next = *linkhead;
 			*linkhead = newLink;
 		}
+		
+//		if( bPrefix ) {
+//			printf("Duplicated %p %s as %p %s\n", link, link->Name, newLink, newLink->Name);
+//		}
 	}
 	
 	// Re-resolve links
 	for( link = Unit->Links; link; link = link->Next )
 	{
 		if( link->Link ) {
+			tLink	*newlink = link->Backlink;
+			tLink	*target = link->Link->Backlink;
 			// Set new links's ->Link field
-			link->Backlink->Link = link->Link->Backlink;
-			// And merge the two value
-			LinkValue_Ref(link->Link->Backlink->Value);
-			LinkValue_Deref(link->Backlink->Value);
-			link->Backlink->Value = link->Link->Backlink->Value;
+			newlink->Link = target;
+			// And merge the two values
+			LinkValue_Ref(target->Value);
+			LinkValue_Deref(newlink->Value);
+			newlink->Value = target->Value;
 		}
 	}
 	
@@ -641,36 +709,45 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 	}
 	
 	// Duplicate elements and replace links
-	for( ele = Unit->Elements; ele; ele = ele->Next )
+	for( tElement *ele = Unit->Elements; ele; ele = ele->Next )
 	{
-		tElement	*newele;
-		
+		tElement	*newele;		
+
 		newele = ele->Type->Duplicate( ele );
 		if(!newele) {
 			fprintf(stderr, "Error in creating copy of %s", ele->Type->Name);
 			return NULL;
 		}
+		if(ele->NInputs > 2) {
+			printf("Duplicated '%s' %p -> %p\n", ele->Type->Name, ele, newele);
+		}
+
 		for( i = 0; i < ele->NInputs; i ++ ) {
-			if( ele->Inputs[i]->Backlink )
+			if( ele->Inputs[i]->Backlink ) {
+				if( ele->NInputs > 2 )
+					printf("IN  %p %s -> %p %s\n",
+						ele->Inputs[i], ele->Inputs[i]->Name,
+						ele->Inputs[i]->Backlink, ele->Inputs[i]->Backlink->Name
+						);
 				newele->Inputs[i] = ele->Inputs[i]->Backlink;
+			}
 			else
 				newele->Inputs[i] = ele->Inputs[i];
-			#if USE_LINKS
-			if( newele->Inputs[i]->Link ) {
-				//printf("linked input %i to %p\n", i, newele->Inputs[i]->Link);
-				newele->Inputs[i] = newele->Inputs[i]->Link;
-			}
-			#endif
 		}
 		for( i = 0; i < ele->NOutputs; i ++ ) {
-			if( newele->Outputs[i]->Backlink )
+			if( ele->Outputs[i]->Backlink ) {
+				if( ele->NInputs > 2)
+					printf("OUT %p %s -> %p %s\n",
+						ele->Outputs[i], ele->Outputs[i]->Name,
+						ele->Outputs[i]->Backlink, ele->Outputs[i]->Backlink->Name
+						);
 				newele->Outputs[i] = ele->Outputs[i]->Backlink;
-			else
+			}
+			else {
+				printf("No backlink on %s output %i %p (%s)\n",
+					ele->Type->Name, i, ele->Outputs[i], ele->Outputs[i]->Name);
 				newele->Outputs[i] = ele->Outputs[i];
-			#if USE_LINKS
-			if( newele->Outputs[i]->Link )
-				newele->Outputs[i] = newele->Outputs[i]->Link;
-			#endif
+			}
 		}
 		
 		newele->Next = *listhead;
@@ -680,9 +757,15 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 	// Create output return
 	ret = malloc( sizeof(tList) + Unit->Outputs.NItems * sizeof(tLink*) );
 	ret->NItems = Unit->Outputs.NItems;
-	ret->Items = (void *)( (intptr_t)ret + sizeof(tList) );
+	ret->Items = (void *)( ret + 1 );
 	for( i = 0; i < Unit->Outputs.NItems; i ++ )
 		ret->Items[i] = Unit->Outputs.Items[i]->Backlink;
+	
+	// Clean up after ourselves
+	for( link = Unit->Links; link; link = link->Next )
+	{
+		link->Backlink = NULL;
+	}
 	
 	return ret;	
 }

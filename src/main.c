@@ -30,7 +30,7 @@ extern void	LinkValue_Deref(tLinkValue *Value);
 
 // === PROTOTYPES ===
 void	RunSimulationStep(tTestCase *Root);
-void	ShowDisplayItems(void);
+void	ShowDisplayItems(tDisplayItem *First);
 void	ReadCommand(int MaxCmd, char *Command, int MaxArg, char *Argument);
 void	SigINT_Handler(int Signum);
 void	PrintDisplayItem(tDisplayItem *dispItem);
@@ -108,7 +108,7 @@ int main(int argc, char *argv[])
 	for( tTestCase *test = gpTests; test; test = test->Next )
 	{
 		ResolveLinks(test->Links);
-		ResolveEleLinks(test->Elements);
+//		ResolveEleLinks(test->Elements);
 	}
 	
 	// Print links
@@ -206,7 +206,7 @@ int main(int argc, char *argv[])
 			while( steps_elapsed != test->MaxLength && !bFailure )
 			{
 				RunSimulationStep(test);
-			//	ShowDisplayItems();
+				ShowDisplayItems(test->DisplayItems);
 				steps_elapsed ++;
 			
 				 int	assertion_num = 0;	
@@ -292,7 +292,7 @@ int main(int argc, char *argv[])
 		}
 		printf("---- %6i ----\n", timestamp);
 		
-		ShowDisplayItems();
+		ShowDisplayItems(gpDisplayItems);
 	
 		// Check breakpoints
 		breakPointFired = 0;
@@ -435,7 +435,7 @@ void RunSimulationStep(tTestCase *Root)
 		}
 	}
 	
-	for( tLink *link = gpLinks; link; link = link->Next )
+	for( tLink *link = *links; link; link = link->Next )
 	{
 		ASSERT(link != link->Next);
 		link->Value->NDrivers = 0;
@@ -451,16 +451,13 @@ void RunSimulationStep(tTestCase *Root)
 			link->Value->Value = 0;
 			link->Value->NDrivers = 0;
 		}
-//		if( link->Name[0] ) {
-//			printf("%s %p = %i\n", link->Name, link->Value, link->Value->Value);
-//		}
 	}
 }
 
-void ShowDisplayItems(void)
+void ShowDisplayItems(tDisplayItem *First)
 {
 	 int	i;
-	for( tDisplayItem *dispItem = gpDisplayItems; dispItem; dispItem = dispItem->Next )
+	for( tDisplayItem *dispItem = First; dispItem; dispItem = dispItem->Next )
 	{
 		ASSERT(dispItem != dispItem->Next);
 		// Check condition (if one condition line is high, the item is displayed)
@@ -645,6 +642,11 @@ void CompressLinks(void)
 			_compactList(&a->Values);
 			_compactList(&a->Expected);
 		}
+		for( tDisplayItem *disp = test->DisplayItems; disp; disp = disp->Next )
+		{
+			_compactList(&disp->Condition);
+			_compactList(&disp->Values);
+		}
 	}
 	
 	// Find and free unused
@@ -674,6 +676,11 @@ void CompressLinks(void)
 			_markList(&a->Condition);
 			_markList(&a->Values);
 			_markList(&a->Expected);
+		}
+		for( tDisplayItem *disp = test->DisplayItems; disp; disp = disp->Next )
+		{
+			_markList(&disp->Condition);
+			_markList(&disp->Values);
 		}
 	}
 	

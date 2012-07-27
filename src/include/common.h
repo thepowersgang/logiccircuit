@@ -51,6 +51,7 @@ typedef struct sTestCase
 	tLink	*Links;
 	struct sGroupDef	*Groups;
 	struct sElement	*Elements;
+	tDisplayItem	*DisplayItems;
 
 	tAssertion	*Assertions;
 	

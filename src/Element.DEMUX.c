@@ -42,7 +42,10 @@ static tElement *_Duplicate(tElement *Source)
 {
 	 int	size = sizeof(t_element) + (Source->NOutputs+Source->NInputs)*sizeof(tLink*);
 	t_element *ret = malloc( size );
-	memcpy(ret, Source, size);
+	memcpy(ret, Source, sizeof(t_element));
+	ret->Ele.Inputs = &ret->_links[0];
+	ret->Ele.Outputs = &ret->_links[ret->Ele.NInputs];
+	
 	return &ret->Ele;
 }
 
@@ -61,8 +64,8 @@ static void _Update(tElement *Ele)
 	if( GetLink(Ele->Inputs[0]) )
 		RaiseLink(Ele->Outputs[val]);
 	
-	//printf("DEMUX val=%i, ENABLE=%i, %s->NDrivers=%i\n",
-	//	val, GetLink(Ele->Inputs[0]), Ele->Outputs[val]->Name, Ele->Outputs[val]->Value->NDrivers);
+	printf("%p DEMUX val=%i, ENABLE=%i, %s->NDrivers=%i\n",
+		Ele, val, GetLink(Ele->Inputs[0]), Ele->Outputs[val]->Name, Ele->Outputs[val]->Value->NDrivers);
 }
 
 tElementDef gElement_DEMUX = {
