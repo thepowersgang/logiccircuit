@@ -7,7 +7,7 @@
 ;#endtestfixure
 
 ; ---------------------------------------------------------------------
-#testcase 100 "Decode - R10, R11"
+#testcase 20 "Decode - R10, R11"
 
 #array dest_addr 32
 #array op1 32
@@ -46,7 +46,7 @@ $done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
 #endtestcase
 
 ; ---------------------------------------------------------------------
-#testcase 100 "Decode - R10, Imm20"
+#testcase 20 "Decode - R10, Imm20"
 #array dest_addr 32
 #array op1 32
 #array op2 32
@@ -82,7 +82,7 @@ $done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
 ; ---------------------------------------------------------------------
 ; Tests Imm16 decode
 ; - Also uses $read_r = 0 to make test simpler
-#testcase 100 "Decode - R-, Imm16 << 5"
+#testcase 20 "Decode - R-, Imm16 << 5"
 #array dest_addr 32
 #array op1 32
 #array op2 32
@@ -111,7 +111,7 @@ $done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
 ; ---------------------------------------------------------------------
 ; Tests Imm16s decode
 ; - Also uses $read_r = 0 to make test simpler
-#testcase 100 "Decode - R-, Imm16s << 12"
+#testcase 20 "Decode - R-, Imm16s << 12"
 #array dest_addr 32
 #array op1 32
 #array op2 32

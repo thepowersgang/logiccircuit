@@ -141,16 +141,18 @@ $_mem8_shift_done, @_mem8_reg_shifted, $NULL = SHIFT_LEFT_N_32 (DELAY{3} $_mem8_
 $_mem_add_start = PULSE $_mem8_shift_done
 $addr_ready = AND $is_M8, (NOT $is_M8_stg1), $_mem_add_done
 ; === Common Adder for Memory ===
-#display $_mem_add_start "add 0x%32x and 0x%32x" @_mem_add_op1[31:0], @_mem_add_op2[31:0]
+//#display $_mem_add_start "add 0x%32x and 0x%32x" @_mem_add_op1[31:0], @_mem_add_op2[31:0]
 $_mem_add_done, @int_addr, $NULL = ADDER_32BIT $_mem_add_start, @_mem_add_op1, @_mem_add_op2, 0
-#display $_mem_add_done "add gave 0x%32x" @int_addr[31:0]
+//#display $_mem_add_done "add gave 0x%32x" @int_addr[31:0]
 
 ; === Memory Load ===
+@dest_addr = AND{32} $addr_ready, $is_mem_dest, @int_addr
 $mem_enable = DELAY $addr_ready
 @mem_addr = AND{32} $addr_ready, @int_addr
-@op_2 = AND{32} $addr_ready, $mem_ready, @mem_data_in
-$op_2_read_set = AND $addr_ready, $mem_ready
-@dest_addr = AND{32} $is_mem_dest, @int_addr
+@op_2 = AND{32} $is_M8, $mem_ready, @mem_data_in
+@op_2 = AND{32} $is_M16, $mem_ready, @mem_data_in
+$op_2_read_set = PULSE $mem_ready
+//#display $op_2_read_set "op_2 value" @op_2
 
 ; === Skip Op2? ===
 $op_2_read = AND $pulse, (NOT $read_m)
