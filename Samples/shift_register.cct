@@ -82,7 +82,7 @@ $ready = DELAY{1} $pulse
 
 
 ;
-; Templated left rotate unit
+; Templated left rotate unit (variable count)
 ;
 %macro def_rotate_left_n 2
 #defunit ROTATE_LEFT_N_ %+ %1
@@ -93,6 +93,9 @@ $ready = DELAY{1} $pulse
 
 $ready = DELAY{2} $pulse
 @count_enable = DEMUX{%2} $pulse, @count
+//#display $pulse "count" @count
+//#display $pulse "count_enable %6i (pulse = %1i)" %1[5:0],$pulse,@count_enable
+//#display $ready "value_out" @value_out
 %assign i 0
 %rep %1
   %assign j 0
