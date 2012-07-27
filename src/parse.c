@@ -327,7 +327,6 @@ int ParseValue(tParser *Parser, tList *destList)
 		tmplist = ParseOperation(Parser);
 		AppendList(destList, tmplist);
 		List_Free(tmplist);
-		free(tmplist);
 		SyntaxAssert(Parser, GetToken(Parser), TOK_PAREN_CLOSE);
 		}
 		break;
@@ -353,8 +352,10 @@ void *ParseOperation(tParser *Parser)
 	// Check for a constant value
 	if( ParseValue(Parser, &inputs) == 0 )
 	{
-		tList *ret = calloc(1, sizeof(tList));
-		AppendList(ret, &inputs);
+		tList *ret = calloc(1, sizeof(tList)+sizeof(tLink*)*inputs.NItems);
+		ret->Items = (void*)(ret + 1);
+		ret->NItems = inputs.NItems;
+		memcpy(ret->Items, inputs.Items, sizeof(tLink*)*inputs.NItems);
 		free(inputs.Items);
 		return ret;
 	}
@@ -686,7 +687,6 @@ int ParseLine(tParser *Parser)
 	
 	// Clean up
 	List_Free(outputs);
-	free(outputs);
 	free(destArray.Items);
 	
 	return 0;
