@@ -124,5 +124,9 @@ extern int	MergeLinks(tList *Dest, tList *Src);
  */
 extern tList	*CreateUnit(const char *Name, int NParams, int *Params, tList *Inputs);
 
+
+extern void	LinkValue_Ref(tLinkValue *Value);
+extern void	LinkValue_Deref(tLinkValue *Value);
+
 #endif
 

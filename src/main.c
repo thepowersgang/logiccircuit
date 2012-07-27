@@ -18,8 +18,6 @@ extern tDisplayItem	*gpDisplayItems;
 extern tTestCase	*gpTests;
 
 extern int ParseFile(const char *Filename);
-extern void	LinkValue_Ref(tLinkValue *Value);
-extern void	LinkValue_Deref(tLinkValue *Value);
 
 // === MACRO! ===
 #define ADD_ELEDEF(name)	do {\
@@ -242,6 +240,9 @@ int main(int argc, char *argv[])
 			}
 			if( bFailure == 1 ) {
 				printf("\nTest '%s' failed in %i steps\n", test->Name, steps_elapsed);
+			}
+			else if( steps_elapsed == test->MaxLength ) {
+				printf("Timed out in %i\n", steps_elapsed);
 			}
 			else {
 				printf("Passed in %i\n", steps_elapsed);

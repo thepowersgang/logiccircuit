@@ -296,6 +296,71 @@ int Test_AddCompletion(const tList *Condition)
 int Test_CloseTest(void)
 {
 	if(!gpCurTest)	return -1;
+
+	// Reduce all links to at most 1 level deep
+	for(tLink *link = gpCurTest->Links; link; link = link->Next)
+	{
+		while(link->Link && link->Link->Link)
+			link->Link = link->Link->Link;
+		if(link->Link)
+		{
+			// Join values
+			LinkValue_Ref(link->Link->Value);
+			LinkValue_Deref(link->Value);
+			link->Value = link->Link->Value;
+		}
+		
+		link->Backlink = NULL;
+	}
+
+	void _merge(tLink **Links, int Count)
+	{
+		for( int i = 0; i < Count; i ++ )
+		{
+			if(Links[i]->Link)
+				Links[i] = Links[i]->Link;
+			Links[i]->Backlink = (void*)1;
+		}
+	}
+
+	// Reduce to a single layer
+	for(tElement *ele = gpCurTest->Elements; ele; ele = ele->Next)
+	{
+		_merge(ele->Inputs,  ele->NInputs);
+		_merge(ele->Outputs, ele->NOutputs);
+	}
+	for( tDisplayItem *disp = gpCurTest->DisplayItems; disp; disp = disp->Next )
+	{
+		_merge(disp->Condition.Items, disp->Condition.NItems);
+		_merge(disp->Values.Items, disp->Values.NItems);
+	}
+	for( tAssertion *a = gpCurTest->Assertions; a; a = a->Next )
+	{
+		_merge(a->Condition.Items, a->Condition.NItems);
+		_merge(a->Values.Items, a->Values.NItems);
+		_merge(a->Expected.Items, a->Expected.NItems);
+	}
+	_merge(&gpCurTest->CompletionCondition, 1);
+
+	// Remove any unused links
+	 int	nTrimmed = 0;
+	for(tLink *link = gpCurTest->Links, *prev = (void*)&gpCurTest->Links; link; )
+	{
+		if( link->Backlink )
+		{
+			link->Backlink = NULL;
+			prev = link;
+			link = link->Next;
+			continue ;
+		}
+		
+		prev->Next = link->Next;
+		free(link);
+		link = prev->Next;
+		nTrimmed ++;
+	}
+	printf("Trimmed %i links in close of test '%s'\n", nTrimmed, gpCurTest->Name);
+
 	gpCurTest = NULL;
 	return 0;
 }
