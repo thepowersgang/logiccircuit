@@ -130,7 +130,7 @@ $_mem8_add1_done = AND $is_M8, $is_M8_stg1, $_mem_add_done
 $is_M8_stg1_clear = $_mem8_add1_done
 ; - Stage 2: rotate index
 $reg_enable = DELAY $_mem8_add1_done
-@reg_addr = AND{4} $_mem8_add1_done, @instr[15:12]
+@reg_addr[3:0] = AND{4} $_mem8_add1_done, @instr[15:12]
 $_mem8_shift_done, @_mem8_reg_shifted, $NULL = SHIFT_LEFT_N_32 (DELAY{3} $_mem8_add1_done), \
 	@instr[8:11],0, \
 	@reg_data_in, \

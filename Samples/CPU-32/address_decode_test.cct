@@ -8,7 +8,6 @@
 
 ; ---------------------------------------------------------------------
 #testcase 20 "Decode - R10, R11"
-
 #array dest_addr 32
 #array op1 32
 #array op2 32
@@ -175,4 +174,43 @@ $done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
 
 #endtestcase
 
+; ---------------------------------------------------------------------
+; Tests [r + ri<<s +imm8s] decode
+; - Also uses $read_r = 0 to make test simpler
+#testcase 100 "Decode - R-, [R15 + R14 << 4 + imm8s]"
+#array dest_addr 32
+#array op1 32
+#array op2 32
+#array _ra 4
+#array _rd 32
+#array _ma 32
+#array _md 32
+
+; Registers
+; - R15 = 0x00FF0000
+$_rr = DELAY{2} $_re
+@_rd[31:0] = AND{32} (DELAY $_re), (NOT   @_ra[0]), 0x000050[31:0]	; R14
+@_rd[31:0] = AND{32} (DELAY $_re), (DELAY @_ra[0]), 0xFF1000[31:0]	; R15
+#display $_re "@_ra" @_ra
+#testassert $_re @_ra[3:1] 15[3:1]
+; Memory
+; 0xFF1000 + 0x000500 + 0xFFFFFFFC
+; = 0x00FF14FC
+$_mr = DELAY $_me
+@_md[31:0] = AND{32} $_me, 0xF0E1D2C3[31:0]
+#display $_me "@_ma" @_ma
+#testassert $_me @_ma[31:0] 0x00FF14FC[31:0]
+
+$done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
+	(DELAY 1), 0, 0, 1, 0xF50FE4FC[0:31], \
+	$_re, @_ra, $_rr, @_rd, \
+	$_me, @_ma, $_mr, @_md
+
+; Final output
+#testassert $done  $imd 0
+#testassert $done  @dest_addr[31:0] 0[31:0]
+#testassert $done  @op2[31:0] 0xF0E1D2C3[31:0]
+#testcomplete $done
+
+#endtestcase
 ; vim: ft=logiccircuit
