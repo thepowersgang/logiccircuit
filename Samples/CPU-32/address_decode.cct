@@ -38,7 +38,10 @@ $int_addr_clear = PULSE $trigger
 
 $pulse = PULSE $_enable
 
-$NULL, $_enable = LATCH 1, $rdy_clear, $trigger
+#display $pulse "$pulse = %1i, $_enable = %1i" $pulse, $_enable
+#display $rdy_clear "$rdy_clear = %1i" $rdy_clear
+
+$NULL, $_enable = LATCH 1, $rdy_clear, (DELAY $trigger)
 $NULL, @dest_addr = LATCH{32} 1, $_pulse, @dest_addr
 $NULL, @op_1 = LATCH{32} 1, $op_clear, @op_1
 $NULL, @op_2 = LATCH{32} 1, $op_clear, @op_2
@@ -98,15 +101,16 @@ $reading_M16 = AND $pulse, $read_m, $is_op_RM16
 $reading_M16 = AND $pulse, $read_m, $is_op_M16R
 ; - Prepare add
 $reg_enable = DELAY $reading_M16
-@reg_addr = AND{4} $reading_M16, @instr[19:16]
-@_mem_add_op1 = AND{32} (DELAY{3} $reading_M16), @reg_data_in
-@_mem_add_op2[31:0] = AND{32} (DELAY{3} $reading_M16), \
+@reg_addr[3:0] = AND{4} $reading_M16, @instr[19:16]
+$m16_add_ready = AND $_enable, $is_M16, $reg_ready, (NOT $reading_op1)
+@_mem_add_op1 = AND{32} $m16_add_ready, (DELAY @reg_data_in)
+@_mem_add_op2[31:0] = AND{32} $m16_add_ready, \
 	@instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], \
 	@instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], @instr[15], \
 	@instr[15:0]
-$_mem_add_start = DELAY{4} $reading_M16
+$_mem_add_start = DELAY $m16_add_ready
 ; - Add is done, trigger the read
-$addr_ready = AND $is_M16, $_mem_add_done
+$addr_ready = AND $_enable, $is_M16, $_mem_add_done
 ; === RM8 / M8R ===
 $is_M8 = OR $is_op_RM8, $is_op_M8R
 $reading_M8 = AND $pulse, $read_m, $is_op_RM8
@@ -128,7 +132,7 @@ $is_M8_stg1_clear = $_mem8_add1_done
 $reg_enable = DELAY $_mem8_add1_done
 @reg_addr = AND{4} $_mem8_add1_done, @instr[15:12]
 $_mem8_shift_done, @_mem8_reg_shifted, $NULL = SHIFT_LEFT_N_32 (DELAY{3} $_mem8_add1_done), \
-	0, @instr[11:8], \
+	@instr[8:11],0, \
 	@reg_data_in, \
 	0
 ; - Stage 3: add above two
@@ -137,9 +141,12 @@ $_mem8_shift_done, @_mem8_reg_shifted, $NULL = SHIFT_LEFT_N_32 (DELAY{3} $_mem8_
 $_mem_add_start = PULSE $_mem8_shift_done
 $addr_ready = AND $is_M8, (NOT $is_M8_stg1), $_mem_add_done
 ; === Common Adder for Memory ===
+#display $_mem_add_start "add 0x%32x and 0x%32x" @_mem_add_op1[31:0], @_mem_add_op2[31:0]
 $_mem_add_done, @int_addr, $NULL = ADDER_32BIT $_mem_add_start, @_mem_add_op1, @_mem_add_op2, 0
+#display $_mem_add_done "add gave 0x%32x" @int_addr[31:0]
 
 ; === Memory Load ===
+$mem_enable = DELAY $addr_ready
 @mem_addr = AND{32} $addr_ready, @int_addr
 @op_2 = AND{32} $addr_ready, $mem_ready, @mem_data_in
 $op_2_read_set = AND $addr_ready, $mem_ready

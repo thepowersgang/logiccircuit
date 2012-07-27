@@ -57,3 +57,5 @@ $ret = AND $_ready, $value
 $ready = DELAY $_ready
 
 #endunit
+
+; vim: ft=logiccircuit
