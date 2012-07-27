@@ -82,6 +82,7 @@ $op_2_read_set = DELAY $reading_Ri20
 @op_2[19:0] = AND{20} $reading_Ri20, @instr[19:0]
 
 ; Ri16 / Rs16
+; - This uses that 4 bits of rotate on a 16-bit value can't wrap in a 32-bit container
 $reading_Ri16 = AND $pulse, $read_m, $is_op_Ri16
 $reading_Ri16 = AND $pulse, $read_m, $is_op_Rs16
 $_Ri16_sign = AND $is_op_Rs16, @instr[15]
