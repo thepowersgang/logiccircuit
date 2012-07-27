@@ -86,6 +86,8 @@ int main(int argc, char *argv[])
 				gbPrintStats = 1;
 			else if( strcmp(argv[i], "-test") == 0 )
 				gbRunTests = 1;
+			else if( strcmp(argv[i], "-testdbg") == 0 )
+				gbTest_ShowDisplay = 1;
 			else if( strcmp(argv[i], "-count") == 0 ) {
 				if(i + 1 == argc)	return -1;
 				giSimulationSteps = atoi(argv[++i]);
@@ -461,6 +463,7 @@ void RunSimulationStep(tTestCase *Root)
 void ShowDisplayItems(tDisplayItem *First)
 {
 	 int	i;
+	 int	bHasDisplayed = 0;
 	for( tDisplayItem *dispItem = First; dispItem; dispItem = dispItem->Next )
 	{
 		ASSERT(dispItem != dispItem->Next);
@@ -475,7 +478,12 @@ void ShowDisplayItems(tDisplayItem *First)
 			}
 		}
 		if( i == dispItem->Condition.NItems )	continue;
-		
+
+		if( !bHasDisplayed ) {
+			printf("-----\n");
+			bHasDisplayed = 1;
+		}
+
 		PrintDisplayItem(dispItem);
 	}
 }
@@ -555,6 +563,8 @@ void PrintDisplayItem(tDisplayItem *DispItem)
 			tmpCount = count % BITS_PER_BLOCK;
 			do
 			{
+				if( tmpCount == 0 )
+					tmpCount = BITS_PER_BLOCK;
 				val = 0;
 				for( i = 0; i < tmpCount && lineNum < DispItem->Values.NItems; i ++)
 				{
@@ -570,7 +580,7 @@ void PrintDisplayItem(tDisplayItem *DispItem)
 					printf("%0*x", (i+3)/4, val);
 					break;
 				case 'i':
-					printf("%i ", val);
+					printf("%i", val);
 					break;
 				case 'b':
 				default:
