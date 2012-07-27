@@ -1,4 +1,3 @@
-//<?php
 // Shift Unit - 8-bit
 #defunit SHIFT_UNIT_8
 #input $pulse, $dir_is_right, @value[8], $carry_in
@@ -17,6 +16,9 @@ $carry_out = DELAY{2} @value[7]
 #endunit
 
 
+//
+// Variable distance 8-bit shifter
+//
 #defunit SHIFT_LEFT_N_8
 #input $pulse, @count[3], @value[8], $carry_in
 #output $ready, @value_out[8], $carry_out
@@ -50,7 +52,7 @@ $carry_out = DELAY{2} @value[7]
 %rep %1
  %assign j i
  %rep %1-i
-@value[i] = AND (DELAY $pulse), @count_enable[j], (DELAY @value[j])
+@value_out[i] = AND (DELAY $pulse), @count_enable[j], (DELAY @value[j])
  %assign j j+1
  %endrep
 %assign i i+1
@@ -59,6 +61,29 @@ $carry_out = DELAY{2} @value[7]
 #endunit
 %endmacro
 
+;
+; Templated left rotate unit
+;
+%macro def_rotate_left_1 2
+#defunit ROTATE_LEFT_1_ %+ %1
+#input $pulse, @value[%1]
+#output $ready, @value_out[%1]
+
+$ready = DELAY{1} $pulse
+%assign i 0
+%rep %1
+  %assign k ((i+1) % %1)
+  @value_out[i] = DELAY  @value[k]
+%assign i i+1
+%endrep
+
+#endunit
+%endmacro
+
+
+;
+; Templated left rotate unit
+;
 %macro def_rotate_left_n 2
 #defunit ROTATE_LEFT_N_ %+ %1
 #input $pulse, @count[%2], @value[%1]
@@ -68,12 +93,15 @@ $carry_out = DELAY{2} @value[7]
 
 $ready = DELAY{2} $pulse
 @count_enable = DEMUX{%2} $pulse, @count
+#display 1 "count" @count
+#display 1 "count_enable %6i (pulse = %1i)" %1[5:0],$pulse,@count_enable
 %assign i 0
 %rep %1
   %assign j 0
   %rep %1
-    %assign k (i+j) % %1
-    @value[i] = AND @count_enable[j], (DELAY  @value[k])
+    %assign k ((i+j) % %1)
+    %assign l ((%1 - j) % %1)
+    @value_out[i] = AND @count_enable[l], (DELAY  @value[k])
   %assign j j+1
   %endrep
 %assign i i+1
@@ -82,10 +110,24 @@ $ready = DELAY{2} $pulse
 #endunit
 %endmacro
 
-
 def_shift_left_n 16, 4
 def_shift_left_n 32, 5
 def_rotate_left_n 16, 4
 def_rotate_left_n 32, 5
+
+#testcase 10 "Rotate Left 32 - None"
+#array _out 32
+$rdy, @_out = ROTATE_LEFT_N_32 (DELAY 1), 0[4:0], 0x01234567[0:31]
+#testassert $rdy @_out[31:0] 0x01234567[31:0]
+#testcomplete $rdy
+#endtestcase
+
+#testcase 10 "Rotate Left 32 - 28"
+#array _out 32
+$rdy, @_out = ROTATE_LEFT_N_32 (DELAY 1), 4[0:4], 0x01234567[0:31]
+#testassert $rdy @_out[31:0] 0x12345670[31:0]
+#testcomplete $rdy
+#endtestcase
+
 
 ; vim: ft=logiccircuit
