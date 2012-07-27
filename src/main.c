@@ -199,12 +199,12 @@ int main(int argc, char *argv[])
 	
 	if( gbRunTests )
 	{
-		printf("Running tests...\n");
+		printf("=== Running tests ===\n");
 		for( tTestCase *test = gpTests; test; test = test->Next )
 		{
 			 int	steps_elapsed = 0;
 			 int	bFailure = 0;
-			printf("Test '%s'... ", test->Name);
+			printf("Test '%s'...\n", test->Name);
 			while( steps_elapsed != test->MaxLength && !bFailure )
 			{
 				RunSimulationStep(test);
@@ -230,13 +230,14 @@ int main(int argc, char *argv[])
 						continue ;
 					
 					// Failed
-					printf("\n - Assertion %i failed", assertion_num+1);
-					printf("\n  if ");
+					printf(" - Assertion %i failed\n", assertion_num+1);
+					printf("  if ");
 					DumpList(&a->Condition, 1);
 					printf("assert actual ");
 					DumpList(&a->Values, 0);
 					printf(" == expected ");
 					DumpList(&a->Expected, 0);
+					printf("\n");
 					bFailure = 1;
 				}
 				
@@ -244,13 +245,13 @@ int main(int argc, char *argv[])
 					break;
 			}
 			if( bFailure == 1 ) {
-				printf("\nTest '%s' failed in %i steps\n", test->Name, steps_elapsed);
+				printf("- Test '%s' failed in %i steps\n", test->Name, steps_elapsed);
 			}
 			else if( steps_elapsed == test->MaxLength ) {
-				printf("Timed out in %i\n", steps_elapsed);
+				printf("- TIMED OUT (%i cycles)\n", steps_elapsed);
 			}
 			else {
-				printf("Passed in %i\n", steps_elapsed);
+				printf(" Passed in %i cycles\n", steps_elapsed);
 			}
 		}
 		
