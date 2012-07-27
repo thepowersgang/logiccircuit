@@ -327,6 +327,7 @@ int ParseValue(tParser *Parser, tList *destList)
 		tmplist = ParseOperation(Parser);
 		AppendList(destList, tmplist);
 		List_Free(tmplist);
+		free(tmplist);
 		SyntaxAssert(Parser, GetToken(Parser), TOK_PAREN_CLOSE);
 		}
 		break;
@@ -685,6 +686,7 @@ int ParseLine(tParser *Parser)
 	
 	// Clean up
 	List_Free(outputs);
+	free(outputs);
 	free(destArray.Items);
 	
 	return 0;

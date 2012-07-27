@@ -45,7 +45,9 @@ void	ResolveEleLinks(tElement *First);
  int	gbPrintLinks = 0;
  int	gbPrintStats = 0;
  int	gbCompress = 1;
+
  int	gbRunTests = 0;
+ int	gbTest_ShowDisplay = 0;
 
 // === CODE ===
 int main(int argc, char *argv[])
@@ -204,7 +206,8 @@ int main(int argc, char *argv[])
 			while( steps_elapsed != test->MaxLength && !bFailure )
 			{
 				RunSimulationStep(test);
-				ShowDisplayItems(test->DisplayItems);
+				if( gbTest_ShowDisplay )
+					ShowDisplayItems(test->DisplayItems);
 				steps_elapsed ++;
 			
 				 int	assertion_num = 0;	
