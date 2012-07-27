@@ -7,7 +7,7 @@
 ;#endtestfixure
 
 ; ---------------------------------------------------------------------
-#testcase 100 "R10, R11"
+#testcase 100 "Decode - R10, R11"
 
 #array dest_addr 32
 #array op1 32
@@ -46,7 +46,7 @@ $done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
 #endtestcase
 
 ; ---------------------------------------------------------------------
-#testcase 100 "R10, Imm20"
+#testcase 100 "Decode - R10, Imm20"
 #array dest_addr 32
 #array op1 32
 #array op2 32
@@ -80,7 +80,9 @@ $done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
 #endtestcase
 
 ; ---------------------------------------------------------------------
-#testcase 100 "R0, Imm16"
+; Tests Imm16 decode
+; - Also uses $read_r = 0 to make test simpler
+#testcase 100 "Decode - R-, Imm16 << 5"
 #array dest_addr 32
 #array op1 32
 #array op2 32
@@ -89,25 +91,18 @@ $done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
 #array _ma 32
 #array _md 32
 
-; Pseudo register file
-; - R10 = 0x12345678
-@_rd[31:0] = AND{32} (DELAY $_re), (NOT @_ra[3]), (NOT @_ra[2]), (NOT @_ra[1]), (NOT @_ra[0]), (0x12345678[31:0])
-$_rr = DELAY{2} $_re
-; - Only R0 is allowed to be accessed
-#testassert $_re @_ra[3:0] 0[3:0]
-; Simulated memory
-; - Assert that memory is never accessed
+; No register/memory accesses allowed
+#testassert 1	$_re	0
 #testassert 1	$_me	0
 
 $done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
-	(DELAY 1), 0, 1, 1, 0xF2057777[0:31], \
+	(DELAY 1), 0, 0, 1, 0xF2057777[0:31], \
 	$_re, @_ra, $_rr, @_rd, \
 	$_me, @_ma, $_mr, @_md
 
 ; Final output
 #testassert $done  $imd 0
 #testassert $done  @dest_addr[31:0] 0[31:0]
-#testassert $done  @op1[31:0] 0x12345678[31:0]
 #testassert $done  @op2[31:0] 0x000EEEE0[31:0]
 #testcomplete $done
 

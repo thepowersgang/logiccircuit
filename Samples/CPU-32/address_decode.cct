@@ -86,7 +86,7 @@ $op_2_read_set = DELAY $reading_Ri20
 $reading_Ri16 = AND $pulse, $read_m, $is_op_Ri16
 $reading_Ri16 = AND $pulse, $read_m, $is_op_Rs16
 $_Ri16_sign = AND $is_op_Rs16, @instr[15]
-$op_2_read_set, @op_2[31:0] = ROTATE_LEFT_N_32 $reading_Ri16, 0,@instr[19:16], $_Ri16_sign * 16, @instr[15:0]
+$op_2_read_set, @op_2[0:31] = ROTATE_LEFT_N_32 $reading_Ri16, @instr[16:19],0, @instr[0:15],$_Ri16_sign*16
 
 #array _mem_add_op1 32
 #array _mem_add_op2 32
