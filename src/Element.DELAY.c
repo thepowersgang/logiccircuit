@@ -84,21 +84,23 @@ static void _Update(tElement *Ele)
 	}
 	else
 	{
-		 int	readOfs = ((this->Pos + 1) % this->Delay) * Ele->NInputs;
-		 int	writeOfs = this->Pos * Ele->NInputs;
+		 int	ofs = this->Pos * Ele->NInputs;
 		
 		for( i = 0; i < Ele->NInputs; i ++ )
 		{
-//			printf("DELAY{%i} Cache[%i] = %i (update [%i] = (%p %s)%i)\n",
-//				this->Delay+1,
-//				readOfs + i, this->Cache[ readOfs + i ],
-//				writeOfs + i,
-//				Ele->Inputs[i], Ele->Inputs[i]->Name, GetLink(Ele->Inputs[i])
-//				);
-			if( this->Cache[ readOfs + i ] )
+#if 0
+			if( this->Delay == 7 ) {
+				printf("DELAY{%i} Cache[%i] = %i (update [%i] = (%p %s)%i)\n",
+					this->Delay+1,
+					ofs + i, this->Cache[ ofs + i ],
+					ofs + i, Ele->Inputs[i], Ele->Inputs[i]->Name, GetLink(Ele->Inputs[i])
+					);
+			}
+#endif
+			if( this->Cache[ ofs + i ] )
 				RaiseLink(Ele->Outputs[i]);
 	
-			this->Cache[ writeOfs + i ] = GetLink(Ele->Inputs[i]);
+			this->Cache[ ofs + i ] = GetLink(Ele->Inputs[i]);
 		}
 		this->Pos ++;
 		if(this->Pos == this->Delay)	this->Pos = 0;
