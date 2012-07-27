@@ -58,6 +58,7 @@ $op_1_read = DELAY $op_1_read	// Reduces latency when starting
 
 #array int_addr 32
 $NULL, @int_addr = LATCH{32} 1, $int_addr_clear, @int_addr
+#display $trigger "internal addr = 0x%32x" @int_addr[31:0]
 
 ; Decode
 $is_op_Rr   = AND $_enable, (NOT   @instr[26]), (NOT   @instr[25]), (NOT   @instr[24])
@@ -66,11 +67,11 @@ $is_op_Ri16 = AND $_enable, (NOT   @instr[26]), (DELAY @instr[25]), (NOT   @inst
 $is_op_Rs16 = AND $_enable, (NOT   @instr[26]), (DELAY @instr[25]), (DELAY @instr[24])
 $is_op_RM16 = AND $_enable, (DELAY @instr[26]), (NOT   @instr[25]), (NOT   @instr[24])
 $is_op_RM8  = AND $_enable, (DELAY @instr[26]), (NOT   @instr[25]), (DELAY @instr[24])
-$is_op_M16R = AND $_enable, (DELAY @instr[26]), (NOT   @instr[25]), (NOT   @instr[24])
-$is_op_M8R  = AND $_enable, (DELAY @instr[26]), (NOT   @instr[25]), (DELAY @instr[24])
+$is_op_M16R = AND $_enable, (DELAY @instr[26]), (DELAY @instr[25]), (NOT   @instr[24])
+$is_op_M8R  = AND $_enable, (DELAY @instr[26]), (DELAY @instr[25]), (DELAY @instr[24])
 
-$is_mem_dest = AND $is_op_M8R, $is_op_M16R
-@dest_addr[3:0] = AND{4} $pulse, (NOT $is_mem_dest), @instr[23:20]
+$is_mem_dest = OR $is_op_M8R, $is_op_M16R
+@dest_addr[3:0] = AND{4} (DELAY{3} $pulse), (NOT $is_mem_dest), @instr[23:20]
 
 ; Rr
 $reading_Rr = AND $pulse, $read_m, $is_op_Rr
@@ -115,10 +116,13 @@ $addr_ready = AND $_enable, $is_M16, $_mem_add_done
 $is_M8 = OR $is_op_RM8, $is_op_M8R
 $reading_M8 = AND $pulse, $read_m, $is_op_RM8
 $reading_M8 = AND $pulse, $read_m, $is_op_M8R
+$is_M8_stg1_clear = OR $_pulse, $_mem8_add1_done
+$NULL, $is_M8_stg1 = LATCH 1, $is_M8_stg1_clear, (PULSE $is_M8)
+$is_M8_stg2_clear = OR $_pulse, $_mem8_shift_done
+$NULL, $is_M8_stg2 = LATCH 1, $is_M8_stg2_clear, $_mem8_add1_done
 ; - Stage 1: add Base + Offset
-$NULL, $is_M8_stg1 = LATCH 1, $is_M8_stg1_clear, (PULSE $is_M8)	// Stops looping
 $reg_enable = DELAY $reading_M8
-@reg_addr = AND{4} $reading_M8, @instr[19:16]
+@reg_addr[3:0] = AND{4} $reading_M8, @instr[19:16]
 @_mem_add_op1 = AND{32} (DELAY{3} $reading_M8), @reg_data_in
 @_mem_add_op2[31:0] = AND{32} (DELAY{3} $reading_M8), \
 	@instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], \
@@ -127,11 +131,10 @@ $reg_enable = DELAY $reading_M8
 	@instr[7:0]
 $_mem_add_start = DELAY{4} $reading_M8
 $_mem8_add1_done = AND $is_M8, $is_M8_stg1, $_mem_add_done
-$is_M8_stg1_clear = $_mem8_add1_done
 ; - Stage 2: rotate index
-$reg_enable = DELAY $_mem8_add1_done
-@reg_addr[3:0] = AND{4} $_mem8_add1_done, @instr[15:12]
-$_mem8_shift_trigger = AND $reg_ready, (NOT $is_M8_stg1), $is_M8
+$reg_enable = PULSE $is_M8_stg2
+@reg_addr[3:0] = AND{4} $is_M8_stg2, @instr[15:12]
+$_mem8_shift_trigger = AND $reg_ready, $is_M8_stg2, $is_M8
 #display $_mem8_shift_trigger "mem8_shift input" (DELAY @reg_data_in)
 $_mem8_shift_done, @_mem8_reg_shifted, $NULL = SHIFT_LEFT_N_32 $_mem8_shift_trigger,\
 	@instr[8:11],0, (DELAY @reg_data_in), \
@@ -158,12 +161,12 @@ $op_2_read_set = PULSE $mem_ready
 //#display $op_2_read_set "op_2 value" @op_2
 
 ; === Skip Op2? ===
-$op_2_read = AND $pulse, (NOT $read_m)
+$op_2_read_set = AND $pulse, (NOT $read_m)
 
 ; === Read Op1 ===
 $reading_op1 = AND $read_r, $op_2_read
 #display $reading_op1 "Reading OP1" 0
-$reg_enable = DELAY $reading_op1
+$reg_enable = PULSE $reading_op1
 @reg_addr[3:0] = AND{4} $reading_op1, @instr[23:20]
 @op_1 = AND{32} $reading_op1, $reg_ready, @reg_data_in
 $op_1_read = AND $reading_op1, $reg_ready
@@ -174,8 +177,9 @@ $op_1_read = AND $op_2_read, (NOT $read_r)
 $rdy = AND $op_1_read, (NOT $is_mem_dest)
 ; === Swap if mem dest ===
 $_swap_ops = AND (PULSE $op_1_read), $is_mem_dest
-@op_1 = DELAY{2} (AND{32} $_swap_ops, @op_2)
-@op_2 = DELAY{2} (AND{32} $_swap_ops, @op_1)
+#display $_swap_ops "Swapping OP1/OP2 %32x and %32x" @op_1[31:0], @op_2[31:0]
+@op_1 = DELAY{3} (AND{32} $_swap_ops, @op_2)
+@op_2 = DELAY{3} (AND{32} $_swap_ops, @op_1)
 $op_clear = DELAY $_swap_ops
 $rdy = DELAY{3+2} $_swap_ops
 
