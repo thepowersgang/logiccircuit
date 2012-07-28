@@ -11,14 +11,6 @@
 
 #array ROM_select	16
 
-;#display $enable "Memory Addr" @addr
-;#display $is_ROM "ROM Select " @ROM_select
-;#display $ready "Memory Out " @data_output
-
-;#display $ready  "Memory Output " @data_output
-;#display $is_ROM "ROM 0x000?    " @ROM_select[0] 
-;#display $is_ROM "ROM 0x001?    " @ROM_select[1]
-
 $size_32 = AND (NOT   @size[1]), (NOT   @size[0])
 $size_16 = AND (NOT   @size[1]), (DELAY @size[0])
 $size_8  = AND (DELAY @size[1]), (NOT   @size[0])
@@ -67,11 +59,11 @@ $is_ROM = AND (DELAY $enable), (NOT   @addr[15]), (NOT   @addr[14]), (NOT   @add
 
 // === ROM Contents ===
 // - Address is in 32-bit words
-_ROM_DWORD 0x0000, 0x11131337	; OR R1, 0x31337
-_ROM_DWORD 0x0001, 0x010FFFFF	; MOV R0, 0xFFFFF
-_ROM_DWORD 0x0002, 0x21000001	; ADD R0, 0x00001
-_ROM_DWORD 0x0003, 0x23F0FFF8	; ADD PC, -8
-_ROM_DWORD 0x0004, 0x23F0FFF4	; JMP .+0xFFFC (-4) (ADD R15, 0xFFFC signed)
+@_data_word_out[0:31] = AND{32} @ROM_select[0x0000], 0x11131337[0:31]	; OR R1, 0x31337
+@_data_word_out[0:31] = AND{32} @ROM_select[0x0001], 0x010FFFFF[0:31]	; MOV R0, 0xFFFFF
+@_data_word_out[0:31] = AND{32} @ROM_select[0x0002], 0x21000001[0:31]	; ADD R0, 0x00001
+@_data_word_out[0:31] = AND{32} @ROM_select[0x0003], 0x23F0FFF8[0:31]	; ADD PC, -8
+@_data_word_out[0:31] = AND{32} @ROM_select[0x0004], 0x23F0FFF4[0:31]	; JMP .+0xFFFC (-4) (ADD R15, 0xFFFC signed)
 
 // 1 delay for DEMUX, 1 for data
 $_data_rdy = DELAY{2} $is_ROM
@@ -93,4 +85,29 @@ $fault_ac = AND $size_16, @addr[0]
 @data_output[0:7] = AND{8} $size_8, $_data_rdy, (DELAY @addr[1]), (DELAY @addr[0]), @_data_word_out[24:31]
 
 #endunit
+
+
+#testcase 20 "Memory - 32-bit aligned"
+#array out	32
+$rdy, @out, $fault = MEMORY_SPACE 1, 0[0:31], 0, 0xFFFFFFFF[0:31], 0[0:1]
+#testassert $rdy @out[0:31] 0x11131337[0:31]
+#testassert $rdy $fault 0
+#testcomplete $rdy
+#endtestcase
+
+#testcase 20 "Memory - 32-bit aligned NZ"
+#array out	32
+$rdy, @out, $fault = MEMORY_SPACE 1, 0x10[0:31], 0, 0xFFFFFFFF[0:31], 0[0:1]
+#testassert $rdy @out[0:31] 0x23F0FFF4[0:31]
+#testassert $rdy $fault 0
+#testcomplete $rdy
+#endtestcase
+
+#testcase 20 "Memory - 32-bit non-aligned"
+#array out	32
+$rdy, @out, $fault = MEMORY_SPACE 1, 1[0:31], 0, 0xFFFFFFFF[0:31], 0[0:1]
+#testassert $rdy $fault 1
+#testcomplete $rdy
+#endtestcase
+
 ; vim: ft=logiccircuit
