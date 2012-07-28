@@ -1,0 +1,244 @@
+;
+; CPU-32 Design
+; - By John Hodge (thePowersGang)
+;
+; alu.cct
+; - Arithmatic / Logic Unit
+;
+%include "common.h.cct"
+%include "../adder.cct"
+
+#defunit CPU32_ALU
+#input $enable, @op[3], @alu_in_dst[32], @alu_in_src[32],\
+	$flags_C, $flags_O, $flags_Z, $flags_C_clear, $flags_O_clear, $flags_Z_clear
+#output $_done, $alu_nosave, @_alu_out[32]
+#array alu_out	32
+
+// --- ALU Operations ---
+$is_MOV, $is_AND, $is_OR, $is_XOR, $is_ADD, $is_SUB, $is_CMP, $is_TST = DEMUX{3} $enable, @op
+
+$flags_Z_clear = PULSE $enable
+$flags_Z = AND (DELAY $done), (NOR @alu_out)
+$_done = DELAY{2} $done
+@_alu_out = DELAY{2} @alu_out
+
+// --- MOV ---
+#display $is_MOV "MOV 0x%32x" @alu_in_src[31:0]
+@alu_out = AND{32} $is_MOV, @alu_in_src
+$done    = PULSE $is_MOV
+// --- AND ---
+#display $is_AND "AND 0x%32x & 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
+%assign i 0
+%rep NUM_GPR_BITS
+@alu_out[i] = AND $is_AND, @alu_in_src[i], @alu_in_dst[i]
+%assign i i+1
+%endrep
+$done = PULSE $is_AND
+// --- OR  ---
+#display $is_OR "OR 0x%32x | 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
+%assign i 0
+%rep NUM_GPR_BITS
+@alu_out[i] = AND (DELAY $is_OR), (OR @alu_in_src[i], @alu_in_dst[i])
+%assign i i+1
+%endrep
+$done = PULSE (DELAY $is_OR)
+// --- XOR ---
+#display $is_XOR "XOR 0x%32x & 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
+%assign i 0
+%rep NUM_GPR_BITS
+@alu_out[i] = AND (DELAY $is_XOR), (XOR @alu_in_src[i], @alu_in_dst[i])
+%assign i i+1
+%endrep
+$done = PULSE (DELAY $is_XOR)
+// --- Common Adder ---
+#array alu_adder_op2	NUM_GPR_BITS
+#array add_out	NUM_GPR_BITS
+$add_done, @add_out, $add_C_out = ADDER_32BIT $alu_adder_pulse, @alu_in_dst, @alu_adder_op2, $alu_adder_CF
+$done    = DELAY{3} $add_done
+@alu_out = DELAY{3} @add_out
+// --- ADD ---
+#display $is_ADD "ADD 0x%32x + 0x%32x + %i" @alu_in_dst[31:0], @alu_in_src[31:0], $flags_C
+$flags_C_clear = PULSE (DELAY $is_ADD)
+$alu_adder_pulse = DELAY $is_ADD
+@alu_adder_op2   = AND{32} $is_ADD, @alu_in_src
+$alu_adder_CF    = AND $is_ADD, $flags_C
+$flags_C = AND $is_ADD, $add_done, $add_C_out
+// --- SUB ---
+#display $is_SUB "SUB 0x%32x - 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
+$flags_C_clear = PULSE (DELAY{2} $is_SUB)
+$alu_adder_pulse = DELAY{2} $is_SUB
+@alu_adder_op2   = AND{32} $is_SUB, (NOT @alu_in_src)
+$alu_adder_CF    = AND $is_SUB, (NOT $flags_C)
+$flags_C = AND $is_SUB, (DELAY $add_done), (NOT $add_C_out)
+// --- CMP --
+#display $is_CMP "CMP 0x%32x - 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
+$flags_C_clear = PULSE (DELAY{2} $is_CMP)
+$alu_adder_pulse = DELAY{2} $is_SUB
+@alu_adder_op2   = AND{32} $is_CMP, (NOT @alu_in_src)
+$alu_adder_CF    = AND $is_CMP, (NOT $flags_C)
+$alu_nosave = DELAY $is_CMP
+$flags_C = AND $is_CMP, (DELAY $add_done), (NOT $add_C_out)
+// --- TST --
+#display $is_TST "TST 0x%32x & 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
+%assign i 0
+%rep NUM_GPR_BITS
+@alu_out[i] = AND $is_TST, @alu_in_src[i], @alu_in_dst[i]
+%assign i i+1
+%endrep
+$alu_nosave = DELAY $is_TST
+$done       = PULSE $is_TST
+
+#endunit
+
+; --------------------------------------------------------------------
+; Test cases
+; --------------------------------------------------------------------
+
+#testcase 10 "ALU: MOV"
+#array out 32
+#testassert 1	$flags_C	0
+#testassert 1	$flags_O	0
+#testassert 1	$flags_Z	0
+#testassert 1	$flags_C_clear	0
+#testassert 1	$flags_O_clear	0
+$done, $nowrite, @out = CPU32_ALU 1, 0[0:2], 0x12314565[0:31], 0xFF005523[0:31],\
+	$flags_C, $flags_O, $flags_Z, $flags_C_clear, $flags_O_clear, $flags_Z_clear
+#testassert $done $nowrite 0
+#testassert $done @out[31:0]	0xFF005523[31:0]
+#testcomplete $done
+#endtestcase
+
+#testcase 10 "ALU: AND"
+#array out 32
+#testassert 1	$flags_C	0
+#testassert 1	$flags_O	0
+#testassert 1	$flags_Z	0
+#testassert 1	$flags_C_clear	0
+#testassert 1	$flags_O_clear	0
+$done, $nowrite, @out = CPU32_ALU 1, 1[0:2], 0x12300565[0:31], 0x00E4C000[0:31],\
+	$flags_C, $flags_O, $flags_Z, $flags_C_clear, $flags_O_clear, $flags_Z_clear
+#testassert $done $nowrite 0
+#testassert $done @out[31:0]	0x00200000[31:0]
+#testcomplete $done
+
+#endtestcase
+
+#testcase 10 "ALU: OR"
+#array out 32
+#testassert 1	$flags_C	0
+#testassert 1	$flags_O	0
+#testassert 1	$flags_Z	0
+#testassert 1	$flags_C_clear	0
+#testassert 1	$flags_O_clear	0
+$done, $nowrite, @out = CPU32_ALU 1, 2[0:2], 0x12300565[0:31], 0x00E4C000[0:31],\
+	$flags_C, $flags_O, $flags_Z, $flags_C_clear, $flags_O_clear, $flags_Z_clear
+#testassert $done $nowrite 0
+#testassert $done @out[31:0]	0x12F4C565[31:0]
+#testcomplete $done
+#endtestcase
+
+#testcase 10 "ALU: XOR"
+#array out 32
+#testassert 1	$flags_C	0
+#testassert 1	$flags_O	0
+#testassert 1	$flags_Z	0
+#testassert 1	$flags_C_clear	0
+#testassert 1	$flags_O_clear	0
+$done, $nowrite, @out = CPU32_ALU 1, 3[0:2], 0x12300565[0:31], 0x00E4C000[0:31],\
+	$flags_C, $flags_O, $flags_Z, $flags_C_clear, $flags_O_clear, $flags_Z_clear
+#testassert $done $nowrite 0
+#testassert $done @out[31:0]	0x12D4C565[31:0]
+#testcomplete $done
+#endtestcase
+
+#testcase 40 "ALU: ADD - NC in, NC out"
+#array out 32
+$NULL, $flags_C = LATCH 1, $flags_C_clear, $flags_C
+#testassert 1	$flags_C	0
+#testassert 1	$flags_O	0
+#testassert 1	$flags_Z	0
+#testassert 1	$flags_O_clear	0
+$done, $nowrite, @out = CPU32_ALU 1, 4[0:2], 0x12300565[0:31], 0x00E4C000[0:31],\
+	$flags_C, $flags_O, $flags_Z, $flags_C_clear, $flags_O_clear, $flags_Z_clear
+#testassert $done $nowrite 0
+#testassert $done @out[31:0]	0x1314C565[31:0]
+#testassert $done $flags_C	0
+#testcomplete $done
+#endtestcase
+
+#testcase 40 "ALU: ADD - NC in, C out"
+#array out 32
+$NULL, $flags_C = LATCH 1, $flags_C_clear, $flags_C
+#testassert 1	$flags_O	0
+#testassert 1	$flags_Z	0
+#testassert 1	$flags_O_clear	0
+$done, $nowrite, @out = CPU32_ALU 1, 4[0:2], 0x12300565[0:31], 0xF0E4C000[0:31],\
+	$flags_C, $flags_O, $flags_Z, $flags_C_clear, $flags_O_clear, $flags_Z_clear
+#testassert $done $nowrite 0
+#testassert $done @out[31:0]	0x0314C565[31:0]
+#testassert $done $flags_C	1
+#testcomplete $done
+#endtestcase
+
+#testcase 40 "ALU: ADD - C in, NC out"
+#array out 32
+$NULL, $flags_C = LATCH 1, $flags_C_clear, $flags_C
+$flags_C = PULSE 1
+#testassert 1	$flags_O	0
+#testassert 1	$flags_Z	0
+#testassert 1	$flags_O_clear	0
+$done, $nowrite, @out = CPU32_ALU 1, 4[0:2], 0x12300565[0:31], 0x00E4C000[0:31],\
+	$flags_C, $flags_O, $flags_Z, $flags_C_clear, $flags_O_clear, $flags_Z_clear
+#testassert $done $nowrite 0
+#testassert $done @out[31:0]	0x1314C566[31:0]
+#testassert $done $flags_C	0
+#testcomplete $done
+#endtestcase
+
+#testcase 40 "ALU: ADD - NC in, C out"
+#array out 32
+$NULL, $flags_C = LATCH 1, $flags_C_clear, $flags_C
+$flags_C = PULSE 1
+#testassert 1	$flags_O	0
+#testassert 1	$flags_Z	0
+#testassert 1	$flags_O_clear	0
+$done, $nowrite, @out = CPU32_ALU 1, 4[0:2], 0x12300565[0:31], 0xF0E4C000[0:31],\
+	$flags_C, $flags_O, $flags_Z, $flags_C_clear, $flags_O_clear, $flags_Z_clear
+#testassert $done $nowrite 0
+#testassert $done @out[31:0]	0x0314C566[31:0]
+#testassert $done $flags_C	1
+#testcomplete $done
+#endtestcase
+
+#testcase 40 "ALU: SUB - NC in, NC out"
+#array out 32
+$NULL, $flags_C = LATCH 1, $flags_C_clear, $flags_C
+#testassert 1	$flags_C	0
+#testassert 1	$flags_O	0
+#testassert 1	$flags_Z	0
+#testassert 1	$flags_O_clear	0
+$done, $nowrite, @out = CPU32_ALU 1, 5[0:2], 0x12300565[0:31], 0x00E4C000[0:31],\
+	$flags_C, $flags_O, $flags_Z, $flags_C_clear, $flags_O_clear, $flags_Z_clear
+#testassert $done $nowrite 0
+#testassert $done @out[31:0]	0x114B4565[31:0]
+#testassert $done $flags_C	0
+#testcomplete $done
+#endtestcase
+
+#testcase 10 "ALU: ZF (XOR)"
+#array out 32
+$NULL, $flags_Z = LATCH 1, $flags_Z_clear, $flags_Z
+#testassert 1	$flags_C	0
+#testassert 1	$flags_O	0
+#testassert 1	$flags_C_clear	0
+#testassert 1	$flags_O_clear	0
+#display 1	"flags_Z = %i"	$flags_Z
+$done, $nowrite, @out = CPU32_ALU 1, 3[0:2], 0x00000005[0:31], 0x00000005[0:31],\
+	$flags_C, $flags_O, $flags_Z, $flags_C_clear, $flags_O_clear, $flags_Z_clear
+#testassert $done $nowrite 0
+#testassert $done @out[31:0] 0[31:0]
+#testassert $done $flags_Z 1
+#testcomplete $done
+#endtestcase
+
+; vim: ft=logiccircuit
