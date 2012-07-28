@@ -349,6 +349,9 @@ int Test_CloseTest(void)
 	{
 		if( link->Backlink )
 		{
+//			if( link->ReferenceCount == 1 && link->Name[0] != '\0' ) {
+//				printf("Link '%s' may be a typo\n", link->Name);
+//			}
 			link->Backlink = NULL;
 			prev = link;
 			link = link->Next;
@@ -697,6 +700,7 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 		
 		// Create link
 		newLink = malloc( sizeof(tLink) + len + 1 );
+		newLink->ReferenceCount = 2;
 		newLink->Name[0] = '\0';
 		// Only append prefix to named links
 		if( bPrefix ) {
@@ -759,6 +763,7 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 		LinkValue_Ref( Inputs->Items[i]->Value );
 		LinkValue_Deref( link->Value );
 		link->Value = Inputs->Items[i]->Value;
+		Inputs->Items[i]->ReferenceCount ++;
 	}
 	
 	// Append display items
@@ -927,9 +932,9 @@ tList *CreateUnit(const char *Name, int NParams, int *Params, tList *Inputs)
 		return NULL;
 	}
 	ele->Type = def;	// Force type to be set
-	//ele->Param = Param;
 	for( i = 0; i < Inputs->NItems; i ++ ) {
 		ele->Inputs[i] = Inputs->Items[i];
+		ele->Inputs[i]->ReferenceCount ++;
 	}
 	
 	// Append to element list
@@ -952,6 +957,8 @@ tList *CreateUnit(const char *Name, int NParams, int *Params, tList *Inputs)
  */
 void List_Free(tList *List)
 {
+	for( int i = 0; i < List->NItems; i ++ )
+		List->Items[i]->ReferenceCount --;
 	if( List->Items != (void *)( (intptr_t)List + sizeof(tList) ) )
 		free(List->Items);
 	else
@@ -966,7 +973,11 @@ void AppendList(tList *Dest, tList *Src)
 	 int	oldOfs = Dest->NItems;
 	Dest->NItems += Src->NItems;
 	Dest->Items = realloc( Dest->Items, Dest->NItems * sizeof(tLink*) );
-	memcpy( &Dest->Items[oldOfs], Src->Items, Src->NItems*sizeof(tLink*) );
+	for( int i = 0; i < Src->NItems; i ++ )
+	{
+		Dest->Items[oldOfs+i] = Src->Items[i];
+		Dest->Items[oldOfs+i]->ReferenceCount ++;
+	}
 }
 
 /**
