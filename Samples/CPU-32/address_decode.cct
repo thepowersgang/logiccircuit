@@ -158,7 +158,6 @@ $mem_enable = DELAY $addr_ready
 @op_2 = AND{32} $is_M8, $mem_ready, @mem_data_in
 @op_2 = AND{32} $is_M16, $mem_ready, @mem_data_in
 $op_2_read_set = PULSE $mem_ready
-//#display $op_2_read_set "op_2 value" @op_2
 
 ; === Skip Op2? ===
 $op_2_read_set = AND $pulse, (NOT $read_m)

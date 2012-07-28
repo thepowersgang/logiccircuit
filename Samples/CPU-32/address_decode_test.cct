@@ -247,7 +247,7 @@ $done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
 
 ; ---------------------------------------------------------------------
 ; Tests [r+imm16] destination decode
-#testcase 50 "Decode - [R15+imm16], R15"
+#testcase 60 "Decode - [R15+imm16], R15"
 #array dest_addr 32
 #array op1 32
 #array op2 32
@@ -275,11 +275,14 @@ $done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
 	$_me, @_ma, $_mr, @_md
 
 ; Final output
-#testassert $done  $imd 1
-#testassert $done  @dest_addr[31:0] 0x00FF2234[31:0]
-#testassert $done  @op1[31:0] 0xF0E1D2C3[31:0]
-#testassert $done  @op2[31:0] 0x00FF1000[31:0]
-#testcomplete $done
+$hold = HOLD{10} $done
+$comp = DELAY{10} $done
+#testassert $hold  $done 1
+#testassert $hold  $imd 1
+#testassert $hold  @dest_addr[31:0] 0x00FF2234[31:0]
+#testassert $hold  @op1[31:0] 0xF0E1D2C3[31:0]
+#testassert $hold  @op2[31:0] 0x00FF1000[31:0]
+#testcomplete $comp
 
 #endtestcase
 
@@ -315,11 +318,14 @@ $done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
 	$_me, @_ma, $_mr, @_md
 
 ; Final output
-#testassert $done  $imd 1
-#testassert $done  @dest_addr[31:0] 0x00FF14FC[31:0]
-#testassert $done  @op1[31:0] 0xF0E1D2C3[31:0]
-#testassert $done  @op2[31:0] 0x00FF1000[31:0]
-#testcomplete $done
+$hold = HOLD{10} $done
+$comp = DELAY{10} $done
+#testassert $hold  $done 1
+#testassert $hold  $imd 1
+#testassert $hold  @dest_addr[31:0] 0x00FF14FC[31:0]
+#testassert $hold  @op1[31:0] 0xF0E1D2C3[31:0]
+#testassert $hold  @op2[31:0] 0x00FF1000[31:0]
+#testcomplete $comp
 
 #endtestcase
 

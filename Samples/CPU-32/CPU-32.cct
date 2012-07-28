@@ -101,11 +101,12 @@ $instr_clear = PULSE @stage_state[0]	// Clear the instruction register
 $reg_enable = PULSE @stage_state[0]
 @reg_addr = CONST{4,15} @stage_state[0]
 // - Request memory
-@mem_addr = DELAY (AND{NUM_ADDR_BITS} @stage_state[0], $reg_ready, @reg_data_in)	// Set memory address to PC
+@mem_addr    = DELAY (AND{NUM_ADDR_BITS} @stage_state[0], $reg_ready, @reg_data_in)	// Set memory address to PC
 $mem_enable  = PULSE (AND @stage_state[0], $reg_ready)	// Enable memory for read
 // - Read complete, save into @instr
 @instr = AND{32} @stage_state[0], $mem_ready, @mem_data_in	// Save the opcode
 $next_stage = PULSE (AND @stage_state[0], $mem_ready)	// Wait for instruction to be fetched
+
 // === Stage 1: Increment PC ===
 #display @stage_state[1] "PC Update" 1
 #array new_pc	32
@@ -131,8 +132,8 @@ $next_stage = PULSE $pc_updated	// Don't move to decode until PC is updated
 
 #display @stage_state[2] "Opcode decode" 1
 $decode_enable = OR @stage_state[2:15]
-$is_ALU = AND $decode_enable, (NOT @instr[31]), (NOT @instr[30])
-$is_CND = AND $decode_enable, (NOT @instr[31]), (DELAY @instr[30]), (NOT @instr[29]), (NOT @instr[28])
+$is_ALU = AND $decode_enable, (NOT   @instr[31]), (NOT   @instr[30])
+$is_CND = AND $decode_enable, (NOT   @instr[31]), (DELAY @instr[30]), (NOT @instr[29]), (NOT @instr[28])
 
 // === Handle Undefined Opcodes ===
 $is_UNDEF = AND (DELAY $decode_enable), (NOR $is_ALU, $is_CND)
