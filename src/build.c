@@ -340,7 +340,8 @@ int Test_CloseTest(void)
 		_merge(a->Values.Items, a->Values.NItems);
 		_merge(a->Expected.Items, a->Expected.NItems);
 	}
-	_merge(&gpCurTest->CompletionCondition, 1);
+	if( gpCurTest->CompletionCondition )
+		_merge(&gpCurTest->CompletionCondition, 1);
 
 	// Remove any unused links
 	 int	nTrimmed = 0;
