@@ -27,23 +27,17 @@
 #breakpoint $reg_pc_write "PC Write"
 #breakpoint $stage_reset "Stage Reset"
 
-#display 1 "Clock  " $clock
 #display 1 "Stage %4x" @stage_num[3:0], @stage_state
 #display 1 "Reset  " $stage_reset
 #display 1 "NextS  " $next_stage
 #display 1 "instr = 0x%32x" @instr[31:0]
 #display 1 "NextI  " $next_instruction
 
-// Instruction clock (used to ensure synchronisation)
-// In each 128 cycles, the clock is high for one
-// TODO: Determine how many logic cycles are needed to run the CPU
-//       - Maybe have @stage_state[15] map to reset (or map others via an
-//         AND with $is_*)
-// NOTE: Unused really
-$clock = CLOCK{128}
-
 // === Registers ===
 $reg_ready, @reg_data_in = REGISTER_BANK_16_32 $reg_enable, @reg_addr, $reg_write, @reg_data_out
+#display $reg_enable "Register Addr" @reg_addr[0:3]
+#display $reg_write  "Register Value New %32x" @reg_data_out[NUM_GPR_BITS-1:0]
+#display $reg_ready  "Register Value %32x" @reg_data_in[NUM_GPR_BITS-1:0]
 
 // --- FLAGS Pseudo-Register ---
 $NULL, $flags_C = LATCH 1, $flags_C_clear, $flags_C
@@ -52,10 +46,6 @@ $NULL, $flags_Z = LATCH 1, $flags_Z_clear, $flags_Z
 #display 1 "CF" $flags_C
 #display 1 "OF" $flags_O
 #display 1 "ZF" $flags_Z
-
-#display $reg_enable "Register Addr" @reg_addr[0:3]
-#display $reg_write  "Register Value New %32x" @reg_data_out[NUM_GPR_BITS-1:0]
-#display $reg_ready  "Register Value %32x" @reg_data_in[NUM_GPR_BITS-1:0]
 
 // === Memory ===
 // TODO: Maybe have these lines be arguments of some form
@@ -146,6 +136,7 @@ $is_UNDEF = AND (DELAY $decode_enable), (NOR $is_ALU, $is_CND)
 $no_decode_r = AND $decode_enable, (NOR @instr[31:27])
 $decode_start = DELAY $is_ALU
 $decode_clear = PULSE @stage_state[4]
+$decode_clear = PULSE @stage_state[0]
 
 $alu_data_rdy, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src = CPU32_ADDRESS_DECODE \
 	$decode_start, $decode_clear, (NOT $no_decode_r), 1, @instr, \
@@ -157,8 +148,9 @@ $alu_data_rdy, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src = CPU32_ADDRESS
 #display $alu_data_rdy "@alu_in_src = %32x" @alu_in_src[31:0]
 
 // === ALU Handling ===
-$next_stage, $alu_nosave, @alu_out = CPU32_ALU $alu_data_rdy, @instr[27:29], @alu_in_dst, @alu_in_src,\
+$alu_done, $alu_nosave, @alu_out = CPU32_ALU $alu_data_rdy, @instr[27:29], @alu_in_dst, @alu_in_src,\
 	$flags_C, $flags_O, $flags_Z, $flags_C_clear, $flags_O_clear, $flags_Z_clear
+$next_stage = PULSE $alu_done
 
 // ==============================
 // === Stage 3: Save ALU Data ===

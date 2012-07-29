@@ -14,14 +14,14 @@
 #array reg_ %+ i %+ _newvalue 32
 
 $reg_ %+ i %+ _write = AND @reg_select[i], (DELAY $reg_write)
-@reg_ %+ i %+ _newvalue = AND{32} @reg_select[i], $reg_write, @reg_data_in
-$reg_ %+ i %+ _ready, @reg_ %+ i %+ _value = LATCH{32} 1, $reg_ %+ i %+ _write, @reg_ %+ i %+ _newvalue
-@reg_data_out = AND{32} @reg_select[i], @reg_ %+ i %+ _value
+@reg_ %+ i %+ _newvalue = AND{32} @reg_select[i], (DELAY $reg_write), (DELAY @reg_data_in)
+$NULL, @reg_ %+ i %+ _value = LATCH{32} 1, $reg_ %+ i %+ _write, (DELAY @reg_ %+ i %+ _newvalue)
+@reg_data_out = AND{32} (DELAY @reg_select[i]), @reg_ %+ i %+ _value
 
 %assign i i+1
 %endrep
 
-$ready = DELAY{4} $enable	// DEMUX, _write, LATCH, AND
+$ready = DELAY{3} $enable	// DEMUX, _write, LATCH(writes take 2), AND
 
 // --- Register Display ---
 #display 1 "R 0=%32x R 1=%32x R 2=%32x R 3=%32x" @reg_0_value[32-1:0], @reg_1_value[32-1:0], \
@@ -34,5 +34,22 @@ $ready = DELAY{4} $enable	// DEMUX, _write, LATCH, AND
 	@reg_14_value[32-1:0], @reg_15_value[32-1:0]
 
 #endunit
+
+#testcase 15 "Registers - Ready"
+#array reg_data_out	32
+$done,@reg_data_out = REGISTER_BANK_16_32 1, 0[0:3], 0, 0[0:31]
+#testassert $done @reg_data_out[31:0] 0[31:0]
+#testcomplete $done
+#endtestcase
+
+#testcase 15 "Registers - Write / Read R0"
+#array reg_data_out	32
+$en = PULSE 1
+$en = PULSE $write_done
+$NULL, $write_done = LATCH 1, 0, $done
+$done,@reg_data_out = REGISTER_BANK_16_32 $en, 0[0:3], (NOT $write_done), 0x12345678[0:31]
+#testassert (AND $done, $write_done) (DELAY @reg_data_out[31:0]) 0x12345678[31:0]
+#testcomplete (AND $done, $write_done)
+#endtestcase
 
 ; vim: ft=logiccircuit
