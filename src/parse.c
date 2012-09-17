@@ -1,5 +1,9 @@
 /*
- *
+ * LogicCircuit
+ * - By John Hodge (thePowersGang)
+ * 
+ * parse.c
+ * - Parsing code
  */
 #include <stdio.h>
 #include <stdlib.h>

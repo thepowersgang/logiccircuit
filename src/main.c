@@ -237,7 +237,6 @@ int main(int argc, char *argv[])
 					DumpList(&a->Values, 0);
 					printf(" == expected ");
 					DumpList(&a->Expected, 0);
-					printf("\n");
 					bFailure = 1;
 				}
 				

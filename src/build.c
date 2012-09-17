@@ -794,7 +794,8 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 	{
 		tBreakpoint	*newBP;
 		
-		newBP = AddBreakpoint(dispItem->Label, &dispItem->Condition);
+		newBP = AddBreakpoint(bp->Label, &bp->Condition);
+		if( !newBP )	continue;
 		
 		// Resolve backlinks
 		for( i = 0; i < newBP->Condition.NItems; i ++ )
