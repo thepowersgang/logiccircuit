@@ -52,4 +52,14 @@ $done,@reg_data_out = REGISTER_BANK_16_32 $en, 0[0:3], (NOT $write_done), 0x1234
 #testcomplete (AND $done, $write_done)
 #endtestcase
 
+#testcase 15 "Registers - Write / Read R10"
+#array reg_data_out	32
+$en = PULSE 1
+$en = PULSE $write_done
+$NULL, $write_done = LATCH 1, 0, $done
+$done,@reg_data_out = REGISTER_BANK_16_32 $en, 10[0:3], (NOT $write_done), 0x12345678[0:31]
+#testassert (AND $done, $write_done) (DELAY @reg_data_out[31:0]) 0x12345678[31:0]
+#testcomplete (AND $done, $write_done)
+#endtestcase
+
 ; vim: ft=logiccircuit
