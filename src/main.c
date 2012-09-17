@@ -204,7 +204,7 @@ int main(int argc, char *argv[])
 		{
 			 int	steps_elapsed = 0;
 			 int	bFailure = 0;
-			printf("Test '%s'...\n", test->Name);
+			printf("Test '%s'...", test->Name);
 			while( steps_elapsed != test->MaxLength && !bFailure )
 			{
 				RunSimulationStep(test);
@@ -230,7 +230,7 @@ int main(int argc, char *argv[])
 						continue ;
 					
 					// Failed
-					printf(" - Assertion %i failed\n", assertion_num+1);
+					printf("\n - Assertion %i failed\n", assertion_num+1);
 					printf("  if ");
 					DumpList(&a->Condition, 1);
 					printf("assert actual ");
@@ -245,13 +245,13 @@ int main(int argc, char *argv[])
 					break;
 			}
 			if( bFailure == 1 ) {
-				printf("- Test '%s' failed in %i steps\n", test->Name, steps_elapsed);
+				printf("\n- Test '%s' failed in %i steps\n", test->Name, steps_elapsed);
 			}
 			else if( steps_elapsed == test->MaxLength ) {
-				printf("- TIMED OUT (%i cycles)\n", steps_elapsed);
+				printf("\n- TIMED OUT (%i cycles)\n", steps_elapsed);
 			}
 			else {
-				printf(" Passed in %i cycles\n", steps_elapsed);
+				printf(" PASS (%i cycles)\n", steps_elapsed);
 			}
 		}
 		

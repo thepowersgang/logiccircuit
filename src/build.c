@@ -190,7 +190,7 @@ int Unit_CloseUnit(void)
 		link = prev->Next;
 		nTrimmed ++;
 	}
-	printf("Trimmed %i links in close of '%s'\n", nTrimmed, gpCurUnit->Name);
+//	printf("Trimmed %i links in close of '%s'\n", nTrimmed, gpCurUnit->Name);
 
 	#if 0
 	for( tElement *ele = gpCurUnit->Elements; ele; ele = ele->Next )
@@ -363,7 +363,7 @@ int Test_CloseTest(void)
 		link = prev->Next;
 		nTrimmed ++;
 	}
-	printf("Trimmed %i links in close of test '%s'\n", nTrimmed, gpCurTest->Name);
+//	printf("Trimmed %i links in close of test '%s'\n", nTrimmed, gpCurTest->Name);
 
 	gpCurTest = NULL;
 	return 0;
