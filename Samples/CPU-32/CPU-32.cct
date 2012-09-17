@@ -10,13 +10,15 @@
 %include "registers.cct"
 %include "common.h.cct"
 
-#array mem_data_in NUM_GPR_BITS
-#array mem_data_out NUM_GPR_BITS
-#array mem_addr NUM_ADDR_BITS
+%define NUM_FLAGS	3
 
-#array reg_data_in NUM_GPR_BITS
-#array reg_data_out NUM_GPR_BITS
-#array reg_addr 	4
+#defunit CPU32_CORE
+#input $reset, $mem_ready, @mem_data_in[NUM_GPR_BITS], \
+	$reg_ready, @reg_data_in[NUM_GPR_BITS], \
+	@flags[NUM_FLAGS]
+#output $ins_clock, $mem_enable, @mem_addr[NUM_ADDR_BITS], @mem_data_out[NUM_GPR_BITS], \
+	$reg_enable, @reg_addr[4], @reg_data_out[NUM_GPR_BITS], \
+	@flags_clear[NUM_FLAGS]
 
 #array stage_num	4
 #array stage_state	16
@@ -33,33 +35,31 @@
 #display 1 "instr = 0x%32x" @instr[31:0]
 #display 1 "NextI  " $next_instruction
 
-// === Registers ===
-$reg_ready, @reg_data_in = REGISTER_BANK_16_32 $reg_enable, @reg_addr, $reg_write, @reg_data_out
-#display $reg_enable "Register Addr" @reg_addr[0:3]
-#display $reg_write  "Register Value New %32x" @reg_data_out[NUM_GPR_BITS-1:0]
-#display $reg_ready  "Register Value %32x" @reg_data_in[NUM_GPR_BITS-1:0]
+$flags_C = @flags[0]
+$flags_C_clear = @flags_clear[0]
+$flags_O = @flags[1]
+$flags_O_clear = @flags_clear[1]
+$flags_Z = @flags[2]
+$flags_Z_clear = @flags_clear[2]
 
-// --- FLAGS Pseudo-Register ---
-$NULL, $flags_C = LATCH 1, $flags_C_clear, $flags_C
-$NULL, $flags_O = LATCH 1, $flags_O_clear, $flags_O
-$NULL, $flags_Z = LATCH 1, $flags_Z_clear, $flags_Z
-#display 1 "CF" $flags_C
-#display 1 "OF" $flags_O
-#display 1 "ZF" $flags_Z
 
-// === Memory ===
-// TODO: Maybe have these lines be arguments of some form
-// TODO: Implement non-dword reads
-$mem_ready, @mem_data_in, $fault_ac = MEMORY_SPACE $mem_enable, @mem_addr, $mem_data_write, @mem_data_out, 0,0
-#display $mem_enable "MemAddr" @mem_addr[NUM_ADDR_BITS-1:0]
-#display $mem_write "MemOut " @mem_data_out[31:0]
-#display $mem_ready "MemIn  " @mem_data_in[NUM_GPR_BITS-1:0]
+// --- Program Counter ---
+#array pc	32
+#array pc_new	32
+#display $pc_clear "PC CLEAR" 0
+#display 1 "PC = %32x" @pc[31:0]
+$pc_clear = PULSE $reset
+$NULL, @pc = LATCH{32} 1, $pc_clear, @pc_new
+#display 1 "PC Valid? %1i" $reg_pc_valid
+$reg_pc_valid = PULSE $reset	// Raise at CPU init
+$NULL, $reg_pc_valid  = LATCH 1, $pc_clear, $reg_pc_valid
 
 // === "Temporary" Latches ===
 // @instr - Temporary "variables" used to hold intermediate values
 // to be moved to other locations
 #display 1 "instr_clear=%1i" $instr_clear
 $NULL, @instr = LATCH{32} 1, $instr_clear, @instr
+$instr_clear = PULSE @stage_state[0]	// Clear the instruction register
 
 // === Timing control (stages) ===
 // 4-bit counter reset by $stage_reset, incremented by $next_stage
@@ -69,30 +69,15 @@ $NULL, @instr = LATCH{32} 1, $instr_clear, @instr
 
 // === Next instruction ===
 $stage_reset = PULSE $next_instruction
-
-// === PC Increment ===
-$reg_pc_invalidate = $increment_pc	// Invalidate PC when increment is called
-// Add 1 to the PC register (if $increment_pc is set)
-// - Assigning to reg_pc_(write|out) causes it to update the register
-//   once done
-$reg_pc_valid = AND (NOT $reg_pc_valid), $reg_ready
-$reg_pc_valid = PULSE 1	// Raise at CPU init
-$NULL, $reg_pc_valid  = LATCH 1, $reg_pc_invalidate, $reg_pc_valid
-#display 1 "PC Valid? %1i" $reg_pc_valid
-
-// Reset all values
-$instr_clear = PULSE @stage_state[0]	// Clear the instruction register
+$stage_reset = DELAY $reset
 
 // =============================
 // === Stage 0: Opcode Fetch ===
 // =============================
 #display @stage_state[0] "Opcode fetch" 1
-// - Read register
-$reg_enable = PULSE @stage_state[0]
-@reg_addr = CONST{4,15} @stage_state[0]
 // - Request memory
-@mem_addr    = DELAY (AND{NUM_ADDR_BITS} @stage_state[0], $reg_ready, @reg_data_in)	// Set memory address to PC
-$mem_enable  = PULSE (AND @stage_state[0], $reg_ready)	// Enable memory for read
+@mem_addr    = AND{NUM_ADDR_BITS} @stage_state[0], @pc	// Set memory address to PC
+$mem_enable  = PULSE @stage_state[0]	// Enable memory for read
 // - Read complete, save into @instr
 @instr = AND{32} @stage_state[0], $mem_ready, @mem_data_in	// Save the opcode
 $next_stage = PULSE (AND @stage_state[0], $mem_ready)	// Wait for instruction to be fetched
@@ -101,18 +86,11 @@ $next_stage = PULSE (AND @stage_state[0], $mem_ready)	// Wait for instruction to
 // === Stage 1: Increment PC ===
 // =============================
 #display @stage_state[1] "PC Update" 1
-#array new_pc	32
-// - Get PC value
-$reg_enable = PULSE @stage_state[1]
-@reg_addr = CONST{4,15} @stage_state[1]
-// - Add 4
+// - Add 4 to PC
 $increment_pc = PULSE (AND @stage_state[1], $reg_ready)	// Increment the program counter too
-$pc_updated, @new_pc, $NULL = ADDER_32BIT $increment_pc, (DELAY{2} @reg_data_in), (CONST{32,0x4} 1), 0
+$pc_clear, @pc_new, $NULL = ADDER_32BIT $increment_pc, (DELAY{2} @pc), 4[0:31], 0
 // Write back
-@reg_data_out = DELAY @new_pc
-$reg_enable = DELAY $pc_updated
-$reg_write = DELAY $pc_updated
-$next_stage = PULSE $pc_updated		; Don't move to decode until PC is updated
+$next_stage = PULSE (DELAY $pc_clear)		; Don't move to decode until PC is updated
 
 // ================================
 // === Stage 2: Opcode Decoding ===
@@ -182,5 +160,71 @@ $next_stage = PULSE $_alu_save_none
 $alu_complete = AND $is_ALU, @stage_state[4]
 #display $alu_complete "ALU Complete" 1
 $stage_reset = PULSE $alu_complete
+
+#endunit
+
+// ====================================
+//
+// ====================================
+
+%macro __CPU32_TEST_WRAPPER 0
+#array flags	NUM_FLAGS
+#array flags_clear	NUM_FLAGS
+#array reg_addr	4
+#array reg_data_in	NUM_GPR_BITS
+#array reg_data_out	NUM_GPR_BITS
+#array mem_addr	NUM_ADDR_BITS
+#array mem_data_in	NUM_GPR_BITS
+#array mem_data_out	NUM_GPR_BITS
+
+$rst, $mem_enable, @mem_addr, @mem_data_out, $reg_enable, @reg_addr, @reg_data_out, @flags_clear = \
+	CPU32_CORE (PULSE 1), $mem_ready, @mem_data_in, $reg_ready, @reg_data_in, @flags
+%endmacro
+
+#testcase 100 "NOP - Tests PC Inc"
+__CPU32_TEST_WRAPPER
+
+#testassert $reg_enable @reg_addr[0:3] 15[0:3]
+$reg_ready = DELAY $reg_enable
+@reg_data_in[0:31] = AND{32} $reg_enable, 0x10F0[0:31]
+#testassert $reg_write @reg_data_out[0:31] 0x10F0[0:31]
+#testassert $mem_enable @mem_addr[31:0] 0x00000000[31:0]
+$mem_ready = DELAY $mem_enable
+@mem_data_in[0:31] = AND{32} $mem_enable, 0x00FF0000[0:31]
+
+#testcomplete (DELAY $reg_write)
+#endtestcase
+
+// --- FLAGS Pseudo-Register ---
+#array flags	NUM_FLAGS
+#array flags_clear	NUM_FLAGS
+$NULL, @flags[0] = LATCH 1, @flags_clear[0], @flags[0]	// 'C' Flag
+$NULL, $flags_O = LATCH 1, $flags_O_clear, $flags_O
+$NULL, $flags_Z = LATCH 1, $flags_Z_clear, $flags_Z
+#display 1 "CF" $flags_C
+#display 1 "OF" $flags_O
+#display 1 "ZF" $flags_Z
+
+// -- GP Registers ---
+#array reg_addr	4
+#array reg_data_in	32
+#array reg_data_out	32
+$reg_ready, @reg_data_in = REGISTER_BANK_16_32 $reg_enable, @reg_addr, $reg_write, @reg_data_out
+#display $reg_enable "Register Addr" @reg_addr[0:3]
+#display $reg_write  "Register Value New %32x" @reg_data_out[NUM_GPR_BITS-1:0]
+#display $reg_ready  "Register Value %32x" @reg_data_in[NUM_GPR_BITS-1:0]
+
+// --- Memory ---
+// TODO: Implement non-dword reads
+#array mem_addr	32
+#array mem_data_in	32
+#array mem_data_out	32
+$mem_ready, @mem_data_in, $fault_ac = MEMORY_SPACE $mem_enable, @mem_addr, $mem_data_write, @mem_data_out, 0,0
+#display $mem_enable "MemAddr" @mem_addr[NUM_ADDR_BITS-1:0]
+#display $mem_write "MemOut " @mem_data_out[31:0]
+#display $mem_ready "MemIn  " @mem_data_in[NUM_GPR_BITS-1:0]
+
+$rst, $mem_enable, @mem_addr, @mem_data_out, $reg_enable, @reg_addr, @reg_data_out, @flags_clear = \
+	CPU32_CORE (PULSE 1), $mem_ready, @mem_data_in, $reg_ready, @reg_data_in, @flags
 
 ; vim: ft=logiccircuit
