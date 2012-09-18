@@ -16,8 +16,8 @@
 #input $reset, $mem_ready, @mem_data_in[NUM_GPR_BITS], \
 	$reg_ready, @reg_data_in[NUM_GPR_BITS], \
 	@flags[NUM_FLAGS]
-#output $ins_clock, $mem_enable, @mem_addr[NUM_ADDR_BITS], @mem_data_out[NUM_GPR_BITS], \
-	$reg_enable, @reg_addr[4], @reg_data_out[NUM_GPR_BITS], \
+#output $ins_complete, $mem_enable, @mem_addr[NUM_ADDR_BITS], $mem_write, @mem_data_out[NUM_GPR_BITS], \
+	$reg_enable, @reg_addr[4], $reg_write, @reg_data_out[NUM_GPR_BITS], \
 	@flags_clear[NUM_FLAGS]
 
 #array stage_num	4
@@ -68,6 +68,7 @@ $instr_clear = PULSE @stage_state[0]	// Clear the instruction register
 @stage_state = DEMUX{4} 1, @stage_num
 
 // === Next instruction ===
+$ins_complete = PULSE $next_instruction
 $stage_reset = PULSE $next_instruction
 $stage_reset = DELAY $reset
 
@@ -112,10 +113,11 @@ $is_UNDEF = AND (DELAY $decode_enable), (NOR $is_ALU, $is_CND)
 
 // === Address/Operand Decoding ===
 $no_decode_r = AND $decode_enable, (NOR @instr[31:27])
-$decode_start = DELAY $is_ALU
+$decode_start = AND $is_ALU, @stage_state[2]
 $decode_clear = PULSE @stage_state[4]
 $decode_clear = PULSE @stage_state[0]
 
+#display $decode_start "Decode @instr=%32x" @instr
 $alu_data_rdy, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src = CPU32_ADDRESS_DECODE \
 	$decode_start, $decode_clear, (NOT $no_decode_r), 1, @instr, \
 	$reg_enable, @reg_addr, $reg_ready, @reg_data_in, \
@@ -159,7 +161,7 @@ $next_stage = PULSE $_alu_save_none
 // === ALU Done ===
 $alu_complete = AND $is_ALU, @stage_state[4]
 #display $alu_complete "ALU Complete" 1
-$stage_reset = PULSE $alu_complete
+$next_instruction = PULSE $alu_complete
 
 #endunit
 
@@ -168,6 +170,7 @@ $stage_reset = PULSE $alu_complete
 // ====================================
 
 %macro __CPU32_TEST_WRAPPER 0
+
 #array flags	NUM_FLAGS
 #array flags_clear	NUM_FLAGS
 #array reg_addr	4
@@ -177,8 +180,9 @@ $stage_reset = PULSE $alu_complete
 #array mem_data_in	NUM_GPR_BITS
 #array mem_data_out	NUM_GPR_BITS
 
-$rst, $mem_enable, @mem_addr, @mem_data_out, $reg_enable, @reg_addr, @reg_data_out, @flags_clear = \
-	CPU32_CORE (PULSE 1), $mem_ready, @mem_data_in, $reg_ready, @reg_data_in, @flags
+$ins_end, $mem_enable, @mem_addr, $mem_write, @mem_data_out, \
+	$reg_enable, @reg_addr, $reg_write, @reg_data_out, @flags_clear \
+	= CPU32_CORE (PULSE 1), $mem_ready, @mem_data_in, $reg_ready, @reg_data_in, @flags
 %endmacro
 
 #testcase 100 "NOP - Tests PC Inc"
@@ -186,24 +190,25 @@ __CPU32_TEST_WRAPPER
 
 #testassert $reg_enable @reg_addr[0:3] 15[0:3]
 $reg_ready = DELAY $reg_enable
-@reg_data_in[0:31] = AND{32} $reg_enable, 0x10F0[0:31]
-#testassert $reg_write @reg_data_out[0:31] 0x10F0[0:31]
+@reg_data_in[31:0] = AND{32} $reg_enable, 0x10F0[31:0]
+#testassert $reg_write @reg_data_out[31:0] 0x10F0[31:0]
 #testassert $mem_enable @mem_addr[31:0] 0x00000000[31:0]
 $mem_ready = DELAY $mem_enable
 @mem_data_in[0:31] = AND{32} $mem_enable, 0x00FF0000[0:31]
+#testassert 1 @flags[2:0]	0[2:0]
 
-#testcomplete (DELAY $reg_write)
+#testcomplete (DELAY $ins_end)
 #endtestcase
 
 // --- FLAGS Pseudo-Register ---
 #array flags	NUM_FLAGS
 #array flags_clear	NUM_FLAGS
 $NULL, @flags[0] = LATCH 1, @flags_clear[0], @flags[0]	// 'C' Flag
-$NULL, $flags_O = LATCH 1, $flags_O_clear, $flags_O
-$NULL, $flags_Z = LATCH 1, $flags_Z_clear, $flags_Z
-#display 1 "CF" $flags_C
-#display 1 "OF" $flags_O
-#display 1 "ZF" $flags_Z
+$NULL, @flags[1] = LATCH 1, @flags_clear[1], @flags[1]	// 'O' Flag
+$NULL, @flags[2] = LATCH 1, @flags_clear[2], @flags[2]	// 'Z' Flag
+#display 1 "CF" @flags[0]
+#display 1 "OF" @flags[1]
+#display 1 "ZF" @flags[2]
 
 // -- GP Registers ---
 #array reg_addr	4
@@ -219,12 +224,12 @@ $reg_ready, @reg_data_in = REGISTER_BANK_16_32 $reg_enable, @reg_addr, $reg_writ
 #array mem_addr	32
 #array mem_data_in	32
 #array mem_data_out	32
-$mem_ready, @mem_data_in, $fault_ac = MEMORY_SPACE $mem_enable, @mem_addr, $mem_data_write, @mem_data_out, 0,0
+$mem_ready, @mem_data_in, $fault_ac = MEMORY_SPACE $mem_enable, @mem_addr, $mem_write, @mem_data_out, 0,0
 #display $mem_enable "MemAddr" @mem_addr[NUM_ADDR_BITS-1:0]
 #display $mem_write "MemOut " @mem_data_out[31:0]
 #display $mem_ready "MemIn  " @mem_data_in[NUM_GPR_BITS-1:0]
 
-$rst, $mem_enable, @mem_addr, @mem_data_out, $reg_enable, @reg_addr, @reg_data_out, @flags_clear = \
+$rst, $mem_enable, @mem_addr, $mem_write, @mem_data_out, $reg_enable, @reg_addr, $reg_write, @reg_data_out, @flags_clear = \
 	CPU32_CORE (PULSE 1), $mem_ready, @mem_data_in, $reg_ready, @reg_data_in, @flags
 
 ; vim: ft=logiccircuit

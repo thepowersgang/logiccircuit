@@ -38,7 +38,7 @@ $int_addr_clear = PULSE $trigger
 
 $pulse = PULSE $_enable
 
-#display $pulse "$pulse = %1i, $_enable = %1i" $pulse, $_enable
+#display (DELAY $_enable) "$pulse = %1i, $_enable = %1i" $pulse, $_enable
 #display $rdy_clear "$rdy_clear = %1i" $rdy_clear
 
 $NULL, $_enable = LATCH 1, $rdy_clear, (DELAY $trigger)
