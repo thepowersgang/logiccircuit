@@ -1,11 +1,3 @@
-%include "../adder.cct"
-%include "../shift_register.cct"
-%include "address_decode.cct"
-
-;#testfixture
-
-;#endtestfixure
-
 ; ---------------------------------------------------------------------
 #testcase 20 "Decode - R10, -- (no decode m)"
 #array dest_addr 32

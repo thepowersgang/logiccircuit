@@ -184,4 +184,6 @@ $rdy = DELAY{3+2} $_swap_ops
 
 #endunit
 
+%include "address_decode_test.cct"
+
 ; vim: ft=logiccircuit
