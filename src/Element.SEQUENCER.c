@@ -26,7 +26,7 @@ static tElement *_Create(int NParams, int *Params, int NInputs, tLink **Inputs)
 
 	if( NParams != 1 )	return NULL;
 
-	ret = calloc( 1, sizeof(t_element) + (Params[0])*sizeof(tLink*) );
+	ret = calloc( 1, sizeof(t_element) + (3+Params[0])*sizeof(tLink*) );
 	if(!ret)	return NULL;	
 
 	ret->Position = 0;
@@ -70,7 +70,7 @@ static void _Update(tElement *Ele)
 
 tElementDef gElement_SEQUENCER = {
 	NULL, "SEQUENCER",
-	0, 0,
+	3, 3,
 	_Create,
 	_Duplicate,
 	_Update

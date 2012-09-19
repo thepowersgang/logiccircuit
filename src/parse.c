@@ -599,7 +599,11 @@ int ParseLine(tParser *Parser)
 				SyntaxError(Parser, "#testassert outside of a test");
 			
 			// Condition (single value)
-			ParseValue(Parser, &cond);
+			do {
+				ParseValue(Parser, &cond);
+				GetToken(Parser);
+			} while(Parser->Token == TOK_COMMA);
+			PutBack(Parser);	// Put back non-comma token
 			
 			// Values to check
 			do {

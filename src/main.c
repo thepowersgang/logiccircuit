@@ -217,7 +217,14 @@ int main(int argc, char *argv[])
 				for( tAssertion *a = test->Assertions; a; a = a->Next, assertion_num ++ )
 				{
 					 int	i;
-					if( !GetLink(a->Condition.Items[0]) )
+				
+					for( i = 0; i < a->Condition.NItems; i ++ )
+					{
+						if( !GetLink(a->Condition.Items[i]) )
+							break ;
+					}
+					// If one condition failed, don't check
+					if( i < a->Condition.NItems )
 						continue ;
 					
 					// Check that Expected == Actual
