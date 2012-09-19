@@ -165,9 +165,9 @@ $next_instruction = PULSE $alu_complete
 
 #endunit
 
-// ====================================
-//
-// ====================================
+// ====================================================================
+//                             Test Cases
+// ====================================================================
 
 %macro __CPU32_TEST_WRAPPER 1
 
@@ -192,21 +192,25 @@ $ins_end, $mem_enable, @mem_addr, $mem_write, @mem_data_out, \
 #testcase 100 "MOV R15, R15"
 __CPU32_TEST_WRAPPER 1
 
+// - Register accesses should only be R15
 #testassert $reg_enable @reg_addr[0:3] 15[0:3]
 $reg_ready = DELAY $reg_enable
 @reg_data_in[31:0] = AND{32} $reg_enable, 0x10F0[31:0]
+// - Register write 0x10F0
 #testassert $reg_write @reg_data_out[31:0] 0x10F0[31:0]
+// - One memory read from 0 (Fetch)
 #testassert $mem_enable @mem_addr[31:0] 0x00000000[31:0]
 $mem_ready = DELAY $mem_enable
 @mem_data_in[0:31] = AND{32} $mem_enable, 0x00FF0000[0:31]
+// - Flags should not be changed
 #testassert 1 @flags[2:0]	0[2:0]
 
 #testcomplete (DELAY $ins_end)
 #endtestcase
 
-// --------------------------------------------------------------------
-// Operational Version
-// --------------------------------------------------------------------
+// ====================================================================
+//                           Root Version
+// ====================================================================
 
 // --- FLAGS Pseudo-Register ---
 #array flags	NUM_FLAGS
@@ -236,6 +240,7 @@ $mem_ready, @mem_data_in, $fault_ac = MEMORY_SPACE $mem_enable, @mem_addr, $mem_
 #display $mem_write "MemOut " @mem_data_out[31:0]
 #display $mem_ready "MemIn  " @mem_data_in[NUM_GPR_BITS-1:0]
 
+// --- CPU ---
 $rst, $mem_enable, @mem_addr, $mem_write, @mem_data_out, $reg_enable, @reg_addr, $reg_write, @reg_data_out, @flags_clear = \
 	CPU32_CORE (PULSE 1), $mem_ready, @mem_data_in, $reg_ready, @reg_data_in, @flags
 
