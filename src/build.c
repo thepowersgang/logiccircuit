@@ -918,11 +918,11 @@ tList *CreateUnit(const char *Name, int NParams, int *Params, tList *Inputs)
 	
 	// Sanity check input numbers
 	if( Inputs->NItems < def->MinInput ) {
-		printf("%s requires at least %i input lines\n", def->Name, def->MinInput);
+		fprintf(stderr, "%s requires at least %i input lines\n", def->Name, def->MinInput);
 		return NULL;
 	}
 	if( def->MaxInput != -1 && Inputs->NItems > def->MaxInput ) {
-		printf("%s takes at most %i input lines\n", def->Name, def->MaxInput);
+		fprintf(stderr, "%s takes at most %i input lines\n", def->Name, def->MaxInput);
 		return NULL;
 	}
 	
