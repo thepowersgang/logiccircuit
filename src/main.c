@@ -73,7 +73,6 @@ int main(int argc, char *argv[])
 	ADD_ELEDEF(PULSE);
 	ADD_ELEDEF(HOLD);
 	ADD_ELEDEF(VALUESET);
-	ADD_ELEDEF(CONST);
 	ADD_ELEDEF(SEQUENCER);
 	
 	// Load Circuit file(s)
