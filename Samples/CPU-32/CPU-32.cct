@@ -50,9 +50,6 @@ $flags_Z_clear = @flags_clear[2]
 #display 1 "PC = %32x" @pc[31:0]
 $pc_clear = PULSE $reset
 $NULL, @pc = LATCH{32} 1, $pc_clear, @pc_new
-#display 1 "PC Valid? %1i" $reg_pc_valid
-$reg_pc_valid = PULSE $reset	// Raise at CPU init
-$NULL, $reg_pc_valid  = LATCH 1, $pc_clear, $reg_pc_valid
 
 // === "Temporary" Latches ===
 // @instr - Temporary "variables" used to hold intermediate values
@@ -88,10 +85,14 @@ $next_stage = PULSE (AND @stage_state[0], $mem_ready)	// Wait for instruction to
 // =============================
 #display @stage_state[1] "PC Update" 1
 // - Add 4 to PC
-$increment_pc = PULSE (AND @stage_state[1], $reg_ready)	// Increment the program counter too
-$pc_clear, @pc_new, $NULL = ADDER_32BIT $increment_pc, (DELAY{2} @pc), 4[0:31], 0
+#array _pc_new 32
+$increment_pc = PULSE @stage_state[1]	// Increment the program counter too
+$_pc_clear, @_pc_new, $NULL = ADDER_32BIT $increment_pc, @pc, 4[0:31], 0
+#display $pc_clear "_pc_new = %32x" @_pc_new[0:31]
+$pc_clear = DELAY $_pc_clear
+@pc_new = DELAY{2} @_pc_new
 // Write back
-$next_stage = PULSE (DELAY $pc_clear)		; Don't move to decode until PC is updated
+$next_stage = PULSE (DELAY $_pc_clear)		; Don't move to decode until PC is updated
 
 // ================================
 // === Stage 2: Opcode Decoding ===
@@ -169,8 +170,8 @@ $next_instruction = PULSE $alu_complete
 //                             Test Cases
 // ====================================================================
 
+// --- Boilerplate for tests ---
 %macro __CPU32_TEST_WRAPPER 1
-
 #array flags	NUM_FLAGS
 #array flags_clear	NUM_FLAGS
 #array reg_addr	4
@@ -206,6 +207,34 @@ $mem_ready = DELAY $mem_enable
 #testassert 1 @flags[2:0]	0[2:0]
 
 #testcomplete (DELAY $ins_end)
+#endtestcase
+
+#testcase 200 "MOV R0, R0; MOV R15, R15"
+__CPU32_TEST_WRAPPER 1
+
+#array stage 3
+@stage = SEQUENCER{3} 1, 0, $ins_end
+// - #1: R0=0x43211234, Mem=0
+#testassert @stage[0],$reg_enable  @reg_addr[3:0]  0[3:0]
+$reg_ready = AND $reg_enable, @stage[0]
+@reg_data_in[31:0] = AND{32} $reg_enable, @stage[0], 0x43211234[31:0]
+#testassert @stage[0],$reg_write  @reg_data_out[31:0]  0x43211234[31:0]
+#testassert @stage[0],$mem_enable  @mem_addr[31:0]  0x00000000[31:0]
+$mem_ready = AND @stage[0], $mem_enable
+@mem_data_in[0:31] = AND{32} @stage[0], $mem_enable, 0x00000000[0:31]
+// - #2: R15=0xF00DCAFE, Mem=4
+#testassert @stage[1],$reg_enable  @reg_addr[3:0]  15[3:0]
+$reg_ready = AND @stage[1], $reg_enable
+@reg_data_in[31:0] = AND{32} $reg_enable, @stage[1], 0xF00DCAFE[31:0]
+#testassert @stage[1],$reg_write  @reg_data_out[31:0]  0xF00DCAFE[31:0]
+#testassert @stage[1],$mem_enable @mem_addr[31:0] 0x00000004[31:0]
+$mem_ready = AND @stage[1], $mem_enable
+@mem_data_in[0:31] = AND{32} @stage[1], $mem_enable, 0x00FF0000[0:31]
+// - Flags should not be changed
+#testassert 1 @flags[2:0]	0[2:0]
+
+#testcomplete @stage[2]
+
 #endtestcase
 
 // ====================================================================
