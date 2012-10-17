@@ -27,6 +27,8 @@ extern int ParseFile(const char *Filename);
 } while(0)
 
 // === PROTOTYPES ===
+ int	main(int argc, char *argv[]);
+void	UsageCheck(tTestCase *Root);
 void	RunSimulationStep(tTestCase *Root);
 void	ShowDisplayItems(tDisplayItem *First);
 void	ReadCommand(int MaxCmd, char *Command, int MaxArg, char *Argument);
@@ -196,7 +198,13 @@ int main(int argc, char *argv[])
 		WriteCompiledVersion("cct.binary", 1);
 		WriteCompiledVersion("cct.ascii", 0);
 	}
-	
+
+	// TODO: Check for links that aren't set/read
+//	UsageCheck(NULL);
+//	for( tTestCase *test = gpTests; test; test = test->Next )
+//		UsageCheck(test);
+
+	// Test case code	
 	if( gbRunTests )
 	{
 		printf("=== Running tests ===\n");
@@ -393,20 +401,66 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
+void GetLists(tTestCase *Root, tLink ***links, tElement ***elements)
+{
+	if( Root ) {
+		*links = &Root->Links;
+		*elements = &Root->Elements;
+	}
+	else {
+		*links = &gpLinks;
+		*elements = &gpElements;
+	}
+}
+
+void UsageCheck(tTestCase *Root)
+{
+	struct sUsage {
+		short	nSet;
+		short	nRead;
+	}	*usage;
+	 int	nLinks = 0;
+	tLink	**links;
+	tElement	**elements;
+	
+	GetLists(Root, &links, &elements);
+	
+	for( tLink *link = *links; link; link = link->Next )
+		nLinks ++;
+	usage = calloc(nLinks, sizeof(*usage));
+	
+	 int	i = 0;
+	for( tLink *link = *links; link; link = link->Next, i++ )
+		link->Link = (void*)&usage[i];
+	
+	for( tElement *ele = *elements; ele; ele = ele->Next )
+	{
+		for( i = 0; i < ele->NInputs; i ++ )
+			((struct sUsage*)ele->Inputs[i]->Link)->nRead ++;
+		for( i = 0; i < ele->NOutputs; i ++ )
+			((struct sUsage*)ele->Outputs[i]->Link)->nSet ++;
+	}
+	
+	for( tLink *link = *links; link; link = link->Next )
+	{
+		struct sUsage	*u = (void*)link->Link;
+		if( u->nSet == 0 )
+			fprintf(stderr, "Link '%s' is never set\n", link->Name);
+		if( u->nRead == 0 )
+			fprintf(stderr, "Link '%s' is never read\n", link->Name);
+		link->Link = NULL;
+	}
+	
+	free(usage);
+}
+
 void RunSimulationStep(tTestCase *Root)
 {
 	tLink	**links;
 	tElement	**elements;
 	
-	if( Root ) {
-		links = &Root->Links;
-		elements = &Root->Elements;
-	}
-	else {
-		links = &gpLinks;
-		elements = &gpElements;
-	}
-	
+	GetLists(Root, &links, &elements);
+
 	for( tLink *link = *links; link; link = link->Next )
 	{
 		ASSERT(link != link->Next);
