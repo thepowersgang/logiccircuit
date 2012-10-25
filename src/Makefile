@@ -4,7 +4,7 @@
 CPPFLAGS = -I ./include/
 CFLAGS = -Wall -g -std=gnu99
 
-OBJ := main.o parse.o build.o
+OBJ := main.o parse.o build.o compiled.o
 OBJ += Elements.Logic.o Element.NOT.o
 OBJ += Element.CLOCK.o Element.COUNTER.o Element.MUX.o Element.DEMUX.o Element.LATCH.o
 OBJ += Element.PULSE.o Element.HOLD.o Element.VALUESET.o Element.DELAY.o

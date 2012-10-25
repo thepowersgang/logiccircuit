@@ -5,6 +5,8 @@
 
 #include <link.h>
 
+#define MAX_PARAMS	4
+
 typedef struct sElementDef	tElementDef;
 typedef struct sElement	tElement;
 
@@ -27,7 +29,8 @@ struct sElement
 	tElement	*Next;
 	tElementDef	*Type;
 
-	 int	Param;
+	 int	NParams;
+	 int	Params[MAX_PARAMS];
 
 	 int	NInputs;
 	tLink	**Inputs;

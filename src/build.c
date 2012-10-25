@@ -925,6 +925,10 @@ tList *CreateUnit(const char *Name, int NParams, int *Params, tList *Inputs)
 		fprintf(stderr, "%s takes at most %i input lines\n", def->Name, def->MaxInput);
 		return NULL;
 	}
+	if( NParams > MAX_PARAMS ) {
+		fprintf(stderr, "%s passed %i params (max %i)\n", def->Name, NParams, MAX_PARAMS);
+		return NULL;
+	}
 	
 	// Create an instance
 	ele = def->Create(NParams, Params, Inputs->NItems, Inputs->Items);
@@ -937,6 +941,9 @@ tList *CreateUnit(const char *Name, int NParams, int *Params, tList *Inputs)
 		ele->Inputs[i] = Inputs->Items[i];
 		ele->Inputs[i]->ReferenceCount ++;
 	}
+	ele->NParams = NParams;
+	for( i = 0; i < NParams; i ++ )
+		ele->Params[i] = Params[i];
 	
 	// Append to element list
 	ele->Next = *listhead;

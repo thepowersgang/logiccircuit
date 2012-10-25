@@ -8,6 +8,7 @@
 #include <signal.h>
 #include <string.h>
 #include <ctype.h>
+#include <compiled.h>
 
 #define PRINT_ELEMENTS	0
 
@@ -100,6 +101,14 @@ int main(int argc, char *argv[])
 				if(i + 1 == argc)	return -1;
 				giSimulationSteps = atoi(argv[++i]);
 			}
+			else if( strcmp(argv[i], "-readbin") == 0 ) {
+				if(i + 1 == argc)	return -1;
+				ReadCompiledVersion(argv[++i], 1);
+			}
+			else if( strcmp(argv[i], "-readascii") == 0 ) {
+				if(i + 1 == argc)	return -1;
+				ReadCompiledVersion(argv[++i], 0);
+			}
 			else {
 				// ERROR
 				fprintf(stderr, "Unknown option '%s'\n", argv[i]);
@@ -107,7 +116,7 @@ int main(int argc, char *argv[])
 			}
 			continue ;
 		}
-		
+
 		if( ParseFile(argv[i]) ) {
 			return -1;
 		}
@@ -159,6 +168,11 @@ int main(int argc, char *argv[])
 	if( gbCompress )
 		CompressLinks();	
 
+	// TODO: Check for links that aren't set/read
+//	UsageCheck(NULL);
+//	for( tTestCase *test = gpTests; test; test = test->Next )
+//		UsageCheck(test);
+
 	if( gbPrintStats )
 	{
 		 int	totalLinks = 0;
@@ -202,15 +216,10 @@ int main(int argc, char *argv[])
 	}
 
 	// TODO: Support saving tree to a file
-	if( 0 ) {
+	if( 1 ) {
 		WriteCompiledVersion("cct.binary", 1);
 		WriteCompiledVersion("cct.ascii", 0);
 	}
-
-	// TODO: Check for links that aren't set/read
-//	UsageCheck(NULL);
-//	for( tTestCase *test = gpTests; test; test = test->Next )
-//		UsageCheck(test);
 
 	// Test case code	
 	if( gbRunTests )
@@ -790,83 +799,6 @@ void CompressLinks(void)
 	}
 	printf("Pruned %i links\n", nPruned);
 	#endif
-}
-
-void WriteCompiledVersion(const char *Path, int bBinary)
-{
-	 int	n_links = 0;
-	 int	n_eletypes = 0;
-	 int	n_elements = 0;
-	FILE	*fp;
-	tLink	*link;
-	tElement	*ele;
-	 int	i;
-	
-	if( !gbCompress )	CompressLinks();
-	
-	
-	for( link = gpLinks; link; link = link->Next ) {
-		link->Backlink = (void*)(intptr_t)n_links;	// Save
-		n_links ++;
-	}
-	for( ele = gpElements; ele; ele = ele->Next )
-		n_elements ++;
-	for( tElementDef *ed = gpElementDefs; ed; ed = ed->Next )
-		n_eletypes ++;
-
-	void _Write16(FILE *fp, uint16_t val) {
-		fputc(val & 0xFF, fp);
-		fputc(val >> 8, fp);
-	}
-	
-	fp = fopen(Path, "wb");
-	
-	if( bBinary ) {
-		_Write16(fp, n_links);
-		_Write16(fp, n_eletypes);
-		_Write16(fp, n_elements);
-
-		// Element type names
-		for( tElementDef *ed = gpElementDefs; ed; ed = ed->Next )
-			fwrite(ed->Name, 1, strlen(ed->Name)+1, fp);
-	}
-	else {
-		fprintf(fp, "%04x %04x\n", n_links, n_elements);
-	}
-	
-	// Element info
-	for( ele = gpElements; ele; ele = ele->Next )
-	{
-		if( bBinary ) {
-			_Write16(fp, ele->NInputs);
-			_Write16(fp, ele->NOutputs);
-//			_Write16(fp, ele->NParams);
-			for( i = 0; i < ele->NInputs; i ++ )
-				_Write16(fp, (intptr_t)ele->Inputs[i]->Backlink);
-			for( i = 0; i < ele->NOutputs; i ++ )
-				_Write16(fp, (intptr_t)ele->Outputs[i]->Backlink);
-//			for( i = 0; i < ele->NParams; i ++ )
-//				_Write32(fp, ele->Params[i]);
-		}
-		else {
-			fprintf(fp,
-				"%s %02x %02x %02x |",
-				ele->Type->Name, 0, ele->NInputs, ele->NOutputs
-				);
-			// TODO: Params
-			for( i = 0; i < ele->NInputs; i ++ )
-				fprintf(fp, " %04x", (int)(intptr_t)ele->Inputs[i]->Backlink);
-			fprintf(fp, " |");
-			for( i = 0; i < ele->NOutputs; i ++ )
-				fprintf(fp, " %04x", (int)(intptr_t)ele->Outputs[i]->Backlink);
-			//fprintf(fp, " |");
-			//for( i = 0; i < ele->NParams; i ++ )
-			//	fprintf(fp, " %i", (int)(intptr_t)ele->Params[i]);
-			fprintf(fp, "\n");
-		}
-	}
-	
-	fclose(fp);
 }
 
 void DumpList(const tList *List, int bShowNames)
