@@ -209,6 +209,7 @@ $mem_ready = DELAY $mem_enable
 #testcomplete (DELAY $ins_end)
 #endtestcase
 
+// --- Test Case: Two Instructions ---
 #testcase 200 "MOV R0, R0; MOV R15, R15"
 __CPU32_TEST_WRAPPER 1
 
@@ -270,7 +271,8 @@ $mem_ready, @mem_data_in, $fault_ac = MEMORY_SPACE $mem_enable, @mem_addr, $mem_
 #display $mem_ready "MemIn  " @mem_data_in[NUM_GPR_BITS-1:0]
 
 // --- CPU ---
-$rst, $mem_enable, @mem_addr, $mem_write, @mem_data_out, $reg_enable, @reg_addr, $reg_write, @reg_data_out, @flags_clear = \
-	CPU32_CORE (PULSE 1), $mem_ready, @mem_data_in, $reg_ready, @reg_data_in, @flags
+$rst, $mem_enable, @mem_addr, $mem_write, @mem_data_out, \
+	$reg_enable, @reg_addr, $reg_write, @reg_data_out, @flags_clear \
+	= CPU32_CORE (PULSE 1), $mem_ready, @mem_data_in, $reg_ready, @reg_data_in, @flags
 
 ; vim: ft=logiccircuit

@@ -16,14 +16,16 @@
 ; - $is_mem_dest : Set if the destination is a memory address (as opposed to a register num)
 ; - @dest_addr : Destination address / register number (register num is stored in low 4 bits)
 ; - @op_1    : First operand (usually R, unless $is_mem_dest is set)
-; - @op_2    : First operand (usually m, unless $is_mem_dest is set)
+; - @op_2    : Second operand (usually m, unless $is_mem_dest is set)
 ; IMPORTS? (TODO: Are imports possible?)
 ; - $reg_enable   : Enable register unit
 ; - @reg_addr[4]  : Register read select (3 unit lag)
+; - $reg_ready    : Register data ready
 ; - @reg_data_in[32] : Register data
 ; - $mem_enable   : Memory enable line (performs read at @mem_addr)
-; - $mem_ready    : Set when the memory data is ready
 ; - @mem_addr[32] : Memory address
+; - $mem_ready    : Set when the memory data is ready
+; - @mem_data_in[32] : Memory data
 #defunit CPU32_ADDRESS_DECODE
 #input $trigger, $in_rdy_clear, $read_r, $read_m, @instr[32], \
 	$reg_enable, @reg_addr[4], $reg_ready, @reg_data_in[32], \
@@ -40,14 +42,15 @@ $pulse = PULSE $_enable
 
 #display (DELAY $_enable) "$pulse = %1i, $_enable = %1i" $pulse, $_enable
 #display $rdy_clear "$rdy_clear = %1i" $rdy_clear
+#display $rdy "$rdy = %1i" $rdy
 
 $NULL, $_enable = LATCH 1, $rdy_clear, (DELAY $trigger)
 $NULL, @dest_addr = LATCH{32} 1, $_pulse, @dest_addr
 $NULL, @op_1 = LATCH{32} 1, $op_clear, @op_1
 $NULL, @op_2 = LATCH{32} 1, $op_clear, @op_2
-$NULL, $rdy = LATCH{1} 1, $rdy_clear, $rdy
-$NULL, $op_2_read = LATCH{1} 1, $_pulse, $op_2_read_set
-$op_1_read = DELAY $op_1_read	// Reduces latency when starting
+$NULL, $rdy = LATCH{1} 1, $rdy_clear, $rdy_set
+$NULL, $op_2_read = LATCH{1} 1, $rdy_clear, $op_2_read_set
+//$op_1_read = DELAY $op_1_read	// Reduces latency when starting
 
 #display (AND $trigger, $read_r) "op_1" @op_1[31:0]
 #display (AND $trigger, $read_m) "op_2" @op_2[31:0]
@@ -171,16 +174,17 @@ $reg_enable = PULSE $reading_op1
 $op_1_read = AND $reading_op1, $reg_ready
 ; === Skip Op1? ===
 $op_1_read = AND $op_2_read, (NOT $read_r)
+#display $op_1_read "OP1 Read set" $op_1_read
 
 ; === Ready if not mem dest ===
-$rdy = AND $op_1_read, (NOT $is_mem_dest)
+$rdy_set = AND $op_1_read, (NOT $is_mem_dest)
 ; === Swap if mem dest ===
 $_swap_ops = AND (PULSE $op_1_read), $is_mem_dest
 #display $_swap_ops "Swapping OP1/OP2 %32x and %32x" @op_1[31:0], @op_2[31:0]
 @op_1 = DELAY{3} (AND{32} $_swap_ops, @op_2)
 @op_2 = DELAY{3} (AND{32} $_swap_ops, @op_1)
 $op_clear = DELAY $_swap_ops
-$rdy = DELAY{3+2} $_swap_ops
+$rdy_set = DELAY{3+2} $_swap_ops
 
 #endunit
 

@@ -282,28 +282,43 @@ $comp = DELAY{10} $done
 #testcase 50 "Decode - R10, -; reset"
 CPU32_ADDRESS_DECODE_BOILERPLATE
 
-#array state	4
+#array state	5
 $next = PULSE $done
-@state = SEQUENCER{4} 1, 0, $next
+@state = SEQUENCER{5} 1, 0, $next
 
 $enable = DELAY @state[0]
-$next = PULSE (DELAY{10} @state[1])
-$enable = DELAY @state[2]
+// $next set by completion
+
+// Clear and wait for it to happen
+$clear = PULSE @state[1]
+$next = DELAY{10} (PULSE @state[1])
+
+// Ensure clear worked
+$next = DELAY{4} @state[2]
+
+// Second decode
+$enable = DELAY @state[3]
 
 $_rr = DELAY $_re
 
-#testassert @state[2] $imd 0
-#testassert @state[2] $done 0
-#testassert @state[2] @dest_addr[31:0] 0[31:0]
-#testassert @state[2] @op1[31:0] 0[31:0]
-#testassert @state[2] @op2[31:0] 0[31:0]
+#testassert @state[1]	$imd 0
+#testassert @state[1]	@dest_addr[31:0] 10[31:0]
+#testassert @state[1]	@op1[31:0] 0[31:0]
+#testassert @state[1]	@op2[31:0] 0[31:0]
+
+#testassert @state[2]	$done 0
+
+#testassert @state[4]	$imd 0
+#testassert @state[4]	@dest_addr[31:0] 10[31:0]
+#testassert @state[4]	@op1[31:0] 0[31:0]
+#testassert @state[4]	@op2[31:0] 0[31:0]
 
 $done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
-	$enable, 0, 1, 0, 0xF0ABAAAA[0:31], \
+	$enable, $clear, 1, 0, 0xF0ABAAAA[0:31], \
 	$_re, @_ra, $_rr, @_rd, \
 	$_me, @_ma, $_mr, @_md
 
-#testcomplete @state[3]
+#testcomplete @state[4]
 
 #endtestcase
 

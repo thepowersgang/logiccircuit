@@ -49,6 +49,7 @@ void	ResolveEleLinks(tElement *First);
  int	gbCompress = 1;
 
  int	gbRunTests = 0;
+const char	*gsTestName;
  int	gbTest_ShowDisplay = 0;
 
 // === CODE ===
@@ -88,6 +89,11 @@ int main(int argc, char *argv[])
 				gbPrintStats = 1;
 			else if( strcmp(argv[i], "-test") == 0 )
 				gbRunTests = 1;
+			else if( strcmp(argv[i], "-onetest") == 0 ) {
+				if(i + 1 == argc)	return -1;
+				gbRunTests = 1;
+				gsTestName = argv[++i];
+			}
 			else if( strcmp(argv[i], "-testdbg") == 0 )
 				gbTest_ShowDisplay = 1;
 			else if( strcmp(argv[i], "-count") == 0 ) {
@@ -96,6 +102,8 @@ int main(int argc, char *argv[])
 			}
 			else {
 				// ERROR
+				fprintf(stderr, "Unknown option '%s'\n", argv[i]);
+				return -2;
 			}
 			continue ;
 		}
@@ -212,6 +220,10 @@ int main(int argc, char *argv[])
 		{
 			 int	steps_elapsed = 0;
 			 int	bFailure = 0;
+
+			if( gsTestName && strcmp(test->Name, gsTestName) != 0 )
+				continue ;			
+
 			printf("Test '%s'...", test->Name);
 			while( steps_elapsed != test->MaxLength && !bFailure )
 			{
@@ -838,14 +850,18 @@ void WriteCompiledVersion(const char *Path, int bBinary)
 		}
 		else {
 			fprintf(fp,
-				"%s %02x %02x %02x",
+				"%s %02x %02x %02x |",
 				ele->Type->Name, 0, ele->NInputs, ele->NOutputs
 				);
 			// TODO: Params
 			for( i = 0; i < ele->NInputs; i ++ )
 				fprintf(fp, " %04x", (int)(intptr_t)ele->Inputs[i]->Backlink);
+			fprintf(fp, " |");
 			for( i = 0; i < ele->NOutputs; i ++ )
 				fprintf(fp, " %04x", (int)(intptr_t)ele->Outputs[i]->Backlink);
+			//fprintf(fp, " |");
+			//for( i = 0; i < ele->NParams; i ++ )
+			//	fprintf(fp, " %i", (int)(intptr_t)ele->Params[i]);
 			fprintf(fp, "\n");
 		}
 	}
