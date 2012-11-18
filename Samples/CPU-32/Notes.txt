@@ -35,7 +35,7 @@ Operations
 00111mmm	- TEST
 
 0100cccc v24	- JMPcc .+imm24s*4
-0101cccc v24	- CALLcc .+imm24s*4
+0101cccc v24	- CALLcc .+imm24s*4 (ala BX in ARM)
 01100mmm R=0	- PUSH op2
 01100mmm R=1	- POP op2
 01100mmm R=14	- MOV op2, PC
@@ -64,10 +64,10 @@ Operations
 0110 OF=1	O	Overflow
 0111 OF=0	NO	No Overflow
 1000 OF=ZF	GE	Signed Greater or Equal
-1001 OF!=ZF	LE	Signed Less or Equal
+1001 OF!=ZF	LT	Signed Less
 1010 OF=0,ZF=0	GT	Signed Greater
-1011 OF=1,ZF=0	LT	Signed Less
-1100 CF=1,ZF=0	A	Above (Unsigned Greater)
-1101 CF=0|ZF=1	BE	Below-Equal (Unsigned Less-than)
+1011 OF=1|ZF=1	LE	Signed Less or Equal
+1100 CF=0,ZF=0	A	Above (Unsigned Greater)
+1101 CF=1|ZF=1	BE	Below-Equal (Unsigned Less-than)
 1110 -  	--	Always
 1111 -  	--	Never

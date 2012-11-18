@@ -25,9 +25,10 @@
 
 #array instr	32
 
-#breakpoint $next_stage "Next Stage"
-#breakpoint $reg_pc_write "PC Write"
-#breakpoint $stage_reset "Stage Reset"
+#breakpoint $ins_complete "Next Instruction"
+;#breakpoint $next_stage "Next Stage"
+;#breakpoint $reg_pc_write "PC Write"
+;#breakpoint $stage_reset "Stage Reset"
 
 #display 1 "Stage %4x" @stage_num[3:0], @stage_state
 #display 1 "Reset  " $stage_reset
@@ -65,7 +66,7 @@ $instr_clear = PULSE @stage_state[0]	// Clear the instruction register
 @stage_state = DEMUX{4} 1, @stage_num
 
 // === Next instruction ===
-$ins_complete = PULSE $next_instruction
+$ins_complete = DELAY{2} (PULSE $next_instruction)
 $stage_reset = PULSE $next_instruction
 $stage_reset = DELAY $reset
 
@@ -86,8 +87,11 @@ $next_stage = PULSE (AND @stage_state[0], $mem_ready)	// Wait for instruction to
 #display @stage_state[1] "PC Update" 1
 // - Add 4 to PC
 #array _pc_new 32
+#array pc_inc_value 32	// value to increment to
+#display @stage_state[1] "PC Inc Value = %32x" @pc_inc_value[31:0]
 $increment_pc = PULSE @stage_state[1]	// Increment the program counter too
-$_pc_clear, @_pc_new, $NULL = ADDER_32BIT $increment_pc, @pc, 4[0:31], 0
+@pc_inc_value[0:31] = AND{32} (NOT $alt_pc_inc_value), 4[0:31]
+$_pc_clear, @_pc_new, $NULL = ADDER_32BIT $increment_pc, @pc, @pc_inc_value, 0
 #display $pc_clear "_pc_new = %32x" @_pc_new[0:31]
 $pc_clear = DELAY $_pc_clear
 @pc_new = DELAY{2} @_pc_new
@@ -105,10 +109,10 @@ $next_stage = PULSE (DELAY $_pc_clear)		; Don't move to decode until PC is updat
 #display @stage_state[2] "Opcode decode" 1
 $decode_enable = OR @stage_state[2:15]
 $is_ALU = AND $decode_enable, (NOT   @instr[31]), (NOT   @instr[30])
-$is_CND = AND $decode_enable, (NOT   @instr[31]), (DELAY @instr[30]), (NOT @instr[29]), (NOT @instr[28])
+$is_BRANCH = AND $decode_enable, (NOT   @instr[31]), (DELAY @instr[30]), (NOT @instr[29])
 
 // === Handle Undefined Opcodes ===
-$is_UNDEF = AND (DELAY $decode_enable), (NOR $is_ALU, $is_CND)
+$is_UNDEF = AND (DELAY $decode_enable), (NOR $is_ALU, $is_BRANCH)
 #display $is_UNDEF "UNDEFINED INSTRUCTION!" 0
 ; $next_instruction = AND @stage_state[1], $is_UNDEF
 
@@ -132,6 +136,44 @@ $alu_data_rdy, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src = CPU32_ADDRESS
 $alu_done, $alu_nosave, @alu_out = CPU32_ALU $alu_data_rdy, @instr[27:29], @alu_in_dst, @alu_in_src,\
 	$flags_C, $flags_O, $flags_Z, $flags_C_clear, $flags_O_clear, $flags_Z_clear
 $next_stage = PULSE $alu_done
+
+// === Conditional Jumps / Calls ===
+#array cond 8
+@cond = DEMUX{3} $is_BRANCH, @instr[27:25]
+$cond_inverse = DELAY @instr[24]
+$cond_call = DELAY @instr[28]	// bit 28 selects call/BX (as opposed to just jmp)
+$cond_jump = NOT   @instr[28]	// ^^^
+
+$condition_true = AND @cond[0], $flags_Z
+$condition_true = AND @cond[1], $flags_C
+$condition_true = AND @cond[2], $flags_S
+$condition_true = AND @cond[3], $flags_O
+$condition_true = AND @cond[4], (NOT (XOR $flags_O, $flags_Z))	; OF!=ZF
+$condition_true = AND @cond[5], (NOT $flags_O, $flags_Z)	; OF=0,ZF=0
+$condition_true = AND @cond[6], (NOT $flags_C, $flags_Z)	; CF=0,ZF=0
+$condition_true = DELAY @cond[7]
+$_jump_cond = XOR $condition_true, $cond_inverse
+// - Not branching? Next instruction
+$next_instruction = PULSE (AND (DELAY{3} $is_BRANCH), (NOT $_jump_cond))	; Theory says 2, but 3 to be safe
+
+// - Just branch, next stage
+$next_stage = AND $is_BRANCH, $_jump_cond, $cond_jump
+// - Branch+exchange, save PC to R14
+$_do_call = AND $is_BRANCH, $_jump_cond, $cond_call
+@reg_addr[3:0] = AND{4} $_do_call, 14[3:0]	; R14 = LR
+@reg_data_out[31:0] = AND{32} $_do_call, @pc[31:0]
+$reg_enable = PULSE $_do_call
+$reg_write = PULSE $_do_call
+$next_stage = PULSE (AND $_do_call, $reg_ready)
+
+// - Actually do update
+$do_jump = AND $is_BRANCH, @stage_state[3]
+$alt_pc_inc_value = DELAY $do_jump
+@pc_inc_value[31:0] = AND{32} $do_jump, @instr[23],@instr[23],@instr[23],@instr[23],@instr[23],@instr[23],@instr[23:0],0,0 	// 24 bit signed * 4
+$increment_pc = DELAY (PULSE $do_jump)	// Delay is to ensure the alt_pc_inc_value has taken effect (and the 4 has been removed)
+// - Next stage when PC is updated
+$next_instruction = PULSE @stage_state[4]
+
 
 // ==============================
 // === Stage 3: Save ALU Data ===
