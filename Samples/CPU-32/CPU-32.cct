@@ -301,6 +301,31 @@ $mem_ready = DELAY $mem_enable
 
 #endtestcase
 
+#testcase 400 "Big PCs"
+__CPU32_TEST_WRAPPER 1
+#array stage 12
+@stage = SEQUENCER{12} 1, 0, $ins_end
+$mem_ready = DELAY $mem_enable
+#testassert 1 $reg_enable 0
+
+// 0x4F = JMP never
+@mem_data_in[0:31] = AND{32} $mem_enable, 0x4F000000[0:31]
+
+#testassert @stage[0],$mem_enable	@mem_addr[0:31]	0x00[0:31]
+#testassert @stage[1],$mem_enable	@mem_addr[0:31]	0x04[0:31]
+#testassert @stage[2],$mem_enable	@mem_addr[0:31]	0x08[0:31]
+#testassert @stage[3],$mem_enable	@mem_addr[0:31]	0x0C[0:31]
+#testassert @stage[4],$mem_enable	@mem_addr[0:31]	0x10[0:31]
+#testassert @stage[5],$mem_enable	@mem_addr[0:31]	0x14[0:31]
+#testassert @stage[6],$mem_enable	@mem_addr[0:31]	0x18[0:31]
+#testassert @stage[7],$mem_enable	@mem_addr[0:31]	0x1C[0:31]
+#testassert @stage[8],$mem_enable	@mem_addr[0:31]	0x20[0:31]
+#testassert @stage[9],$mem_enable	@mem_addr[0:31]	0x24[0:31]
+#testassert @stage[10],$mem_enable	@mem_addr[0:31]	0x28[0:31]
+
+#testcomplete @stage[11]
+#endtestcase
+
 #testcase 700 "Jump Conditions"
 __CPU32_TEST_WRAPPER 1
 #array stage 7
@@ -330,6 +355,7 @@ $mem_ready = DELAY $mem_enable
 #testassert @stage[4], $mem_enable @mem_addr[0:31] 24[0:31]
 @mem_data_in[0:31] = AND{32} @stage[4], $mem_enable, 0x4EFFFFFF[0:31]
 
+// - Dummy instruction to test the final address
 #testassert @stage[5], $mem_enable @mem_addr[0:31] 24[0:31]
 @mem_data_in[0:31] = AND{32} @stage[5], $mem_enable, 0x4EFFFFFF[0:31]
 
