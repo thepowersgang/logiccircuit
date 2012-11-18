@@ -62,8 +62,8 @@ $is_ROM = AND (DELAY $enable), (NOT   @addr[15]), (NOT   @addr[14]), (NOT   @add
 @_data_word_out[0:31] = AND{32} @ROM_select[0x0000], 0x11131337[0:31]	; OR R1, 0x31337
 @_data_word_out[0:31] = AND{32} @ROM_select[0x0001], 0x010FFFFF[0:31]	; MOV R0, 0xFFFFF
 @_data_word_out[0:31] = AND{32} @ROM_select[0x0002], 0x21000001[0:31]	; ADD R0, 0x00001
-@_data_word_out[0:31] = AND{32} @ROM_select[0x0003], 0x23F0FFF8[0:31]	; ADD PC, -8
-@_data_word_out[0:31] = AND{32} @ROM_select[0x0004], 0x23F0FFF4[0:31]	; JMP .+0xFFFC (-4) (ADD R15, 0xFFFC signed)
+@_data_word_out[0:31] = AND{32} @ROM_select[0x0003], 0x4EFFFFFD[0:31]	; JMP .-3*4
+@_data_word_out[0:31] = AND{32} @ROM_select[0x0004], 0x4EFFFFFF[0:31]	; JMP .-1*4 (infinite loop)
 
 // 1 delay for DEMUX, 1 for data
 $_data_rdy = DELAY{2} $is_ROM
