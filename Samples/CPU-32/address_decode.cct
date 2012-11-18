@@ -50,7 +50,6 @@ $NULL, @op_1 = LATCH{32} 1, $op_clear, @op_1
 $NULL, @op_2 = LATCH{32} 1, $op_clear, @op_2
 $NULL, $rdy = LATCH{1} 1, (HOLD{3} $rdy_clear), $rdy_set
 $NULL, $op_2_read = LATCH{1} 1, $rdy_clear, $op_2_read_set
-//$op_1_read = DELAY $op_1_read	// Reduces latency when starting
 
 ;#display (AND $trigger, $read_r) "op_1" @op_1[31:0]
 ;#display (AND $trigger, $read_m) "op_2" @op_2[31:0]
@@ -173,7 +172,7 @@ $reg_enable = PULSE $reading_op1
 @op_1 = AND{32} $reading_op1, $reg_ready, @reg_data_in
 $op_1_read = AND $reading_op1, $reg_ready
 ; === Skip Op1? ===
-$op_1_read = AND $op_2_read, (NOT $read_r)
+$op_1_read = AND $op_2_read, $_enable, (NOT $read_r)
 #display $op_1_read "OP1 Read set" $op_1_read
 
 ; === Ready if not mem dest ===

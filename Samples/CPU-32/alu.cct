@@ -89,6 +89,7 @@ $alu_nosave = DELAY $is_TST
 $done       = PULSE $is_TST
 
 #display $enable "= 0x%32x (%32x)" @alu_out[31:0], @_alu_out[31:0]
+#display $enable "done=%1i,_done=%1i" $done, $_done
 
 #endunit
 

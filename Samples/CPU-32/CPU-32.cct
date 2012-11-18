@@ -79,7 +79,9 @@ $stage_reset = DELAY $reset
 $mem_enable  = PULSE @stage_state[0]	// Enable memory for read
 // - Read complete, save into @instr
 @instr = AND{32} @stage_state[0], $mem_ready, @mem_data_in	// Save the opcode
-$next_stage = PULSE (AND @stage_state[0], $mem_ready)	// Wait for instruction to be fetched
+$_next_stage_OPRDY = AND @stage_state[0], $mem_ready	// Wait for instruction to be fetched
+#display $_next_stage_OPRDY "next_stage (OPRDY)" 0 
+$next_stage = PULSE $_next_stage_OPRDY
 
 // =============================
 // === Stage 1: Increment PC ===
@@ -96,7 +98,9 @@ $_pc_clear, @_pc_new, $NULL = ADDER_32BIT $increment_pc, @pc, @pc_inc_value, 0
 $pc_clear = DELAY $_pc_clear
 @pc_new = DELAY{2} @_pc_new
 // Write back
-$next_stage = PULSE (DELAY $_pc_clear)		; Don't move to decode until PC is updated
+$_next_stage_PCCLR = DELAY $_pc_clear		; Don't move to decode until PC is updated
+#display $_next_stage_PCCLR "next_stage (PCCLR)" 0 
+$next_stage = PULSE $_next_stage_PCCLR
 
 // ================================
 // === Stage 2: Opcode Decoding ===
@@ -135,6 +139,7 @@ $alu_data_rdy, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src = CPU32_ADDRESS
 // === ALU Handling ===
 $alu_done, $alu_nosave, @alu_out = CPU32_ALU $alu_data_rdy, @instr[27:29], @alu_in_dst, @alu_in_src,\
 	$flags_C, $flags_O, $flags_Z, $flags_C_clear, $flags_O_clear, $flags_Z_clear
+#display $alu_done "next_stage (ALUDONE)" 0
 $next_stage = PULSE $alu_done
 
 // === Conditional Jumps / Calls ===
@@ -248,7 +253,7 @@ $mem_ready = DELAY $mem_enable
 // - Flags should not be changed
 #testassert 1 @flags[2:0]	0[2:0]
 
-#testcomplete (DELAY $ins_end)
+#testcomplete $ins_end
 #endtestcase
 
 // --- Test Case: Two Instructions ---
