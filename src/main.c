@@ -9,6 +9,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <compiled.h>
+#include <assert.h>
 
 #define PRINT_ELEMENTS	0
 
@@ -35,7 +36,7 @@ void	ShowDisplayItems(tDisplayItem *First);
 void	ReadCommand(int MaxCmd, char *Command, int MaxArg, char *Argument);
 void	SigINT_Handler(int Signum);
 void	PrintDisplayItem(tDisplayItem *dispItem);
-void	CompressLinks(void);
+void	CompressLinks(tTestCase *Root);
 void	WriteCompiledVersion(const char *Path, int bBinary);
 void	DumpList(const tList *List, int bShowNames);
 void	ResolveLinks(tLink *First);
@@ -52,6 +53,7 @@ void	ResolveEleLinks(tElement *First);
  int	gbRunTests = 0;
 const char	*gsTestName;
  int	gbTest_ShowDisplay = 0;
+ int	gbDisableTests = 0;
 
 // === CODE ===
 int main(int argc, char *argv[])
@@ -88,6 +90,8 @@ int main(int argc, char *argv[])
 				gbPrintLinks = 1;
 			else if( strcmp(argv[i], "-stats") == 0 )
 				gbPrintStats = 1;
+			else if( strcmp(argv[i], "-notests") == 0 ) 
+				gbDisableTests = 1;
 			else if( strcmp(argv[i], "-test") == 0 )
 				gbRunTests = 1;
 			else if( strcmp(argv[i], "-onetest") == 0 ) {
@@ -121,7 +125,7 @@ int main(int argc, char *argv[])
 			return -1;
 		}
 	}
-	
+
 	// Resolve links
 	printf("Resolving links...\n");
 	ResolveLinks(gpLinks);
@@ -166,13 +170,17 @@ int main(int argc, char *argv[])
 	}
 
 	if( gbCompress )
-		CompressLinks();	
+	{
+		CompressLinks(NULL);
+		for( tTestCase *test = gpTests; test; test = test->Next )
+			CompressLinks(test);
+	}
 
 	// TODO: Check for links that aren't set/read
-//	UsageCheck(NULL);
+	UsageCheck(NULL);
 //	for( tTestCase *test = gpTests; test; test = test->Next )
 //		UsageCheck(test);
-
+	
 	if( gbPrintStats )
 	{
 		 int	totalLinks = 0;
@@ -422,38 +430,43 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
-void GetLists(tTestCase *Root, tLink ***links, tElement ***elements)
+void GetLists(tTestCase *Root, tLink ***links, tElement ***elements, tDisplayItem ***dispitems)
 {
 	if( Root ) {
 		*links = &Root->Links;
 		*elements = &Root->Elements;
+		if(dispitems)	*dispitems = &Root->DisplayItems;
 	}
 	else {
 		*links = &gpLinks;
 		*elements = &gpElements;
+		if(dispitems)	*dispitems = &gpDisplayItems;
 	}
 }
 
 void UsageCheck(tTestCase *Root)
 {
 	struct sUsage {
-		short	nSet;
-		short	nRead;
+		 int	nSet;
+		 int	nRead;
 	}	*usage;
 	 int	nLinks = 0;
 	tLink	**links;
 	tElement	**elements;
 	
-	GetLists(Root, &links, &elements);
+	GetLists(Root, &links, &elements, NULL);
 	
+	// Count links and allocate count space
 	for( tLink *link = *links; link; link = link->Next )
 		nLinks ++;
 	usage = calloc(nLinks, sizeof(*usage));
 	
+	// Set the ->Link field to the usage structure
 	 int	i = 0;
 	for( tLink *link = *links; link; link = link->Next, i++ )
 		link->Link = (void*)&usage[i];
 	
+	// Iterate over elements
 	for( tElement *ele = *elements; ele; ele = ele->Next )
 	{
 		for( i = 0; i < ele->NInputs; i ++ )
@@ -462,13 +475,18 @@ void UsageCheck(tTestCase *Root)
 			((struct sUsage*)ele->Outputs[i]->Link)->nSet ++;
 	}
 	
+	// Complain for links that are not set/read
 	for( tLink *link = *links; link; link = link->Next )
 	{
 		struct sUsage	*u = (void*)link->Link;
-		if( u->nSet == 0 )
+		if( u->nSet == 0 && u->nRead == 0 )
+			fprintf(stderr, "Link '%s' is never used\n", link->Name);
+		else if( u->nSet == 0 )
 			fprintf(stderr, "Link '%s' is never set\n", link->Name);
-		if( u->nRead == 0 )
+		else if( u->nRead == 0 )
 			fprintf(stderr, "Link '%s' is never read\n", link->Name);
+		else
+			;	// Read/Set, good
 		link->Link = NULL;
 	}
 	
@@ -480,7 +498,7 @@ void RunSimulationStep(tTestCase *Root)
 	tLink	**links;
 	tElement	**elements;
 	
-	GetLists(Root, &links, &elements);
+	GetLists(Root, &links, &elements, NULL);
 
 	for( tLink *link = *links; link; link = link->Next )
 	{
@@ -688,32 +706,59 @@ void PrintDisplayItem(tDisplayItem *DispItem)
 	printf("\n");
 }
 
-void CompressLinks(void)
+void CompressLinks(tTestCase *Root)
 {
 	 int	nVal = 0, nLink = 0;
+	 int	i;
 	tLink	*link;
 	tElement	*ele;
-	printf("Culling links...\n");
+	char	*links_merged;
+
+	tLink	**links;
+	tElement	**elements;
+	tDisplayItem	**dispitems;
+	
+	GetLists(Root, &links, &elements, &dispitems);
+	
+//	printf("Culling links on %p\n", Root);
 	
 	// Unify
-	for( link = gpLinks; link; link = link->Next )
+	for( link = *links; link; link = link->Next ) {
 		link->Backlink = NULL;
-	for( link = gpLinks; link; link = link->Next )
-	{
 		nLink ++;
-		if(link->Backlink)	continue;	// Skip ones already done
-		for( tLink *link2 = link; link2; link2 = link2->Next )
+	}
+	links_merged = calloc(nLink, 1);
+	assert(links_merged);
+
+	// Set up backlinks on all links (merging common values)
+	i = 0;
+	for( link = *links; link; link = link->Next, i ++ )
+	{
+		 int j = i + 1;
+		// Skip ones already done
+		if(link->Backlink)
+			continue;
+
+		extern void gValue_Zero, gValue_One;
+		if( strcmp(link->Name, "0") == 0 && link->Value != &gValue_Zero )
+			fprintf(stderr, "Link %p is called 0 but doesn't use value (%p)\n", link, link->Value);
+		if( strcmp(link->Name, "1") == 0 && link->Value != &gValue_One )
+			fprintf(stderr, "Link %p is called 1 but doesn't use value (%p)\n", link, link->Value);
+
+		link->Backlink = link;
+		for( tLink *link2 = link->Next; link2; link2 = link2->Next, j ++ )
 		{
 			if(link2->Backlink)	continue;
 			if(link2->Value != link->Value)	continue;
 			link2->Backlink = link;	// Make backlink non-zero
+			links_merged[j] = 1;
 		}
 		nVal ++;
 	}
-	printf("%i values across %i links\n", nVal, nLink);
+//	printf("%i values across %i links\n", nVal, nLink);
 	
 	// Update elements
-	for( ele = gpElements; ele; ele = ele->Next )
+	for( ele = *elements; ele; ele = ele->Next )
 	{
 		for( int i = 0; i < ele->NInputs; i ++ )
 			ele->Inputs[i] = ele->Inputs[i]->Backlink;
@@ -722,34 +767,32 @@ void CompressLinks(void)
 	}
 	// Update display conditions
 	void _compactList(tList *list) {
-	//	for( int i = 0; i < list->NItems; i ++ )
-	//		list->Items[i] = list->Items[i]->Backlink;
+		for( int i = 0; i < list->NItems; i ++ ) {
+			assert(list->Items[i]->Backlink);
+			list->Items[i] = list->Items[i]->Backlink;
+		}
 	}
-	for( tDisplayItem *disp = gpDisplayItems; disp; disp = disp->Next )
+	for( tDisplayItem *disp = *dispitems; disp; disp = disp->Next )
 	{
 		_compactList(&disp->Condition);
 		_compactList(&disp->Values);
 	}
-	for( tTestCase *test = gpTests; test; test = test->Next )
+	if( Root )
 	{
-		for( tAssertion *a = test->Assertions; a; a = a->Next )
+		for( tAssertion *a = Root->Assertions; a; a = a->Next )
 		{
 			_compactList(&a->Condition);
 			_compactList(&a->Values);
 			_compactList(&a->Expected);
 		}
-		for( tDisplayItem *disp = test->DisplayItems; disp; disp = disp->Next )
-		{
-			_compactList(&disp->Condition);
-			_compactList(&disp->Values);
-		}
 	}
 	
 	// Find and free unused
 	// - NULL all backlinks as an "unused" flag
-	for( link = gpLinks; link; link = link->Next )
+	for( link = *links; link; link = link->Next )
 		link->Backlink = NULL;
-	for( ele = gpElements; ele; ele = ele->Next )
+	// Mark as non-null on used links
+	for( ele = *elements; ele; ele = ele->Next )
 	{
 		for( int i = 0; i < ele->NInputs; i ++ )
 			ele->Inputs[i]->Backlink = (void*)1;
@@ -757,37 +800,35 @@ void CompressLinks(void)
 			ele->Outputs[i]->Backlink = (void*)1;
 	}
 	void _markList(tList *list) {
-		for( int i = 0; i < list->NItems; i ++ )
+		for( int i = 0; i < list->NItems; i ++ ) {
+			assert(list->Items[i]);
 			list->Items[i]->Backlink = (void*)1;
+		}
 	}
-	for( tDisplayItem *disp = gpDisplayItems; disp; disp = disp->Next )
+	for( tDisplayItem *disp = *dispitems; disp; disp = disp->Next )
 	{
 		_markList(&disp->Condition);
 		_markList(&disp->Values);
 	}
-	for( tTestCase *test = gpTests; test; test = test->Next )
+	if( Root )
 	{
-		for( tAssertion *a = test->Assertions; a; a = a->Next )
+		for( tAssertion *a = Root->Assertions; a; a = a->Next )
 		{
 			_markList(&a->Condition);
 			_markList(&a->Values);
 			_markList(&a->Expected);
 		}
-		for( tDisplayItem *disp = test->DisplayItems; disp; disp = disp->Next )
-		{
-			_markList(&disp->Condition);
-			_markList(&disp->Values);
-		}
 	}
 	
-	// Free any with a NULL backlink
-	#if 0
+	// Free any with a NULL backlink and were merged
 	 int	nPruned = 0;
-	tLink	*prev = (tLink*)&gpLinks;
-	for( link = gpLinks; link; )
+	tLink	*prev = (tLink*)links;
+	i = 0;
+	for( link = *links; link; i ++)
 	{
 		tLink *nextlink = link->Next;
-		if(link->Backlink == NULL) {
+		// If not used, and was merged into the first shared
+		if(link->Backlink == NULL && links_merged[i]) {
 			prev->Next = link->Next;
 			free(link);
 			nPruned ++;
@@ -797,8 +838,9 @@ void CompressLinks(void)
 		}
 		link = nextlink;
 	}
-	printf("Pruned %i links\n", nPruned);
-	#endif
+//	printf("Pruned %i links\n", nPruned);
+
+	free( links_merged );
 }
 
 void DumpList(const tList *List, int bShowNames)

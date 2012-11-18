@@ -586,10 +586,20 @@ int ParseLine(tParser *Parser)
 			max_length = ParseNumber(Parser);
 			// Name - String
 			SyntaxAssert(Parser, GetToken(Parser), TOK_STRING);
-			
-			if( Test_IsInTest() )
-				SyntaxError(Parser, "#testcase can't be nested");
-			Test_CreateTest(max_length, Parser->TokenStr+1, Parser->TokenLength-2);
+	
+			// If tests are disabled, find the end of the test block
+			if( gbDisableTests ) {
+				do {
+					while( Parser->Token != TOK_NEWLINE )
+						GetToken(Parser);
+				} while( GetToken(Parser) != TOK_META_STATEMENT
+					|| strcmp(Parser->TokenStr, "#endtestcase") != 0 );
+	 		}
+			else {		
+				if( Test_IsInTest() )
+					SyntaxError(Parser, "#testcase can't be nested");
+				Test_CreateTest(max_length, Parser->TokenStr+1, Parser->TokenLength-2);
+			}
 		}
 		else if( strcmp(Parser->TokenStr, "#testassert") == 0 ) {
 			tList	cond = {0}, have = {0}, expected = {0};

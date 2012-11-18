@@ -35,7 +35,10 @@ static tElement *_Create(int NParams, int *Params, int NInputs, tLink **Inputs)
 	if(busSize < 1)	busSize = 1;
 	if(busCount < 1)	busCount = 1;
 	
-	if( NInputs < busSize*busCount )	return NULL;
+	if( NInputs < busSize*busCount ) {
+		fprintf(stderr, "Logic _Create - Too few inputs (%i < %i*%i)\n", NInputs, busSize, busCount);
+		return NULL;
+	}
 	
 	t_element *ret = calloc( 1, sizeof(t_element) + (busSize+NInputs)*sizeof(tLink*) );
 	if(!ret)	return NULL;

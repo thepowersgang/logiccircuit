@@ -610,7 +610,9 @@ tLink *CreateNamedLink(const char *Name)
 	for(def = *first; def; prev = def, def = def->Next )
 	{
 		if(strcmp(Name, def->Name) == 0)	return def;
+		#if SORTED_LINK_LIST
 		if(strcmp(Name, def->Name) < 0)	break;
+		#endif
 	}
 	
 	ret = malloc(sizeof(tLink) + strlen(Name) + 1);
@@ -619,10 +621,13 @@ tLink *CreateNamedLink(const char *Name)
 	ret->Backlink = NULL;
 	ret->ReferenceCount = 1;
 
-	if( Name[0] == '0' && Name[1] == '\0' ) {
+	if( strcmp(Name, "0") == 0 ) {
 		ret->Value = &gValue_Zero;
 	}
-	else if( Name[0] == '1' && Name[1] == '\0' ) {
+	else if( strcmp(Name, "$NULL") == 0 ) {
+		ret->Value = &gValue_Zero;
+	}
+	else if( strcmp(Name, "1") == 0 ) {
 		ret->Value = &gValue_One;
 	}
 	else
@@ -709,11 +714,15 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 		strcat(newLink->Name, link->Name);
 		newLink->Link = NULL;
 		newLink->Backlink = NULL;
-		newLink->Value = LinkValue_Create();
+		if( link->Value == &gValue_Zero || link->Value == &gValue_One )
+			newLink->Value = link->Value;
+		else
+			newLink->Value = LinkValue_Create();
 		
 		link->Backlink = newLink;	// Set a back link to speed up remapping inputs
 		
 		// Append to the current list
+		#if SORTED_LINK_LIST
 		tLink	*prev = NULL;
 		for( tLink *def = *linkhead; def; prev = def, def = def->Next )
 		{
@@ -728,6 +737,10 @@ tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
 			newLink->Next = *linkhead;
 			*linkhead = newLink;
 		}
+		#else
+		newLink->Next = *linkhead;
+		*linkhead = newLink;
+		#endif
 		
 //		if( bPrefix ) {
 //			printf("Duplicated %p %s as %p %s\n", link, link->Name, newLink, newLink->Name);

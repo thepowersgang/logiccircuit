@@ -76,6 +76,7 @@ extern int	Test_IsInTest(void);
 
 extern tLink	*gpLinks;
 extern tElement	*gpElements;
+extern int	gbDisableTests;
 
 /**
  * \brief Add a display item
