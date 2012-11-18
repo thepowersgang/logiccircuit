@@ -158,28 +158,42 @@ $condition_true = AND @cond[5], (NOR $flags_O, $flags_Z)	; OF=0,ZF=0
 $condition_true = AND @cond[6], (NOR $flags_C, $flags_Z)	; CF=0,ZF=0
 $condition_true = DELAY @cond[7]
 $_jump_cond = XOR $condition_true, $cond_inverse
+
+$_next_stage_JMPDEC = DELAY{4} $is_BRANCH
+#display $_next_stage_JMPDEC "next_stage (JMPDEC)" 0
+$next_stage = PULSE $_next_stage_JMPDEC
+
+#display @stage_state[3] "%1i(_jump_cond) = %1i(condition_true) ^ %1i(cond_inverse)" $_jump_cond, $condition_true, $cond_inverse
+
 // - Not branching? Next instruction
-$next_instruction = PULSE (AND @stage_state[2], (DELAY{3} $is_BRANCH), (NOT $_jump_cond))	; Theory says 2, but 3 to be safe
+$_ni_NOJMP = AND @stage_state[3], $is_BRANCH, (NOT $_jump_cond)
+#display $_ni_NOJMP "Next Instruction (Not Jumping)" 0
+$next_instruction = PULSE $_ni_NOJMP
 
 // - Just branch, next stage
-$next_stage = AND $is_BRANCH, $_jump_cond, $cond_jump
+$_next_stage_JMP = AND @stage_state[3], $is_BRANCH, $_jump_cond, $cond_jump
+#display $_next_stage_JMP "next_stage (JMP)" 0
+$next_stage = PULSE $_next_stage_JMP
 // - Branch+exchange, save PC to R14
-$_do_call = AND $is_BRANCH, $_jump_cond, $cond_call
+$_do_call = AND @stage_state[3], $is_BRANCH, $_jump_cond, $cond_call
 @reg_addr[3:0] = AND{4} $_do_call, 14[3:0]	; R14 = LR
 @reg_data_out[31:0] = AND{32} $_do_call, @pc[31:0]
 $reg_enable = PULSE $_do_call
 $reg_write = PULSE $_do_call
-$next_stage = PULSE (AND $_do_call, $reg_ready)
+$_next_stage_BXLRSAVED = AND $_do_call, $reg_ready
+#display $_next_stage_BXLRSAVED "next_stage (BXLRSAVED)" 0
+$next_stage = PULSE $_next_stage_BXLRSAVED
 
 // - Actually do update
-$do_jump = AND $is_BRANCH, @stage_state[3]
+$do_jump = AND $is_BRANCH, @stage_state[4]
 $alt_pc_inc_value = DELAY $do_jump
 @pc_inc_value[31:0] = AND{32} $do_jump, @instr[23],@instr[23],@instr[23],@instr[23],@instr[23],@instr[23],@instr[23:0],0,0 	// 24 bit signed * 4
-#display $alt_pc_inc_value "@pc_inc_value = %32x" @pc_inc_value
+#display $alt_pc_inc_value "@pc_inc_value = 0x%32x" @pc_inc_value[31:0]
 //  > Delay is to ensure the alt_pc_inc_value has taken effect (the hard 0x4 is turned off)
 $increment_pc = DELAY (PULSE $do_jump)
 // - Next stage when PC is updated
-$next_instruction = PULSE @stage_state[4]
+$jump_complete = AND $is_BRANCH, @stage_state[5]
+$next_instruction = PULSE $jump_complete
 
 
 // ==============================
@@ -194,7 +208,9 @@ $_alu_save_mem = AND $alu_save, (NOT $alu_nosave), $addr_is_mem
 @mem_data_out = AND{32} $_alu_save_mem, @alu_out
 $mem_write  = DELAY $_alu_save_mem
 $mem_enable = DELAY $_alu_save_mem
-$next_stage = PULSE (AND $_alu_save_mem, $mem_ready)
+$_next_stage_ALUMEMSAVE = AND $_alu_save_mem, $mem_ready
+#display $_next_stage_ALUMEMSAVE "next_stage (ALUMEMSAVE)" 0
+$next_stage = PULSE $_next_stage_ALUMEMSAVE
 // --- Save to register
 $_alu_save_reg = AND $alu_save, (NOT $alu_nosave), (NOT $addr_is_mem)
 #display $_alu_save_reg "Register 0x%4x = 0x%32x" @alu_addr[3:0], @alu_out[31:0]
@@ -202,10 +218,13 @@ $_alu_save_reg = AND $alu_save, (NOT $alu_nosave), (NOT $addr_is_mem)
 @reg_data_out = AND{32} $_alu_save_reg, @alu_out
 $reg_write = DELAY $_alu_save_reg
 $reg_enable = DELAY $_alu_save_reg
-$next_stage = PULSE (DELAY{4} $_alu_save_reg)	// wait for update :)
+$_next_stage_ALUREGSAVE = DELAY{4} $_alu_save_reg
+#display $_next_stage_ALUREGSAVE "next_stage (ALUREGSAVE)" 0
+$next_stage = PULSE $_next_stage_ALUREGSAVE	// wait for update :)
 // --- No writeback
 $_alu_save_none = AND $alu_save, $alu_nosave
 #display $_alu_save_none "Not saving 0x%32x" @alu_out[31:0]
+#display $_alu_save_none "next_stage (ALUNOSAVE)" 0
 $next_stage = PULSE $_alu_save_none
 
 // === ALU Done ===
@@ -286,7 +305,7 @@ $mem_ready = AND @stage[1], $mem_enable
 #testcomplete @stage[2]
 #endtestcase
 
-#testcase 100 "JMP.Z Y"
+#testcase 300 "JMP.Z Y"
 __CPU32_TEST_WRAPPER 1
 #array stage 3
 @stage = SEQUENCER{3} 1, 0, $ins_end
@@ -301,7 +320,7 @@ $mem_ready = DELAY $mem_enable
 
 #endtestcase
 
-#testcase 400 "Big PCs"
+#testcase 1000 "Big PCs"
 __CPU32_TEST_WRAPPER 1
 #array stage 12
 @stage = SEQUENCER{12} 1, 0, $ins_end
