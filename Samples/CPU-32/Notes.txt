@@ -36,12 +36,23 @@ Operations
 
 0100cccc v24	- JMPcc .+imm24s*4
 0101cccc v24	- CALLcc .+imm24s*4 (ala BX in ARM)
-01100mmm R=0	- PUSH op2
-01100mmm R=1	- POP op2
-01100mmm R=14	- MOV op2, PC
-01100mmm R=15	- CALL op2
+01100mmm R=0000	- PUSH op2
+01100mmm R=0001	- POP op2
+01100mmm R=1110	- MOV op2, PC
+01100mmm R=1111	- CALL op2
 
-01101xxx	- ?
+01101000 00000000 mmmmmmmm vvvvvvvv	- LDF m, v	- Load (Set) Flags (Mask, Value)
+01101000 00000001 - ?
+01101000 0000001x - ?
+01101000 000001xx - ?
+01101000 00001xxx - ?
+01101000 0001xxxx - ?
+01101000 001xxxxx - ?
+01101000 01xxxxxx - ?
+01101000 1xxxxxxx - ?
+01101001	- ?
+0110101x	- ?
+011011xx	- ?
 0111xxxx	- ?
 
 10000000 RRRRrrrr ssssssss ssssssss	- STRB R, [r + imm16s]
