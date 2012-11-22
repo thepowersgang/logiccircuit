@@ -80,6 +80,7 @@ int main(int argc, char *argv[])
 	ADD_ELEDEF(HOLD);
 	ADD_ELEDEF(VALUESET);
 	ADD_ELEDEF(SEQUENCER);
+	ADD_ELEDEF(MEMORY_DRAM);
 	
 	// Load Circuit file(s)
 	for( i = 1; i < argc; i ++ )

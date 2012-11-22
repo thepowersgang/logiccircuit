@@ -563,7 +563,8 @@ void LinkValue_Deref(tLinkValue *Value)
 {
 	Value->ReferenceCount --;
 	if( !Value->ReferenceCount ) {
-		free(Value);
+		if( Value != &gValue_Zero && Value != &gValue_One )
+			free(Value);
 	}
 }
 
