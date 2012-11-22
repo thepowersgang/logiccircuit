@@ -38,24 +38,16 @@ $_write_enable = AND $_data_write, $size_32
 // DRAM
 // 0x10000000 0x1FFFFFFF
 // 
+$is_DRAM = AND (DELAY $enable), (NOT   @addr[31]), (NOT   @addr[30]), (NOT   @addr[29]), (DELAY @addr[28])
+$_data_rdy, @_data_word_out = MEMORY_DRAM{32,16} $is_DRAM, @addr[2:17], $_write_enable, @_data_word_mask, @_data_word_in
 
 // ROM area
 //  Reserved range: 0xF000 - 0xFFFF
 //  HACK! Actually at 0x0000 - 0x003F atm
 //  Size: 64 bytes (16 words)
-$is_ROM = AND (DELAY $enable), (NOT   @addr[15]), (NOT   @addr[14]), (NOT   @addr[13]), (NOT   @addr[12])
+$is_ROM  = AND (DELAY $enable), (NOT   @addr[31]), (NOT   @addr[30]), (NOT   @addr[29]), (NOT   @addr[28])
 // $ready, @data_output = ROM{12,32} $is_ROM, @addr[0:11]
 @ROM_select = DEMUX{4} $is_ROM, (DELAY{2} @addr[2:5])
-
-%macro _ROM_DWORD 2
- %assign i 31
- %rep 32
-  %if %2 & 1 << i
-@_data_word_out[i] = DELAY @ROM_select[%1]
-  %endif
-  %assign i i-1
- %endrep
-%endmacro
 
 // === ROM Contents ===
 // - Address is in 32-bit words
@@ -63,8 +55,18 @@ $is_ROM = AND (DELAY $enable), (NOT   @addr[15]), (NOT   @addr[14]), (NOT   @add
 @_data_word_out[0:31] = AND{32} @ROM_select[0x0001], 0x010FFFFF[0:31]	; MOV R0, 0xFFFFF
 @_data_word_out[0:31] = AND{32} @ROM_select[0x0002], 0x21000001[0:31]	; ADD R0, 0x00001
 @_data_word_out[0:31] = AND{32} @ROM_select[0x0003], 0x4EFFFFFD[0:31]	; JMP .-3*4
-@_data_word_out[0:31] = AND{32} @ROM_select[0x0004], 0x4EFFFFFF[0:31]	; JMP .-1*4 (infinite loop)
-
+@_data_word_out[0:31] = AND{32} @ROM_select[0x0004], 0x00000000[0:31]	; NOP
+@_data_word_out[0:31] = AND{32} @ROM_select[0x0005], 0x00000000[0:31]	; NOP
+@_data_word_out[0:31] = AND{32} @ROM_select[0x0006], 0x00000000[0:31]	; NOP
+@_data_word_out[0:31] = AND{32} @ROM_select[0x0007], 0x00000000[0:31]	; NOP
+@_data_word_out[0:31] = AND{32} @ROM_select[0x0008], 0x00000000[0:31]	; NOP
+@_data_word_out[0:31] = AND{32} @ROM_select[0x0009], 0x00000000[0:31]	; NOP
+@_data_word_out[0:31] = AND{32} @ROM_select[0x000A], 0x00000000[0:31]	; NOP
+@_data_word_out[0:31] = AND{32} @ROM_select[0x000B], 0x00000000[0:31]	; NOP
+@_data_word_out[0:31] = AND{32} @ROM_select[0x000C], 0x00000000[0:31]	; NOP
+@_data_word_out[0:31] = AND{32} @ROM_select[0x000D], 0x00000000[0:31]	; NOP
+@_data_word_out[0:31] = AND{32} @ROM_select[0x000E], 0x00000000[0:31]	; NOP
+@_data_word_out[0:31] = AND{32} @ROM_select[0x000F], 0x4EFFFFFF[0:31]	; JMP .-1*4 (infinite loop)
 // 1 delay for DEMUX, 1 for data
 $_data_rdy = DELAY{2} $is_ROM
 
