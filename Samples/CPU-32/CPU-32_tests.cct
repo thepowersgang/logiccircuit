@@ -1,0 +1,183 @@
+
+// ====================================================================
+//                             Test Cases
+// ====================================================================
+
+// --- Boilerplate for tests ---
+%macro __CPU32_TEST_WRAPPER 1
+#array flags	NUM_FLAGS
+#array flags_clear	NUM_FLAGS
+#array reg_addr	4
+#array reg_data_in	NUM_GPR_BITS
+#array reg_data_out	NUM_GPR_BITS
+#array mem_addr	NUM_ADDR_BITS
+#array mem_data_in	NUM_GPR_BITS
+#array mem_data_out	NUM_GPR_BITS
+
+%if %1 == 1
+$ins_end, $mem_enable, @mem_addr, $mem_write, @mem_data_out, \
+	$reg_enable, @reg_addr, $reg_write, @reg_data_out, @flags_clear \
+	= CPU32_CORE (PULSE 1), $mem_ready, @mem_data_in, $reg_ready, @reg_data_in, @flags
+%endif
+
+%endmacro
+
+// --- Test Case : Single instruction ---
+#testcase 100 "MOV R15, R15"
+__CPU32_TEST_WRAPPER 1
+
+// - Register accesses should only be R15
+#testassert $reg_enable @reg_addr[0:3] 15[0:3]
+$reg_ready = DELAY $reg_enable
+@reg_data_in[31:0] = AND{32} $reg_enable, 0x10F0[31:0]
+// - Register write 0x10F0
+#testassert $reg_write @reg_data_out[31:0] 0x10F0[31:0]
+// - One memory read from 0 (Fetch)
+#testassert $mem_enable @mem_addr[31:0] 0x00000000[31:0]
+$mem_ready = DELAY $mem_enable
+@mem_data_in[0:31] = AND{32} $mem_enable, 0x00FF0000[0:31]
+// - Flags should not be changed
+#testassert 1 @flags[2:0]	0[2:0]
+
+#testcomplete $ins_end
+#endtestcase
+
+// --- Test Case: Two Instructions ---
+#testcase 200 "MOV R0, R0; MOV R15, R15"
+__CPU32_TEST_WRAPPER 1
+
+#array stage 3
+@stage = SEQUENCER{3} 1, 0, $ins_end
+// - #1: R0=0x43211234, Mem=0
+#testassert @stage[0],$reg_enable  @reg_addr[3:0]  0[3:0]
+$reg_ready = AND $reg_enable, @stage[0]
+@reg_data_in[31:0] = AND{32} $reg_enable, @stage[0], 0x43211234[31:0]
+#testassert @stage[0],$reg_write  @reg_data_out[31:0]  0x43211234[31:0]
+#testassert @stage[0],$mem_enable  @mem_addr[31:0]  0x00000000[31:0]
+$mem_ready = AND @stage[0], $mem_enable
+@mem_data_in[0:31] = AND{32} @stage[0], $mem_enable, 0x00000000[0:31]
+// - #2: R15=0xF00DCAFE, Mem=4
+#testassert @stage[1],$reg_enable  @reg_addr[3:0]  15[3:0]
+$reg_ready = AND @stage[1], $reg_enable
+@reg_data_in[31:0] = AND{32} $reg_enable, @stage[1], 0xF00DCAFE[31:0]
+#testassert @stage[1],$reg_write  @reg_data_out[31:0]  0xF00DCAFE[31:0]
+#testassert @stage[1],$mem_enable @mem_addr[31:0] 0x00000004[31:0]
+$mem_ready = AND @stage[1], $mem_enable
+@mem_data_in[0:31] = AND{32} @stage[1], $mem_enable, 0x00FF0000[0:31]
+// - Flags should not be changed
+#testassert 1 @flags[2:0]	0[2:0]
+
+#testcomplete @stage[2]
+#endtestcase
+
+#testcase 300 "JMP.Z Y"
+__CPU32_TEST_WRAPPER 1
+#array stage 3
+@stage = SEQUENCER{3} 1, 0, $ins_end
+$mem_ready = DELAY $mem_enable
+#testassert 1 $reg_enable 0
+
+@mem_data_in[0:31] = AND{32} $mem_enable, 0x40000001[0:31]
+@flags[2] = DELAY @stage[0]
+
+#testassert @stage[1],$mem_enable @mem_addr[0:31] 8[0:31]
+#testcomplete @stage[2]
+
+#endtestcase
+
+#testcase 1000 "Big PCs"
+__CPU32_TEST_WRAPPER 1
+#array stage 12
+@stage = SEQUENCER{12} 1, 0, $ins_end
+$mem_ready = DELAY $mem_enable
+#testassert 1 $reg_enable 0
+
+// 0x4F = JMP never
+@mem_data_in[0:31] = AND{32} $mem_enable, 0x4F000000[0:31]
+
+#testassert @stage[0],$mem_enable	@mem_addr[0:31]	0x00[0:31]
+#testassert @stage[1],$mem_enable	@mem_addr[0:31]	0x04[0:31]
+#testassert @stage[2],$mem_enable	@mem_addr[0:31]	0x08[0:31]
+#testassert @stage[3],$mem_enable	@mem_addr[0:31]	0x0C[0:31]
+#testassert @stage[4],$mem_enable	@mem_addr[0:31]	0x10[0:31]
+#testassert @stage[5],$mem_enable	@mem_addr[0:31]	0x14[0:31]
+#testassert @stage[6],$mem_enable	@mem_addr[0:31]	0x18[0:31]
+#testassert @stage[7],$mem_enable	@mem_addr[0:31]	0x1C[0:31]
+#testassert @stage[8],$mem_enable	@mem_addr[0:31]	0x20[0:31]
+#testassert @stage[9],$mem_enable	@mem_addr[0:31]	0x24[0:31]
+#testassert @stage[10],$mem_enable	@mem_addr[0:31]	0x28[0:31]
+
+#testcomplete @stage[11]
+#endtestcase
+
+#testcase 700 "Jump Conditions"
+__CPU32_TEST_WRAPPER 1
+#array stage 7
+@stage = SEQUENCER{7} 1, 0, $ins_end
+
+$mem_ready = DELAY $mem_enable
+#testassert 1 $reg_enable 0
+
+// - #1: JMP.N .+16*4 (never)
+#testassert @stage[0], $mem_enable @mem_addr[0:31] 0[0:31]
+@mem_data_in[0:31] = AND{32} @stage[0], $mem_enable, 0x4F000010[0:31]
+
+// - #2: JMP.A .+1*4 (always)
+#testassert @stage[1], $mem_enable @mem_addr[0:31] 4[0:31]
+@mem_data_in[0:31] = AND{32} @stage[1], $mem_enable, 0x4E000001[0:31]
+
+// - #3: JMP.Z .+1*4 (zero, fail)
+#testassert @stage[2], $mem_enable @mem_addr[0:31] 12[0:31]
+@mem_data_in[0:31] = AND{32} @stage[2], $mem_enable, 0x40000001[0:31]
+
+// - #3: JMP.Z .+1*4 (zero, succeed)
+#testassert @stage[3], $mem_enable @mem_addr[0:31] 16[0:31]
+@mem_data_in[0:31] = AND{32} @stage[3], $mem_enable, 0x40000001[0:31]
+@flags[2] = DELAY @stage[3]
+
+// - #4: JMP.A .-4
+#testassert @stage[4], $mem_enable @mem_addr[0:31] 24[0:31]
+@mem_data_in[0:31] = AND{32} @stage[4], $mem_enable, 0x4EFFFFFF[0:31]
+
+// - Dummy instruction to test the final address
+#testassert @stage[5], $mem_enable @mem_addr[0:31] 24[0:31]
+@mem_data_in[0:31] = AND{32} @stage[5], $mem_enable, 0x4EFFFFFF[0:31]
+
+#testcomplete @stage[6]
+
+#endtestcase
+
+#testcase 300 "32-Bit ADD (MOVI,MOVI,ADD)"
+__CPU32_TEST_WRAPPER 1
+#array stage 4
+@stage = SEQUENCER{4} 1, 0, $ins_end
+
+$mem_ready = DELAY $mem_enable
+$reg_ready, @reg_data_in = REGISTER_BANK_16_32 $reg_enable, @reg_addr, $reg_write, @reg_data_out
+
+// - MOV R0, 0x12345
+#testassert @stage[0], $mem_enable  @mem_addr[0:31] 0[0:31]
+@mem_data_in[0:31] = AND{32} @stage[0], $mem_enable, 0x01012345[0:31]
+#testassert @stage[0], $reg_enable  $reg_write 1
+#testassert @stage[0], $reg_enable  @reg_addr[0:3] 0[0:3]
+#testassert @stage[0], $reg_enable  @reg_data_out[0:31] 0x12345[0:31]
+
+// - MOV R1, 0xFEDCB
+#testassert @stage[1], $mem_enable  @mem_addr[0:31] 4[0:31]
+@mem_data_in[0:31] = AND{32} @stage[1], $mem_enable, 0x011FEDCB[0:31]
+#testassert @stage[1], $reg_enable  $reg_write 1
+#testassert @stage[1], $reg_enable  @reg_addr[0:3] 1[0:3]
+#testassert @stage[1], $reg_enable  @reg_data_out[0:31] 0xFEDCB[0:31]
+
+// - ADD R0, R1
+#testassert @stage[2], $mem_enable  @mem_addr[0:31] 8[0:31]
+@mem_data_in[0:31] = AND{32} @stage[2], $mem_enable, 0x20010000[0:31]
+#testassert @stage[2],$reg_write @reg_addr[0:3] 0[0:3]
+#testassert @stage[2],$reg_write @reg_data_out[0:31] 0x111110[0:31]
+
+#testcomplete @stage[3]
+
+#endtestcase
+
+
+; vim: ft=logiccircuit
