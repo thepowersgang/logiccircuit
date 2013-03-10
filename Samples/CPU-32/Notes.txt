@@ -4,10 +4,10 @@ An attempt at designing a CPU to be built using virtual logic gates
 All data operations are 32 bits
 
 Special Registers
-R12 - Frame Pointer
+R12 - Frame Pointer (Suggested)
 R13 - Stack Pointer
 R14 - Link Register
-R15 - ???
+R15 - PIC base (suggested)
 
 TODO: R15 = Aliased to PC again?
 - Need PC-relative load/store?
@@ -29,14 +29,14 @@ ooooo110 RRRRrrrr vvvvvvvv vvvvvvvv	- <op> [r + imm16s], R
 ooooo111 RRRRrrrr iiiissss vvvvvvvv	- <op> [r + Ri << s + imm8s], R
 
 Operations
-00000mmm	- MOV
-00001mmm	- AND
-00010mmm	- OR
-00011mmm	- XOR
-00100mmm	- ADD
-00101mmm	- SUB
-00110mmm	- CMP
-00111mmm	- TEST
+00000mmm	- MOV op1, op2
+00001mmm	- AND op1, op2
+00010mmm	- OR op1, op2
+00011mmm	- XOR op1, op2
+00100mmm	- ADD op1, op2
+00101mmm	- SUB op1, op2
+00110mmm	- CMP op1, op2
+00111mmm	- TEST op1, op2
 
 0100cccc v24	- JMPcc .+imm24s*4
 0101cccc v24	- CALLcc .+imm24s*4 (ala BX in ARM)
@@ -46,7 +46,7 @@ Operations
 01100mmm R=01xx - ?
 01100mmm R=10xx - ?
 01100mmm R=110x - ?
-01100mmm R=1110	- MOV op2, PC
+01100mmm R=1110	- MOV op2, PC	- Functionally a jump
 01100mmm R=1111	- CALL op2
 
 01101000 00000000 mmmmmmmm vvvvvvvv	- LDF m, v	- Load (Set) Flags (Mask, Value)
@@ -54,7 +54,7 @@ Operations
 01101000 0000001x - ?
 01101000 000001xx - ?
 01101000 00001xxx - ?
-01101000 0001xxxx - ?
+01101000 0001rrrr vvvvvvvv vvvvvvvv	- MOV r, .+imm16s*4
 01101000 001xxxxx - ?
 01101000 01xxxxxx - ?
 01101000 1xxxxxxx - ?
@@ -63,12 +63,11 @@ Operations
 011011xx	- ?
 0111xxxx	- ?
 
-10000000 RRRRrrrr ssssssss ssssssss	- STRB R, [r + imm16s]
-10000001 RRRRrrrr ssssssss ssssssss	- STRW R, [r + imm16s]
-10000010 RRRRrrrr ssssssss ssssssss	- LDRB R, [r + imm16s]
-10000011 RRRRrrrr ssssssss ssssssss	- LDRW R, [r + imm16s]
+100000o0 RRRRrrrr ssssssss ssssssss	- STRWo R, [r + imm16s]	- Store 16 bits from register
+100000o1 RRRRrrrr ssssssss ssssssss	- LDRWo R, [r + imm16s]	- Load 16 bits to register
 100001xx	- ?
-10001xxx	- ?
+10001oo0 RRRRrrrr ssssssss ssssssss	- STRBo R, [r + imm16]	- Store 8 bits from register
+10001oo1 RRRRrrrr ssssssss ssssssss	- LDRBo R, [r + imm16]	- Load 8 bits to register
 1001xxxx	- ?
 101xxxxx	- ?
 11xxxxxx	- ?
