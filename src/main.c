@@ -234,13 +234,17 @@ int main(int argc, char *argv[])
 	if( gbRunTests )
 	{
 		printf("=== Running tests ===\n");
+		 int	nTests = 0;
+		 int	nFailure = 0;
 		for( tTestCase *test = gpTests; test; test = test->Next )
 		{
 			 int	steps_elapsed = 0;
 			 int	bFailure = 0;
 
 			if( gsTestName && strcmp(test->Name, gsTestName) != 0 )
-				continue ;			
+				continue ;
+
+			nTests ++;
 
 			printf("Test '%s'...", test->Name);
 			while( steps_elapsed != test->MaxLength && !bFailure )
@@ -290,15 +294,18 @@ int main(int argc, char *argv[])
 			}
 			if( bFailure == 1 ) {
 				printf("\n- Test '%s' failed in %i steps\n", test->Name, steps_elapsed);
+				nFailure ++;
 			}
 			else if( steps_elapsed == test->MaxLength ) {
 				printf("\n- TIMED OUT (%i cycles)\n", steps_elapsed);
+				nFailure ++;
 			}
 			else {
 				printf(" PASS (%i cycles)\n", steps_elapsed);
 			}
 		}
 		
+		printf("%i/%i Tests passed\n", nTests-nFailure, nTests);
 		return 0;
 	}
 
@@ -686,7 +693,7 @@ void PrintDisplayItem(tDisplayItem *DispItem)
 				case 'b':
 				default:
 					for( ; i --; )
-						printf("%i", val & (1 << i));
+						printf("%i", !!(val & (1 << i)));
 					break;
 				}
 				count -= tmpCount;
