@@ -14,6 +14,7 @@
 #include <setjmp.h>
 #include <common.h>
 #include <unistd.h>
+#include <assert.h>
 
 /**
  */
@@ -98,6 +99,28 @@ void	SyntaxWarning(tParser *Parser, const char *Fmt, ...);
 void	SyntaxAssert(tParser *Parser, int Got, int Expected);
 
 // === CODE ===
+unsigned long long GetNumber(tParser *Parser)
+{
+	const char	*start = Parser->TokenStr;
+	 int	base = 0;
+	assert(Parser->Token == TOK_NUMBER);
+	
+	// strtoll doesn't handle 0b
+	if( Parser->TokenLength > 2 && Parser->TokenStr[0] == '0' && Parser->TokenStr[1] == 'b' ) {
+		start += 2;
+		base = 2;
+	}
+	
+	char	*end;	
+	unsigned long long	ret = strtol(start, &end, base);
+	size_t	len = end - Parser->TokenStr;
+	assert(len <= Parser->TokenLength);
+	if(len < Parser->TokenLength)
+		SyntaxError(Parser, "Number '%.*s' is invalid (%i/%i eaten)",
+			Parser->TokenLength, Parser->TokenStr, len, Parser->TokenLength);
+	return ret;
+}
+
 int ParseNumber_Paren(tParser *Parser)
 {
 	if( GetToken(Parser) == TOK_PAREN_OPEN ) {
@@ -110,7 +133,8 @@ int ParseNumber_Paren(tParser *Parser)
 	//	Parser->TokenLength, Parser->TokenStr,
 	//	strtol(Parser->TokenStr, NULL, 0)
 	//	);
-	return strtol(Parser->TokenStr, NULL, 0);
+	//return strtol(Parser->TokenStr, NULL, 0);
+	return GetNumber(Parser);
 }
 int ParseNumber_MulDiv(tParser *Parser)
 {
@@ -262,7 +286,8 @@ int ParseValue(tParser *Parser, tList *destList)
 	// Constant
 	case TOK_NUMBER:
 		{
-			uint64_t	num = strtoll(Parser->TokenStr, NULL, 0);
+//			uint64_t	num = strtoll(Parser->TokenStr, NULL, 0);
+			uint64_t	num = GetNumber(Parser);
 //			uint64_t	num = atoll(Parser->TokenStr);
 			 int	count = 1;
 			 int	start = 0;
