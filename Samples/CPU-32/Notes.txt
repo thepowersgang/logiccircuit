@@ -9,9 +9,8 @@ R13 - Stack Pointer
 R14 - Link Register
 R15 - PIC base (suggested)
 
-TODO: R15 = Aliased to PC again?
-- Need PC-relative load/store?
-- R15 = write-ignore
+TODO:
+- Shifts, sign extended load?
 
 Normal Format:
 |---Op---|Dest Src|      Value      |
@@ -54,7 +53,7 @@ Operations
 01101000 0000001x - ?
 01101000 000001xx - ?
 01101000 00001xxx - ?
-01101000 0001rrrr vvvvvvvv vvvvvvvv	- MOV r, .+imm16s*4
+01101000 0001rrrr vvvvvvvv vvvvvvvv	- MOV r, PC+imm16s*4
 01101000 001xxxxx - ?
 01101000 01xxxxxx - ?
 01101000 1xxxxxxx - ?
@@ -63,11 +62,14 @@ Operations
 011011xx	- ?
 0111xxxx	- ?
 
-100000o0 RRRRrrrr ssssssss ssssssss	- STRWo R, [r + imm16s]	- Store 16 bits from register
-100000o1 RRRRrrrr ssssssss ssssssss	- LDRWo R, [r + imm16s]	- Load 16 bits to register
-100001xx	- ?
-10001oo0 RRRRrrrr ssssssss ssssssss	- STRBo R, [r + imm16]	- Store 8 bits from register
-10001oo1 RRRRrrrr ssssssss ssssssss	- LDRBo R, [r + imm16]	- Load 8 bits to register
+100000o0 RRRRrrrr ssssssss ssssssss	- STRW R.o, [r + imm16s]	- Store 16 bits from register
+100000o1 RRRRrrrr ssssssss ssssssss	- LDRW R.o, [r + imm16s]	- Load 16 bits to register
+10000100 RRRRrrrr ssssssss ssssssss	- LDRWS R, [r + imm16s] 	- Load 16-bits sign extended
+10000101 RRRRrrrr ssssssss ssssssss	- LDRWZ R, [r + imm16s] 	- Load 16-bits zero extended
+10000110 RRRRrrrr ssssssss ssssssss	- LDRBS R, [r + imm16s] 	- Load 8-bits sign extended
+10000111 RRRRrrrr ssssssss ssssssss	- LDRBZ R, [r + imm16s] 	- Load 8-bits zero extended
+10001oo0 RRRRrrrr ssssssss ssssssss	- STRB R,o, [r + imm16s]	- Store 8 bits from register
+10001oo1 RRRRrrrr ssssssss ssssssss	- LDRB R.o, [r + imm16s]	- Load 8 bits to register
 1001xxxx	- ?
 101xxxxx	- ?
 11xxxxxx	- ?
