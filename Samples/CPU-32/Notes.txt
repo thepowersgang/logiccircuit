@@ -11,6 +11,7 @@ R15 - PIC base (suggested)
 
 TODO:
 - Shifts, sign extended load?
+- Replace mmm=110/111 with reversed operand flag (allows 'POP r')
 
 Normal Format:
 |---Op---|Dest Src|      Value      |
@@ -18,14 +19,14 @@ Normal Format:
 
 Addressing Modes (for most commands)
 
-ooooo000 RRRRrrrr xxxxxxxx xxxxxxxx	- <op> R, r
+ooooo000 RRRRrrrr ddddxxxx xxxxxxxx	- <op> d = R, r
 ooooo001 RRRRvvvv vvvvvvvv vvvvvvvv	- <op> R, imm20
 ooooo010 RRRRssss vvvvvvvv vvvvvvvv	- <op> R, imm16 <<< s
 ooooo011 RRRRssss vvvvvvvv vvvvvvvv	- <op> R, imm16s <<< s
 ooooo100 RRRRrrrr vvvvvvvv vvvvvvvv	- <op> R, [r + imm16s]
 ooooo101 RRRRrrrr iiiissss vvvvvvvv	- <op> R, [r + Ri << s + imm8s]
-ooooo110 RRRRrrrr vvvvvvvv vvvvvvvv	- <op> [r + imm16s], R
-ooooo111 RRRRrrrr iiiissss vvvvvvvv	- <op> [r + Ri << s + imm8s], R
+ooooo110 RRRRrrrr vvvvvvvv vvvvvvvv	- <op> r = R, [PC + imm16s]
+ooooo111 RRRRrrrr iiiissss vvvvvvvv	- <op> r = R, [PC + Ri << s + imm8s]
 
 Operations
 00000mmm	- MOV op1, op2
@@ -41,38 +42,38 @@ Operations
 0101cccc v24	- CALLcc .+imm24s*4 (ala BX in ARM)
 01100mmm R=0000	- PUSH op2
 01100mmm R=0001	- POP op2
-01100mmm R=001x - ?
+01100mmm R=0010 - BSWAP op2	- Big<->Little endian swap
+01100mmm R=0011 - BSWAPW op2	- Big<->Little endian swap (low word only)
 01100mmm R=01xx - ?
 01100mmm R=10xx - ?
 01100mmm R=110x - ?
-01100mmm R=1110	- MOV op2, PC	- Functionally a jump
+01100mmm R=1110	- MOV PC, op2	- Functionally a jump
 01100mmm R=1111	- CALL op2
 
 01101000 00000000 mmmmmmmm vvvvvvvv	- LDF m, v	- Load (Set) Flags (Mask, Value)
-01101000 00000001 - ?
-01101000 0000001x - ?
-01101000 000001xx - ?
-01101000 00001xxx - ?
-01101000 0001rrrr vvvvvvvv vvvvvvvv	- MOV r, PC+imm16s*4
-01101000 001xxxxx - ?
-01101000 01xxxxxx - ?
-01101000 1xxxxxxx - ?
-01101001	- ?
-0110101x	- ?
-011011xx	- ?
-0111xxxx	- ?
+    1000 00000001 - ?
+    1000 0000001x - ?
+    1000 000001xx - ?
+    1000 00001xxx - ?
+    1000 0001rrrr vvvvvvvv vvvvvvvv	- MOV r, PC+imm16s*4
+    1000 001xxxxx - ?
+    1000 01xxxxxx - ?
+    1000 1xxxxxxx - ?
+    1001	- ?
+    101x	- ?
+    11xx	- ?
 
-100000o0 RRRRrrrr ssssssss ssssssss	- STRW R.o, [r + imm16s]	- Store 16 bits from register
-100000o1 RRRRrrrr ssssssss ssssssss	- LDRW R.o, [r + imm16s]	- Load 16 bits to register
-10000100 RRRRrrrr ssssssss ssssssss	- LDRWS R, [r + imm16s] 	- Load 16-bits sign extended
-10000101 RRRRrrrr ssssssss ssssssss	- LDRWZ R, [r + imm16s] 	- Load 16-bits zero extended
-10000110 RRRRrrrr ssssssss ssssssss	- LDRBS R, [r + imm16s] 	- Load 8-bits sign extended
-10000111 RRRRrrrr ssssssss ssssssss	- LDRBZ R, [r + imm16s] 	- Load 8-bits zero extended
-10001oo0 RRRRrrrr ssssssss ssssssss	- STRB R,o, [r + imm16s]	- Store 8 bits from register
-10001oo1 RRRRrrrr ssssssss ssssssss	- LDRB R.o, [r + imm16s]	- Load 8 bits to register
-1001xxxx	- ?
-101xxxxx	- ?
-11xxxxxx	- ?
+
+011100o0 RRRRrrrr ssssssss ssssssss	- STRW R.o, [r + imm16s]	- Store 16 bits from register
+    00o1 RRRRrrrr ssssssss ssssssss	- LDRW R.o, [r + imm16s]	- Load 16 bits to register
+    0100 RRRRrrrr ssssssss ssssssss	- LDRWS R, [r + imm16s] 	- Load 16-bits sign extended
+    0101 RRRRrrrr ssssssss ssssssss	- LDRWZ R, [r + imm16s] 	- Load 16-bits zero extended
+    0110 RRRRrrrr ssssssss ssssssss	- LDRBS R, [r + imm16s] 	- Load 8-bits sign extended
+    0111 RRRRrrrr ssssssss ssssssss	- LDRBZ R, [r + imm16s] 	- Load 8-bits zero extended
+    1oo0 RRRRrrrr ssssssss ssssssss	- STRB R,o, [r + imm16s]	- Store 8 bits from register
+    1oo1 RRRRrrrr ssssssss ssssssss	- LDRB R.o, [r + imm16s]	- Load 8 bits to register
+
+1xxxxxxx	- ?
 
 --- Condition Codes ---
 0000 ZF=1	EQ	Equal
