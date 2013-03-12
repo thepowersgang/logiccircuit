@@ -3,7 +3,9 @@
 // By John Hodge (thePowersGang)
 // Designed in LogicCircuit
 
-%include "../memory_bank.cct"
+//%include "../memory_bank.cct"
+
+%include "rom.cct"
 
 #defunit MEMORY_SPACE
 #input $enable, @addr[32], $data_write, @data_input[32], @size[2]
@@ -42,49 +44,26 @@ $is_DRAM = AND (DELAY $enable), (NOT   @addr[31]), (NOT   @addr[30]), (NOT   @ad
 $_data_rdy, @_data_word_out = MEMORY_DRAM{32,16} $is_DRAM, @addr[2:17], $_write_enable, @_data_word_mask, @_data_word_in
 
 // ROM area
-//  Reserved range: 0xF000 - 0xFFFF
-//  HACK! Actually at 0x0000 - 0x003F atm
-//  Size: 64 bytes (16 words)
+//  Reserved range: 0x0000 - 0xFFF
 $is_ROM  = AND (DELAY $enable), (NOT   @addr[31]), (NOT   @addr[30]), (NOT   @addr[29]), (NOT   @addr[28])
-// $ready, @data_output = ROM{12,32} $is_ROM, @addr[0:11]
-@ROM_select = DEMUX{4} $is_ROM, (DELAY{2} @addr[2:5])
+$_data_rdy, @_data_word_out = CPU32ROM_LL $is_ROM, @addr[2:13], $_write_enable, @_data_word_mask, @_data_word_in
 
-// === ROM Contents ===
-// - Address is in 32-bit words
-@_data_word_out[0:31] = AND{32} @ROM_select[0x0000], 0x11131337[0:31]	; OR R1, 0x31337
-@_data_word_out[0:31] = AND{32} @ROM_select[0x0001], 0x010FFFFF[0:31]	; MOV R0, 0xFFFFF
-@_data_word_out[0:31] = AND{32} @ROM_select[0x0002], 0x21000001[0:31]	; ADD R0, 0x00001
-@_data_word_out[0:31] = AND{32} @ROM_select[0x0003], 0x4EFFFFFD[0:31]	; JMP .-3*4
-@_data_word_out[0:31] = AND{32} @ROM_select[0x0004], 0x00000000[0:31]	; NOP
-@_data_word_out[0:31] = AND{32} @ROM_select[0x0005], 0x00000000[0:31]	; NOP
-@_data_word_out[0:31] = AND{32} @ROM_select[0x0006], 0x00000000[0:31]	; NOP
-@_data_word_out[0:31] = AND{32} @ROM_select[0x0007], 0x00000000[0:31]	; NOP
-@_data_word_out[0:31] = AND{32} @ROM_select[0x0008], 0x00000000[0:31]	; NOP
-@_data_word_out[0:31] = AND{32} @ROM_select[0x0009], 0x00000000[0:31]	; NOP
-@_data_word_out[0:31] = AND{32} @ROM_select[0x000A], 0x00000000[0:31]	; NOP
-@_data_word_out[0:31] = AND{32} @ROM_select[0x000B], 0x00000000[0:31]	; NOP
-@_data_word_out[0:31] = AND{32} @ROM_select[0x000C], 0x00000000[0:31]	; NOP
-@_data_word_out[0:31] = AND{32} @ROM_select[0x000D], 0x00000000[0:31]	; NOP
-@_data_word_out[0:31] = AND{32} @ROM_select[0x000E], 0x00000000[0:31]	; NOP
-@_data_word_out[0:31] = AND{32} @ROM_select[0x000F], 0x4EFFFFFF[0:31]	; JMP .-1*4 (infinite loop)
-// 1 delay for DEMUX, 1 for data
-$_data_rdy = DELAY{2} $is_ROM
-
-$ready = DELAY $_data_rdy
 // 32-bit output
 $fault_ac = AND $size_32, (OR @addr[0], @addr[1])
 @data_output = AND{32} $size_32, $_data_rdy, @_data_word_out
 
-// 16-bit
+// 16-bit output
 $fault_ac = AND $size_16, @addr[0]
 @data_output[0:15] = AND{16} $size_16, $_data_rdy, (NOT   @addr[1]), @_data_word_out[ 0:15]
 @data_output[0:15] = AND{16} $size_16, $_data_rdy, (DELAY @addr[1]), @_data_word_out[16:31]
 
-// 8-bit
+// 8-bit output
 @data_output[0:7] = AND{8} $size_8, $_data_rdy, (NOT   @addr[1]), (NOT   @addr[0]), @_data_word_out[ 0: 7]
 @data_output[0:7] = AND{8} $size_8, $_data_rdy, (NOT   @addr[1]), (DELAY @addr[0]), @_data_word_out[ 8:15]
 @data_output[0:7] = AND{8} $size_8, $_data_rdy, (DELAY @addr[1]), (NOT   @addr[0]), @_data_word_out[16:23]
 @data_output[0:7] = AND{8} $size_8, $_data_rdy, (DELAY @addr[1]), (DELAY @addr[0]), @_data_word_out[24:31]
+
+$ready = DELAY $_data_rdy
 
 #endunit
 
