@@ -1,3 +1,6 @@
+%ifndef _SHIFT_REGISTER_CCT_
+%define _SHIFT_REGISTER_CCT_
+
 // Shift Unit - 8-bit
 #defunit SHIFT_UNIT_8
 #input $pulse, $dir_is_right, @value[8], $carry_in
@@ -160,5 +163,6 @@ $rdy, @_out = ROTATE_LEFT_N_32 (DELAY 1), 4[0:4], 0x01234567[0:31]
 #testcomplete $rdy
 #endtestcase
 
+%endif
 
 ; vim: ft=logiccircuit
