@@ -23,7 +23,7 @@ $ins_end, $mem_enable, @mem_addr, $mem_write, @mem_data_out, \
 %endmacro
 
 // --- Test Case : Single instruction ---
-#testcase 100 "MOV R15, R15"
+#testcase 100 "CPU - MOV R15, R15"
 __CPU32_TEST_WRAPPER 1
 
 // - Register accesses should only be R15
@@ -43,7 +43,7 @@ $mem_ready = DELAY $mem_enable
 #endtestcase
 
 // --- Test Case: Two Instructions ---
-#testcase 200 "MOV R0, R0; MOV R15, R15"
+#testcase 200 "CPU - MOV R0, R0; MOV R15, R15"
 __CPU32_TEST_WRAPPER 1
 
 #array stage 3
@@ -70,7 +70,7 @@ $mem_ready = AND @stage[1], $mem_enable
 #testcomplete @stage[2]
 #endtestcase
 
-#testcase 300 "JMP.Z Y"
+#testcase 300 "CPU - JMP.Z Y"
 __CPU32_TEST_WRAPPER 1
 #array stage 3
 @stage = SEQUENCER{3} 1, 0, $ins_end
@@ -85,7 +85,7 @@ $mem_ready = DELAY $mem_enable
 
 #endtestcase
 
-#testcase 1000 "Big PCs"
+#testcase 1000 "CPU - Big PCs"
 __CPU32_TEST_WRAPPER 1
 #array stage 12
 @stage = SEQUENCER{12} 1, 0, $ins_end
@@ -110,7 +110,7 @@ $mem_ready = DELAY $mem_enable
 #testcomplete @stage[11]
 #endtestcase
 
-#testcase 700 "Jump Conditions"
+#testcase 700 "CPU - Jump Conditions"
 __CPU32_TEST_WRAPPER 1
 #array stage 7
 @stage = SEQUENCER{7} 1, 0, $ins_end
@@ -147,7 +147,7 @@ $mem_ready = DELAY $mem_enable
 
 #endtestcase
 
-#testcase 300 "32-Bit ADD (MOVI,MOVI,ADD)"
+#testcase 300 "CPU - 32-Bit ADD (MOVI,MOVI,ADD)"
 __CPU32_TEST_WRAPPER 1
 #array stage 4
 @stage = SEQUENCER{4} 1, 0, $ins_end
