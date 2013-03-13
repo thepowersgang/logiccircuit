@@ -112,16 +112,16 @@ $next_stage = PULSE $_next_stage_PCCLR
 
 #display @stage_state[2] "Opcode decode" 1
 $decode_enable = OR @stage_state[2:15]
-; 00xxxxxx	- General ALU stuff
-$is_ALU     = AND $decode_enable, (NOT   @instr[31]), (NOT   @instr[30])
-; 010xxxxx	- Conditional branches
-$is_BRANCH  = AND $decode_enable, (NXOR{3,2} @instr[31:29], 0b010[2:0])
+; 0xxxxxxx	- General ALU stuff
+$is_ALU     = AND $decode_enable, (NOT   @instr[31])
+; 100xxxxx	- Conditional branches
+$is_BRANCH  = AND $decode_enable, (NXOR{3,2} @instr[31:29], 0b100[2:0])
+; 1010xxxx xxxxxxxx	- Indirect Branch
+$is_IBRANCH = AND $decode_enable, (NXOR{4,2} @instr[31:28], 0b1010[3:0])
 ; 011xxxxx 000xxxxx	- Push/Pop
-$is_PUSHPOP = AND $decode_enable, (NXOR{8,2} @instr[31:27],@instr[23:21], 0b01100000[7:0])
-; 011xxxxx 111xxxxx	- Indirect Branch
-$is_IBRANCH = AND $decode_enable, (NXOR{8,2} @instr[31:27],@instr[23:21], 0b01100111[7:0])
-; 1000xxx	- Non-word Load/Store
-;$is_NONWLS  =
+;$is_PUSHPOP = AND $decode_enable, (NXOR{8,2} @instr[31:27],@instr[23:21], 0b01100000[7:0])
+; 1100xxxx	- Non-word Load/Store
+;$is_NONWLS  = AND $decode_enable, (NXOR{4,2} @instr[31:28], 0b1100[3:0])
 
 // === Handle Undefined Opcodes ===
 $is_UNDEF = AND (DELAY{2} $decode_enable), (NOR $is_ALU, $is_BRANCH)
@@ -129,16 +129,25 @@ $is_UNDEF = AND (DELAY{2} $decode_enable), (NOR $is_ALU, $is_BRANCH)
 ; $next_instruction = AND @stage_state[1], $is_UNDEF
 
 // === Address/Operand Decoding ===
-$no_decode_r = AND $decode_enable, (NOR @instr[31:27])
+$no_decode_r = AND $decode_enable, $is_IBRANCH
+$no_decode_r = AND $decode_enable, (NXOR{5,2} @instr[31:27], 0b00000[4:0])
+$no_read_m   = AND $decode_enable, (NXOR{5,2} @instr[31:27], 0b01000[4:0])
+;$no_decode_r = AND $decode_enable, $is_PUSHPOP
+// - Swap ALU operands
+$switch_operands = AND $decode_enable, $is_ALU, @instr[30]
+// - Push/Swap uses swapped operands
+;$switch_operands = AND $decode_enable, $is_PUSHPOP
+
 $decode_start = AND $is_ALU, @stage_state[2]
 $decode_clear = PULSE @stage_state[4]
 $decode_clear = PULSE @stage_state[0]
 
 #display $decode_start "Decode @instr=%32x" @instr
 $alu_data_rdy, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src = CPU32_ADDRESS_DECODE \
-	$decode_start, $decode_clear, (NOT $no_decode_r), 1, @instr, \
+	$decode_start, $decode_clear, $switch_operands, (NOT $no_decode_r), (NOT $no_read_m), @instr, \
 	$reg_enable, @reg_addr, $reg_ready, @reg_data_in, \
-	$mem_enable, @mem_addr, $mem_ready, @mem_data_in
+	$mem_enable, @mem_addr, $mem_ready, @mem_data_in, \
+	@pc
 
 #display $alu_data_rdy "@alu_addr   = %32x" @alu_addr[31:0]
 #display $alu_data_rdy "@alu_in_dst = %32x" @alu_in_dst[31:0]

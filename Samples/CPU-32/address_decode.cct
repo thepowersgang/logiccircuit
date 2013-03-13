@@ -79,7 +79,7 @@ $is_op_RPC8  = AND $_enable, (DELAY @instr[26]), (DELAY @instr[25]), (DELAY @ins
 // TODO: Could use @instr[26] instead
 $has_mem_read = OR $is_op_RM16, $is_op_RM16, $is_op_RPC16, $is_op_RPC8
 $is_mem_dest = AND $switch, $has_mem_read
-@dest_addr[3:0] = AND{4} (DELAY{4} $_enable), (NOT $switch), $read_r, @instr[23:20]
+@dest_addr[3:0] = AND{4} (DELAY{4} $_enable), (NOT $switch), @instr[23:20]
 @dest_addr[8:0] = AND{9} (DELAY{4} $_enable), $switch, (NOT $is_mem_dest), $read_m, (NOT   $is_op_Rr), 0x100[8:0]
 @dest_addr[3:0] = AND{4} (DELAY{4} $_enable), $switch, $read_m, (DELAY $is_op_Rr), @instr[19:16]
 
@@ -138,13 +138,13 @@ $reg_enable = DELAY $reading_M8
 $m8_add_ready = DELAY{3} $reading_M8
 @_mem_add_op1 = AND{32} $m8_add_ready, $is_op_RM8, @reg_data_in
 $m8_add_ready = AND $pulse, $is_op_RPC8
-@_mem_add_op1 = AND{32} $pulse, $is_op_RPC8, @pc
+@_mem_add_op1 = AND{32} $m8_add_ready, $is_op_RPC8, @pc
 @_mem_add_op2[31:0] = AND{32} $m8_add_ready, \
 	@instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], \
 	@instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], \
 	@instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], @instr[7], \
 	@instr[7:0]
-$_mem_add_start = DELAY{4} $reading_M8
+$_mem_add_start = DELAY $m8_add_ready
 $_mem8_add1_done = AND $is_M8, $is_M8_stg1, $_mem_add_done
 ; - Stage 2: rotate index
 $reg_enable = PULSE $is_M8_stg2

@@ -77,7 +77,7 @@ __CPU32_TEST_WRAPPER 1
 $mem_ready = DELAY $mem_enable
 #testassert 1 $reg_enable 0
 
-@mem_data_in[0:31] = AND{32} $mem_enable, 0x40000001[0:31]
+@mem_data_in[0:31] = AND{32} $mem_enable, 0x80000001[0:31]
 @flags[2] = DELAY @stage[0]
 
 #testassert @stage[1],$mem_enable @mem_addr[0:31] 8[0:31]
@@ -93,7 +93,7 @@ $mem_ready = DELAY $mem_enable
 #testassert 1 $reg_enable 0
 
 // 0x4F = JMP never
-@mem_data_in[0:31] = AND{32} $mem_enable, 0x4F000000[0:31]
+@mem_data_in[0:31] = AND{32} $mem_enable, 0x8F000000[0:31]
 
 #testassert @stage[0],$mem_enable	@mem_addr[0:31]	0x00[0:31]
 #testassert @stage[1],$mem_enable	@mem_addr[0:31]	0x04[0:31]
@@ -120,28 +120,28 @@ $mem_ready = DELAY $mem_enable
 
 // - #1: JMP.N .+16*4 (never)
 #testassert @stage[0], $mem_enable @mem_addr[0:31] 0[0:31]
-@mem_data_in[0:31] = AND{32} @stage[0], $mem_enable, 0x4F000010[0:31]
+@mem_data_in[0:31] = AND{32} @stage[0], $mem_enable, 0x8F000010[0:31]
 
 // - #2: JMP.A .+1*4 (always)
 #testassert @stage[1], $mem_enable @mem_addr[0:31] 4[0:31]
-@mem_data_in[0:31] = AND{32} @stage[1], $mem_enable, 0x4E000001[0:31]
+@mem_data_in[0:31] = AND{32} @stage[1], $mem_enable, 0x8E000001[0:31]
 
 // - #3: JMP.Z .+1*4 (zero, fail)
 #testassert @stage[2], $mem_enable @mem_addr[0:31] 12[0:31]
-@mem_data_in[0:31] = AND{32} @stage[2], $mem_enable, 0x40000001[0:31]
+@mem_data_in[0:31] = AND{32} @stage[2], $mem_enable, 0x80000001[0:31]
 
 // - #3: JMP.Z .+1*4 (zero, succeed)
 #testassert @stage[3], $mem_enable @mem_addr[0:31] 16[0:31]
-@mem_data_in[0:31] = AND{32} @stage[3], $mem_enable, 0x40000001[0:31]
+@mem_data_in[0:31] = AND{32} @stage[3], $mem_enable, 0x80000001[0:31]
 @flags[2] = DELAY @stage[3]
 
 // - #4: JMP.A .-4
 #testassert @stage[4], $mem_enable @mem_addr[0:31] 24[0:31]
-@mem_data_in[0:31] = AND{32} @stage[4], $mem_enable, 0x4EFFFFFF[0:31]
+@mem_data_in[0:31] = AND{32} @stage[4], $mem_enable, 0x8EFFFFFF[0:31]
 
 // - Dummy instruction to test the final address
 #testassert @stage[5], $mem_enable @mem_addr[0:31] 24[0:31]
-@mem_data_in[0:31] = AND{32} @stage[5], $mem_enable, 0x4EFFFFFF[0:31]
+@mem_data_in[0:31] = AND{32} @stage[5], $mem_enable, 0x8EFFFFFF[0:31]
 
 #testcomplete @stage[6]
 
