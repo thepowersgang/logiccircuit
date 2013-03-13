@@ -12,6 +12,12 @@
 
 %define NUM_FLAGS	3
 
+%macro next_stage	3+
+$_next_stage_%1 = %3
+#display $_next_stage_%1 %2 0
+$next_stage = PULSE $_next_stage_%1
+%endmacro
+
 #defunit CPU32_CORE
 #input $reset, $mem_ready, @mem_data_in[NUM_GPR_BITS], \
 	$reg_ready, @reg_data_in[NUM_GPR_BITS], \
@@ -79,6 +85,7 @@ $stage_reset = DELAY $reset
 $mem_enable  = PULSE @stage_state[0]	// Enable memory for read
 // - Read complete, save into @instr
 @instr = AND{32} @stage_state[0], $mem_ready, @mem_data_in	// Save the opcode
+//next_stage OPRDY, AND @stage_state[0], $mem_ready
 $_next_stage_OPRDY = AND @stage_state[0], $mem_ready	// Wait for instruction to be fetched
 #display $_next_stage_OPRDY "next_stage (OPRDY)" 0 
 $next_stage = PULSE $_next_stage_OPRDY
@@ -124,36 +131,38 @@ $is_IBRANCH = AND $decode_enable, (NXOR{4,2} @instr[31:28], 0b1010[3:0])
 ;$is_NONWLS  = AND $decode_enable, (NXOR{4,2} @instr[31:28], 0b1100[3:0])
 
 // === Handle Undefined Opcodes ===
-$is_UNDEF = AND (DELAY{2} $decode_enable), (NOR $is_ALU, $is_BRANCH)
+$is_UNDEF = AND (DELAY{2} $decode_enable), (NOR $is_ALU, $is_BRANCH, $is_IBRANCH)
 #display $is_UNDEF "UNDEFINED INSTRUCTION!" 0
 ; $next_instruction = AND @stage_state[1], $is_UNDEF
 
 // === Address/Operand Decoding ===
 $no_decode_r = AND $decode_enable, $is_IBRANCH
-$no_decode_r = AND $decode_enable, (NXOR{5,2} @instr[31:27], 0b00000[4:0])
-$no_read_m   = AND $decode_enable, (NXOR{5,2} @instr[31:27], 0b01000[4:0])
+$no_decode_r = AND $decode_enable, (NXOR{5,2} @instr[31:27], 0b00000[4:0])	// MOV
+$no_read_m   = AND $decode_enable, (NXOR{5,2} @instr[31:27], 0b01000[4:0])	// Reversed MOV
 ;$no_decode_r = AND $decode_enable, $is_PUSHPOP
 // - Swap ALU operands
 $switch_operands = AND $decode_enable, $is_ALU, @instr[30]
 // - Push/Swap uses swapped operands
 ;$switch_operands = AND $decode_enable, $is_PUSHPOP
 
-$decode_start = AND $is_ALU, @stage_state[2]
+$decode_start = AND @stage_state[2], $is_ALU
+$decode_start = AND @stage_state[2], $is_IBRANCH
 $decode_clear = PULSE @stage_state[4]
 $decode_clear = PULSE @stage_state[0]
 
 #display $decode_start "Decode @instr=%32x" @instr
-$alu_data_rdy, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src = CPU32_ADDRESS_DECODE \
+$decode_complete, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src = CPU32_ADDRESS_DECODE \
 	$decode_start, $decode_clear, $switch_operands, (NOT $no_decode_r), (NOT $no_read_m), @instr, \
 	$reg_enable, @reg_addr, $reg_ready, @reg_data_in, \
 	$mem_enable, @mem_addr, $mem_ready, @mem_data_in, \
 	@pc
 
-#display $alu_data_rdy "@alu_addr   = %32x" @alu_addr[31:0]
-#display $alu_data_rdy "@alu_in_dst = %32x" @alu_in_dst[31:0]
-#display $alu_data_rdy "@alu_in_src = %32x" @alu_in_src[31:0]
+#display $decode_complete "@alu_addr   = %32x" @alu_addr[31:0]
+#display $decode_complete "@alu_in_dst = %32x" @alu_in_dst[31:0]
+#display $decode_complete "@alu_in_src = %32x" @alu_in_src[31:0]
 
 // === ALU Handling ===
+$alu_data_rdy = AND $is_ALU, $decode_complete
 $alu_done, $alu_nosave, @alu_out = CPU32_ALU $alu_data_rdy, @instr[27:29], @alu_in_dst, @alu_in_src,\
 	$flags_C, $flags_O, $flags_Z, $flags_C_clear, $flags_O_clear, $flags_Z_clear
 #display $alu_done "next_stage (ALUDONE)" 0
@@ -162,9 +171,13 @@ $next_stage = PULSE $alu_done
 // === Conditional Jumps / Calls ===
 #array cond 8
 @cond = DEMUX{3} $is_BRANCH, @instr[27:25]
-$cond_inverse = DELAY @instr[24]
-$cond_call = DELAY @instr[28]	// bit 28 selects call/BX (as opposed to just jmp)
-$cond_jump = NOT   @instr[28]	// ^^^
+$cond_inverse = AND $is_BRANCH, @instr[24]
+$cond_call = AND $is_BRANCH, (DELAY @instr[28])	// bit 28 selects call/BX (as opposed to just jmp)
+$cond_jump = AND $is_BRANCH, (NOT   @instr[28])	// ^^^
+@cond = DEMUX{3} $is_IBRANCH, @instr[23:21]
+$cond_inverse = AND $is_IBRANCH, @instr[20]
+$cond_call = AND $is_IBRANCH, (DELAY @instr[27])	// bit 27 selects call/BX (as opposed to just jmp)
+$cond_jump = AND $is_IBRANCH, (NOT   @instr[27])	// ^^^
 
 $condition_true = AND @cond[0], $flags_Z
 $condition_true = AND @cond[1], $flags_C
@@ -180,17 +193,22 @@ $_next_stage_JMPDEC = DELAY{4} $is_BRANCH
 #display $_next_stage_JMPDEC "next_stage (JMPDEC)" 0
 $next_stage = PULSE $_next_stage_JMPDEC
 
+next_stage IJMPDEC, "next_stage (IJMPDEC)", AND $is_IBRANCH, $decode_complete
+;$_next_stage_IJMPDEC = AND $is_IBRANCH, $decode_complete
+;#display $_next_stage_IJMPDEC "next_stage (IJMPDEC)" 0
+;$next_stage = PULSE $_next_stage_IJMPDEC
+
 #display @stage_state[3] "%1i(_jump_cond) = %1i(condition_true) ^ %1i(cond_inverse)" $_jump_cond, $condition_true, $cond_inverse
 
 // - Not branching? Next instruction
 $_ni_NOJMP = AND @stage_state[3], $is_BRANCH, (NOT $_jump_cond)
+$_ni_NOJMP = AND @stage_state[3], $is_IBRANCH, (NOT $_jump_cond)
 #display $_ni_NOJMP "Next Instruction (Not Jumping)" 0
 $next_instruction = PULSE $_ni_NOJMP
 
 // - Just branch, next stage
-$_next_stage_JMP = AND @stage_state[3], $is_BRANCH, $_jump_cond, $cond_jump
-#display $_next_stage_JMP "next_stage (JMP)" 0
-$next_stage = PULSE $_next_stage_JMP
+next_stage JMP,  "next_stage (JMP)",  AND @stage_state[3], $is_BRANCH, $_jump_cond, $cond_jump
+next_stage IJMP, "next_stage (IJMP)", AND @stage_state[3], $is_IBRANCH, $_jump_cond, $cond_jump
 // - Branch+exchange, save PC to R14
 $_do_call = AND @stage_state[3], $is_BRANCH, $_jump_cond, $cond_call
 @reg_addr[3:0] = AND{4} $_do_call, 14[3:0]	; R14 = LR
@@ -204,13 +222,19 @@ $next_stage = PULSE $_next_stage_BXLRSAVED
 // - Actually do update
 $do_jump = AND $is_BRANCH, @stage_state[4]
 $alt_pc_inc_value = DELAY $do_jump
-@pc_inc_value[31:0] = AND{32} $do_jump, @instr[23],@instr[23],@instr[23],@instr[23],@instr[23],@instr[23],@instr[23:0],0,0 	// 24 bit signed * 4
+$_jmp_sign_bit = @instr[23]
+@pc_inc_value[31:0] = AND{32} $do_jump, $_jmp_sign_bit*6, @instr[23:0],0,0 	// 24 bit signed * 4
 #display $alt_pc_inc_value "@pc_inc_value = 0x%32x" @pc_inc_value[31:0]
 //  > Delay is to ensure the alt_pc_inc_value has taken effect (the hard 0x4 is turned off)
 $increment_pc = DELAY (PULSE $do_jump)
 // - Next stage when PC is updated
 $jump_complete = AND $is_BRANCH, @stage_state[5]
 $next_instruction = PULSE $jump_complete
+// -- IJMP - Set PC
+$do_ijump = AND $is_IBRANCH, @stage_state[4]
+$pc_clear = DELAY $do_ijump
+@pc = AND{32} (DELAY{2} $do_ijump), @alu_in_src
+$next_instruction = DELAY{5} $do_ijump
 
 
 // ==============================

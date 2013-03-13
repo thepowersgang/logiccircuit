@@ -11,7 +11,6 @@ R15 - PIC base (suggested)
 
 TODO:
 - Shifts, sign extended load?
-- Replace mmm=110/111 with reversed operand flag (allows 'POP r')
 
 Normal Format:
 |---Op---|Dest Src|      Value      |

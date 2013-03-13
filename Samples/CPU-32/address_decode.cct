@@ -41,12 +41,13 @@ $_pulse = PULSE $trigger
 $op_clear = PULSE $trigger
 $rdy_clear = PULSE $trigger
 $rdy_clear = PULSE $in_rdy_clear
+$rdy_clear = DELAY (PULSE $in_rdy_clear)
 $int_addr_clear = PULSE $trigger
 
 $pulse = PULSE $_enable
 
-;#display (DELAY $_enable) "$pulse = %1i, $_enable = %1i" $pulse, $_enable
-;#display $rdy_clear "$rdy_clear = %1i" $rdy_clear
+#display $_enable "$switch = %1i, $read_r = %1i, $read_m" $switch, $read_r, $read_m
+#display $rdy_clear "$rdy_clear = %1i" $rdy_clear
 ;#display $rdy "$rdy = %1i" $rdy
 
 $NULL, $_enable = LATCH 1, $rdy_clear, (DELAY $trigger)
@@ -85,9 +86,9 @@ $is_mem_dest = AND $switch, $has_mem_read
 
 ; Rr
 $reading_Rr = AND $pulse, $is_op_Rr
-$op_2_read_set = AND $is_op_Rr, $reg_ready
 $reg_enable = DELAY $reading_Rr
 @reg_addr[3:0] = AND{4} $reading_Rr, @instr[19:16]
+$op_2_read_set = AND $is_op_Rr, (NOT $reading_op1), $reg_ready
 @op_2 = AND{32} $is_op_Rr, (NOT $reading_op1), $reg_ready, @reg_data_in
 
 ; Ri20
@@ -172,7 +173,7 @@ $mem_enable = AND $addr_ready, $read_m
 @mem_addr = AND{32} $addr_ready, $read_m, @int_addr
 @op_2 = AND{32} $is_M8, $mem_ready, @mem_data_in
 @op_2 = AND{32} $is_M16, $mem_ready, @mem_data_in
-$op_2_read_set = PULSE (AND $mem_ready, $_enable)
+$op_2_read_set = PULSE (AND $mem_ready, (NOT $op_2_read), $_enable)
 ; - Set @dest_addr if $switch and it's a memory reference
 @dest_addr = AND{32} $addr_ready, $is_mem_dest, @int_addr
 
@@ -182,7 +183,7 @@ $reading_op1 = AND $read_r, $op_2_read
 $reg_enable = PULSE $reading_op1
 @reg_addr[3:0] = AND{4} $reading_op1, @instr[23:20]
 @op_1 = AND{32} $reading_op1, $reg_ready, @reg_data_in
-$op_1_read = AND $reading_op1, $reg_ready
+$op_1_read = AND $reading_op1, $_enable, $reg_ready
 ; === Skip Op1? ===
 $op_1_read = AND $op_2_read, $_enable, (NOT $read_r)
 #display $op_1_read "OP1 Read set" $op_1_read

@@ -79,7 +79,7 @@ $rdy, @out, $fault = MEMORY_SPACE 1, 0[0:31], 0, 0xFFFFFFFF[0:31], 0[0:1]
 #testcase 20 "Memory - 32-bit aligned NZ"
 #array out	32
 $rdy, @out, $fault = MEMORY_SPACE 1, 0x0C[0:31], 0, 0xFFFFFFFF[0:31], 0[0:1]
-#testassert $rdy @out[0:31] 0x4EFFFFFD[0:31]
+#testassert $rdy @out[0:31] 0x8EFFFFFD[0:31]
 #testassert $rdy $fault 0
 #testcomplete $rdy
 #endtestcase

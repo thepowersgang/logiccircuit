@@ -179,5 +179,32 @@ $reg_ready, @reg_data_in = REGISTER_BANK_16_32 $reg_enable, @reg_addr, $reg_writ
 
 #endtestcase
 
+#testcase 700 "CPU - Indirect Jump"
+__CPU32_TEST_WRAPPER 1
+#array stage 4
+@stage = SEQUENCER{4} 1, 0, $ins_end
+
+$mem_ready = DELAY $mem_enable
+$reg_ready = DELAY $reg_enable
+#testassert $reg_enable $reg_write 0
+#testassert $reg_enable @reg_addr[0:3] 11[0:3]
+
+// No jump to 0x50
+@reg_data_in[0:31] = AND{32} @stage[0], $reg_enable, 0x50[0:31]
+#testassert $mem_enable,@stage[0] @mem_addr[31:0] 0[31:0]
+@mem_data_in[0:31] = AND{32} @stage[0], $mem_enable, 0xA0FB0000[0:31]
+
+// Jump to 0x60
+@reg_data_in[0:31] = AND{32} @stage[1], $reg_enable, 0x60[0:31]
+#testassert $mem_enable,@stage[1] @mem_addr[31:0] 4[31:0]
+@mem_data_in[0:31] = AND{32} @stage[1], $mem_enable, 0xA0EB0000[0:31]
+
+// No jump to -1
+@reg_data_in[0:31] = AND{32} @stage[0], $reg_enable, 1*32
+#testassert $mem_enable,@stage[2] @mem_addr[31:0] 0x60[31:0]
+@mem_data_in[0:31] = AND{32} @stage[2], $mem_enable, 0xA0FB0000[0:31]
+
+#testcomplete @stage[3]
+#endtestcase
 
 ; vim: ft=logiccircuit
