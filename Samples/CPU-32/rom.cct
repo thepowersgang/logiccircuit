@@ -11,7 +11,7 @@
 @data_out[0:31] = AND{32} @ROM_select[0x0000], 0x11131337[0:31]	; OR R1, 0x31337
 @data_out[0:31] = AND{32} @ROM_select[0x0001], 0x010FFFFF[0:31]	; MOV R0, 0xFFFFF
 @data_out[0:31] = AND{32} @ROM_select[0x0002], 0x21000001[0:31]	; ADD R0, 0x00001
-@data_out[0:31] = AND{32} @ROM_select[0x0003], 0x4EFFFFFD[0:31]	; JMP .-3*4
+@data_out[0:31] = AND{32} @ROM_select[0x0003], 0x8EFFFFFD[0:31]	; JMP .-3*4
 @data_out[0:31] = AND{32} @ROM_select[0x0004], 0x00000000[0:31]	; NOP
 @data_out[0:31] = AND{32} @ROM_select[0x0005], 0x00000000[0:31]	; NOP
 @data_out[0:31] = AND{32} @ROM_select[0x0006], 0x00000000[0:31]	; NOP
@@ -23,7 +23,7 @@
 @data_out[0:31] = AND{32} @ROM_select[0x000C], 0x00000000[0:31]	; NOP
 @data_out[0:31] = AND{32} @ROM_select[0x000D], 0x00000000[0:31]	; NOP
 @data_out[0:31] = AND{32} @ROM_select[0x000E], 0x00000000[0:31]	; NOP
-@data_out[0:31] = AND{32} @ROM_select[0x000F], 0x4EFFFFFF[0:31]	; JMP .-1*4 (infinite loop)
+@data_out[0:31] = AND{32} @ROM_select[0x000F], 0x8EFFFFFF[0:31]	; JMP .-1*4 (infinite loop)
 
 $ready = DELAY{2} $enable
 
