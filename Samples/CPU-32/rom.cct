@@ -24,6 +24,22 @@
 @data_out[0:31] = AND{32} @ROM_select[0x000D], 0x00000000[0:31]	; NOP
 @data_out[0:31] = AND{32} @ROM_select[0x000E], 0x00000000[0:31]	; NOP
 @data_out[0:31] = AND{32} @ROM_select[0x000F], 0x8EFFFFFF[0:31]	; JMP .-1*4 (infinite loop)
+@data_out[0:31] = AND{32} @ROM_select[0x0010], 0x00000000[0:31]	; NOP
+@data_out[0:31] = AND{32} @ROM_select[0x0011], 0x00000000[0:31]	; NOP
+@data_out[0:31] = AND{32} @ROM_select[0x0012], 0x00000000[0:31]	; NOP
+@data_out[0:31] = AND{32} @ROM_select[0x0013], 0x00000000[0:31]	; NOP
+@data_out[0:31] = AND{32} @ROM_select[0x0014], 0x00000000[0:31]	; NOP
+@data_out[0:31] = AND{32} @ROM_select[0x0015], 0x00000000[0:31]	; NOP
+@data_out[0:31] = AND{32} @ROM_select[0x0016], 0x00000000[0:31]	; NOP
+@data_out[0:31] = AND{32} @ROM_select[0x0017], 0x00000000[0:31]	; NOP
+@data_out[0:31] = AND{32} @ROM_select[0x0018], 0x00000000[0:31]	; NOP
+@data_out[0:31] = AND{32} @ROM_select[0x0019], 0x00000000[0:31]	; NOP
+@data_out[0:31] = AND{32} @ROM_select[0x001a], 0x00000000[0:31]	; NOP
+@data_out[0:31] = AND{32} @ROM_select[0x001b], 0x00000000[0:31]	; NOP
+@data_out[0:31] = AND{32} @ROM_select[0x001c], 0x00000000[0:31]	; NOP
+@data_out[0:31] = AND{32} @ROM_select[0x001d], 0x00000000[0:31]	; NOP
+@data_out[0:31] = AND{32} @ROM_select[0x001e], 0x00000000[0:31]	; NOP
+@data_out[0:31] = AND{32} @ROM_select[0x001f], 0x00000000[0:31]	; NOP
 
 $ready = DELAY{2} $enable
 

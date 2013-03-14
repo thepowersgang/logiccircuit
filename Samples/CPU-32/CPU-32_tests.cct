@@ -207,4 +207,26 @@ $reg_ready = DELAY $reg_enable
 #testcomplete @stage[3]
 #endtestcase
 
+#testcase 120 "CPU - Call"
+__CPU32_TEST_WRAPPER 1
+#array stage 3
+@stage = SEQUENCER{3} 1, 0, $ins_end
+
+$mem_ready = DELAY $mem_enable
+$reg_ready = DELAY $reg_enable
+
+#testassert $reg_enable $reg_write 1
+#testassert $reg_enable @reg_addr[3:0] 14[3:0]
+
+#testassert $mem_enable,@stage[0] @mem_addr[31:0] 0[31:0]
+@mem_data_in[0:31] = AND{32} @stage[0], $mem_enable, 0x9E7FFFFF[0:31]
+#testassert $reg_enable,@stage[0] @reg_data_out[31:0] 4[31:0]
+
+#testassert $mem_enable,@stage[1] @mem_addr[31:0] 0x2000000[31:0]
+@mem_data_in[0:31] = AND{32} @stage[1], $mem_enable, 0x8F000000[0:31]
+
+#testcomplete @stage[2]
+
+#endtestcase
+
 ; vim: ft=logiccircuit

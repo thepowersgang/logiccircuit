@@ -10,7 +10,7 @@ R14 - Link Register
 R15 - PIC base (suggested)
 
 TODO:
-- Shifts, sign extended load?
+- Shifts
 
 Normal Format:
 |---Op---|Dest Src|      Value      |
@@ -30,7 +30,7 @@ ooooo111 RRRRxxxx iiiissss vvvvvvvv	- R = R <op> [PC + Ri << s + imm8s]
 Operations
 
 == Basic ALU
- > 's': Switch order of operands (explicit destination registers are maintained)
+ > 's': Switch order of operands
  > Saves to immedates are ignored
 0s000mmm	- MOV op1, op2
 0s001mmm	- AND op1, op2

@@ -119,13 +119,13 @@ $next_stage = PULSE $_next_stage_PCCLR
 
 #display @stage_state[2] "Opcode decode" 1
 $decode_enable = OR @stage_state[2:15]
-; 0xxxxxxx	- General ALU stuff
+; 0xxxxmmm	- General ALU stuff
 $is_ALU     = AND $decode_enable, (NOT   @instr[31])
 ; 100xxxxx	- Conditional branches
 $is_BRANCH  = AND $decode_enable, (NXOR{3,2} @instr[31:29], 0b100[2:0])
-; 1010xxxx xxxxxxxx	- Indirect Branch
+; 1010xmmm xxxxxxxx	- Indirect Branch
 $is_IBRANCH = AND $decode_enable, (NXOR{4,2} @instr[31:28], 0b1010[3:0])
-; 011xxxxx 000xxxxx	- Push/Pop
+; 10110mmm 000xxxxx	- Push/Pop
 ;$is_PUSHPOP = AND $decode_enable, (NXOR{8,2} @instr[31:27],@instr[23:21], 0b01100000[7:0])
 ; 1100xxxx	- Non-word Load/Store
 ;$is_NONWLS  = AND $decode_enable, (NXOR{4,2} @instr[31:28], 0b1100[3:0])
