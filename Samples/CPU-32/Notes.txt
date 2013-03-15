@@ -63,13 +63,13 @@ Operations
     1000 0000001x - ?
     1000 000001xx - ?
     1000 00001xxx - ?
-    1000 0001rrrr vvvvvvvv vvvvvvvv	- MOV r, PC+imm16s*4
+    1000 0001xxxx - ?
     1000 001xxxxx - ?
     1000 01xxxxxx - ?
     1000 1xxxxxxx - ?
     1001	- ?
     101x	- ?
-    11xx	- ?
+    11xx	- LEA R, op2	- Load Effective Address (NOTE: Modes 0-3 are not memory, so are reused)
 
 == Non-word Loads/Stores
 110000o0 RRRRrrrr ssssssss ssssssss	- STRW R.o, [r + imm16s]	- Store 16 bits from register
