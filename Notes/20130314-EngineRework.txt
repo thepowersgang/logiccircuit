@@ -1,0 +1,9 @@
+== High Level ==
+'#defunit' units maintained within memory (not merged into main blob)
+Upon instantiation (pre-execute) build up list of sub-instances
+- E.g. a CS Adder would contain three Ripple Adders, which each contain 'n' full adders
+Create full mesh just before execution
+- Should help maintain a single level of indirection
+
+Simulation pass iterates through all instances in the simulation two/three times
+- First to prepare values
