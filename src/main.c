@@ -30,12 +30,8 @@ extern int ParseFile(const char *Filename);
 
 // === PROTOTYPES ===
  int	main(int argc, char *argv[]);
-void	UsageCheck(tTestCase *Root);
-void	RunSimulationStep(tTestCase *Root);
-void	ShowDisplayItems(tDisplayItem *First);
 void	ReadCommand(int MaxCmd, char *Command, int MaxArg, char *Argument);
 void	SigINT_Handler(int Signum);
-void	PrintDisplayItem(tDisplayItem *dispItem);
 void	CompressLinks(tTestCase *Root);
 void	WriteCompiledVersion(const char *Path, int bBinary);
 void	DumpList(const tList *List, int bShowNames);
@@ -129,26 +125,26 @@ int main(int argc, char *argv[])
 
 	// Resolve links
 	printf("Resolving links...\n");
-	ResolveLinks(gpLinks);
-	ResolveEleLinks(gpElements);
-	for( tTestCase *test = gpTests; test; test = test->Next )
-	{
-		ResolveLinks(test->Links);
-//		ResolveEleLinks(test->Elements);
-	}
+//	ResolveLinks(gpLinks);
+//	ResolveEleLinks(gpElements);
+//	for( tTestCase *test = gpTests; test; test = test->Next )
+//	{
+//		ResolveLinks(test->Internals.Links);
+////		ResolveEleLinks(test->Elements);
+//	}
 	
 	// Print links
 	// > Scan all links and find ones that share a value pointer 
 	if( gbPrintLinks )
 	{
-		for( link = gpLinks; link; link = link->Next )
+		for( link = gRootUnit.Links; link; link = link->Next )
 		{
 			 int	linkCount;
 			tLink	*link2;
 			if(link->Backlink)	continue;	// Skip ones already done
 			linkCount = 0;
 			printf("(tValue)%p:", link->Value);
-			for( link2 = gpLinks; link2; link2 = link2->Next )
+			for( link2 = link; link2; link2 = link2->Next )
 			{
 				if(link2->Backlink)	continue;
 				if(link2->Value != link->Value)	continue;
@@ -170,17 +166,24 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
+	#if 0
 	if( gbCompress )
 	{
 		CompressLinks(NULL);
 		for( tTestCase *test = gpTests; test; test = test->Next )
 			CompressLinks(test);
 	}
+	#endif
 
-	// TODO: Check for links that aren't set/read
-	UsageCheck(NULL);
+	// Check for links that aren't set/read
+	Sim_UsageCheck(&gRootUnit);
+	for( tUnitTemplate *tpl = gpUnits; tpl; tpl = tpl->Next )
+		Sim_UsageCheck(&tpl->Internals); 
 //	for( tTestCase *test = gpTests; test; test = test->Next )
-//		UsageCheck(test);
+//		UsageCheck(&test->Internals);
+
+	// TODO: Fix later sections
+	return 0;
 	
 	if( gbPrintStats )
 	{
@@ -189,9 +192,9 @@ int main(int argc, char *argv[])
 		 int	totalValues = 0;
 		 int	totalElements = 0;
 		printf("Gathering statistics...\n");
-		for( link = gpLinks; link; link = link->Next )
+		for( link = gRootUnit.Links; link; link = link->Next )
 			link->Backlink = NULL;
-		for( link = gpLinks; link; link = link->Next )
+		for( link = gRootUnit.Links; link; link = link->Next )
 		{
 			tLink	*link2;
 
@@ -213,7 +216,7 @@ int main(int argc, char *argv[])
 			totalValues ++;
 		}
 		
-		for( ele = gpElements; ele; ele = ele->Next )
+		for( ele = gRootUnit.Elements; ele; ele = ele->Next )
 			totalElements ++;
 
 		printf("%i Links (joins)\n", totalLinks);
@@ -249,45 +252,12 @@ int main(int argc, char *argv[])
 			printf("Test '%s'...", test->Name);
 			while( steps_elapsed != test->MaxLength && !bFailure )
 			{
-				RunSimulationStep(test);
+				Sim_RunStep(test);
 				if( gbTest_ShowDisplay )
-					ShowDisplayItems(test->DisplayItems);
+					Sim_ShowDisplayItems(test->Internals.DisplayItems);
 				steps_elapsed ++;
 			
-				 int	assertion_num = 0;	
-				for( tAssertion *a = test->Assertions; a; a = a->Next, assertion_num ++ )
-				{
-					 int	i;
-				
-					for( i = 0; i < a->Condition.NItems; i ++ )
-					{
-						if( !GetLink(a->Condition.Items[i]) )
-							break ;
-					}
-					// If one condition failed, don't check
-					if( i < a->Condition.NItems )
-						continue ;
-					
-					// Check that Expected == Actual
-					for( i = 0; i < a->Expected.NItems; i ++ )
-					{
-						if( GetLink(a->Expected.Items[i]) != GetLink(a->Values.Items[i]) )
-							break;
-					}
-					// Assertion passed
-					if( i == a->Expected.NItems )
-						continue ;
-					
-					// Failed
-					printf("\n - Assertion %i failed\n", assertion_num+1);
-					printf("  if ");
-					DumpList(&a->Condition, 1);
-					printf("assert actual ");
-					DumpList(&a->Values, 0);
-					printf(" == expected ");
-					DumpList(&a->Expected, 0);
-					bFailure = 1;
-				}
+				bFailure = Sim_CheckAssertions(test->Internals.Assertions);
 				
 				if( test->CompletionCondition && GetLink(test->CompletionCondition) )
 					break;
@@ -324,14 +294,13 @@ int main(int argc, char *argv[])
 	// Execute
 	for( timestamp = 0; gbRunSimulation; timestamp ++ )
 	{
-		tBreakpoint	*bp;
 		 int	breakPointFired = 0;
 
 		if( giSimulationSteps && timestamp == giSimulationSteps )
 			break;	
 	
 		// Clear drivers
-		for( link = gpLinks; link; link = link->Next ) {
+		for( link = gRootUnit.Links; link; link = link->Next ) {
 			link->Value->NDrivers = 0;
 			// Ensure 0 and 1 stay as 0 and 1
 			if( link->Name[0] == '1' ) {
@@ -350,26 +319,10 @@ int main(int argc, char *argv[])
 		}
 		printf("---- %6i ----\n", timestamp);
 		
-		ShowDisplayItems(gpDisplayItems);
+		Sim_ShowDisplayItems(gRootUnit.DisplayItems);
 	
 		// Check breakpoints
-		breakPointFired = 0;
-		for( bp = gpBreakpoints; bp; bp = bp->Next )
-		{
-			ASSERT(bp != bp->Next);
-			// Check condition (if one condition line is high, the item is displayed)
-			for( i = 0; i < bp->Condition.NItems; i ++ )
-			{
-				if( GetLink(bp->Condition.Items[i]) ) {
-					break;
-				}
-			}
-			if( i == bp->Condition.NItems )	continue;
-			
-			if( ! breakPointFired )	printf("\n");
-			printf("BREAKPOINT %s\n", bp->Label);
-			breakPointFired = 1;
-		}
+		breakPointFired = Sim_CheckBreakpoints(&gRootUnit);
 		
 		// === User Input ===
 		if( giSimulationSteps == 0 && ( gbStepping || breakPointFired ) )
@@ -408,7 +361,7 @@ int main(int argc, char *argv[])
 				// Display
 				else if( strcmp(commandBuffer, "d") == 0 ) {
 					// Find named link
-					for( link = gpLinks; link; link = link->Next ) {
+					for( link = gRootUnit.Links; link; link = link->Next ) {
 						if( strcmp(link->Name, argBuffer) == 0 ) {
 							printf("%s: %i\n", link->Name, link->Value->Value);
 							break;
@@ -417,7 +370,7 @@ int main(int argc, char *argv[])
 				}
 				else if( strcmp(commandBuffer, "dispall") == 0 ) {
 					 int	len = strlen(argBuffer);
-					for( link = gpLinks; link; link = link->Next ) {
+					for( link = gRootUnit.Links; link; link = link->Next ) {
 						if( link->Name[0] && strncmp(link->Name, argBuffer, len) == 0 ) {
 							printf("%s: %i\n", link->Name, link->Value->Value);
 						}
@@ -429,171 +382,13 @@ int main(int argc, char *argv[])
 			}
 		}
 		
-		RunSimulationStep(NULL);
+		Sim_RunStep(NULL);
 	}
 	
 	// Swap back to main buffer
 	printf("\x1B[?1047l");
 	
 	return 0;
-}
-
-void GetLists(tTestCase *Root, tLink ***links, tElement ***elements, tDisplayItem ***dispitems)
-{
-	if( Root ) {
-		*links = &Root->Links;
-		*elements = &Root->Elements;
-		if(dispitems)	*dispitems = &Root->DisplayItems;
-	}
-	else {
-		*links = &gpLinks;
-		*elements = &gpElements;
-		if(dispitems)	*dispitems = &gpDisplayItems;
-	}
-}
-
-void UsageCheck(tTestCase *Root)
-{
-	struct sUsage {
-		 int	nSet;
-		 int	nRead;
-	}	*usage;
-	 int	nLinks = 0;
-	tLink	**links;
-	tElement	**elements;
-	
-	GetLists(Root, &links, &elements, NULL);
-	
-	// Count links and allocate count space
-	for( tLink *link = *links; link; link = link->Next )
-		nLinks ++;
-	usage = calloc(nLinks, sizeof(*usage));
-	
-	// Set the ->Link field to the usage structure
-	 int	i = 0;
-	for( tLink *link = *links; link; link = link->Next, i++ )
-		link->Link = (void*)&usage[i];
-	
-	// Iterate over elements
-	for( tElement *ele = *elements; ele; ele = ele->Next )
-	{
-		for( i = 0; i < ele->NInputs; i ++ )
-			((struct sUsage*)ele->Inputs[i]->Link)->nRead ++;
-		for( i = 0; i < ele->NOutputs; i ++ )
-			((struct sUsage*)ele->Outputs[i]->Link)->nSet ++;
-	}
-	
-	// Complain for links that are not set/read
-	for( tLink *link = *links; link; link = link->Next )
-	{
-		struct sUsage	*u = (void*)link->Link;
-		if( u->nSet == 0 && u->nRead == 0 )
-			fprintf(stderr, "Link '%s' is never used\n", link->Name);
-		else if( u->nSet == 0 )
-			fprintf(stderr, "Link '%s' is never set\n", link->Name);
-		else if( u->nRead == 0 )
-			fprintf(stderr, "Link '%s' is never read\n", link->Name);
-		else
-			;	// Read/Set, good
-		link->Link = NULL;
-	}
-	
-	free(usage);
-}
-
-void RunSimulationStep(tTestCase *Root)
-{
-	tLink	**links;
-	tElement	**elements;
-	
-	GetLists(Root, &links, &elements, NULL);
-
-	for( tLink *link = *links; link; link = link->Next )
-	{
-		ASSERT(link != link->Next);
-		link->Value->NDrivers = 0;
-		if( link->Name[0] == '1' )
-		{
-			link->Value->Value = 1;
-			link->Value->NDrivers = 1;
-		}
-		else if( link->Name[0] == '0' )
-		{
-			link->Value->Value = 0;
-			link->Value->NDrivers = 0;
-		}
-	}
-	
-	// === Update elements ===
-	for( tElement *ele = *elements; ele; ele = ele->Next )
-	{
-		ASSERT(ele != ele->Next);
-		ele->Type->Update( ele );
-	}
-	
-	// Set values
-	for( tLink *link = *links; link; link = link->Next )
-	{
-		ASSERT(link != link->Next);
-		link->Value->Value = !!link->Value->NDrivers;
-		
-		// Ensure 0 and 1 stay as 0 and 1
-		if( link->Name[0] == '1' )
-		{
-			link->Value->Value = 1;
-			link->Value->NDrivers = 1;
-		}
-		else if( link->Name[0] == '0' )
-		{
-			link->Value->Value = 0;
-		}
-	}
-	
-	for( tLink *link = *links; link; link = link->Next )
-	{
-		ASSERT(link != link->Next);
-		link->Value->NDrivers = 0;
-		if( link->Name[0] == '1' )
-		{
-			ASSERT( link->Value->Value );
-			link->Value->Value = 1;
-			link->Value->NDrivers = 1;
-		}
-		else if( link->Name[0] == '0' )
-		{
-			ASSERT( !link->Value->Value );
-			link->Value->Value = 0;
-			link->Value->NDrivers = 0;
-		}
-	}
-}
-
-void ShowDisplayItems(tDisplayItem *First)
-{
-	 int	i;
-	 int	bHasDisplayed = 0;
-	for( tDisplayItem *dispItem = First; dispItem; dispItem = dispItem->Next )
-	{
-		ASSERT(dispItem != dispItem->Next);
-		// Check condition (if one condition line is high, the item is displayed)
-		for( i = 0; i < dispItem->Condition.NItems; i ++ )
-		{
-//			printf("%s(%p %i)\n", dispItem->Condition.Items[i]->Name,
-//				dispItem->Condition.Items[i]->Value,
-//				dispItem->Condition.Items[i]->Value->Value);
-			if( GetLink(dispItem->Condition.Items[i]) ) {
-				break;
-			}
-		}
-		if( i == dispItem->Condition.NItems )	continue;
-
-		if( !bHasDisplayed ) {
-			printf("-----\n");
-			bHasDisplayed = 1;
-		}
-
-		PrintDisplayItem(dispItem);
-	}
 }
 
 void ReadCommand(int MaxCmd, char *Command, int MaxArg, char *Argument)
@@ -643,77 +438,7 @@ void SigINT_Handler(int Signum)
 	#endif
 }
 
-
-void PrintDisplayItem(tDisplayItem *DispItem)
-{
-	const char	*format = DispItem->Label;
-	 int	lineNum = 0;
-	 int	count, i, tmpCount;
-	uint32_t	val;
-	
-	for( ; *format; format ++ )
-	{
-		if( *format == '%' )
-		{
-			format ++;
-			count = 0;
-			while( isdigit(*format) )
-			{
-				count *= 10;
-				count += *format - '0';
-				format ++;
-			}
-			
-			if(count == 0)	count = 1;
-			
-			#define BITS_PER_BLOCK	32
-			
-			tmpCount = count % BITS_PER_BLOCK;
-			do
-			{
-				if( tmpCount == 0 )
-					tmpCount = BITS_PER_BLOCK;
-				val = 0;
-				for( i = 0; i < tmpCount && lineNum < DispItem->Values.NItems; i ++)
-				{
-					val *= 2;
-					val += !!DispItem->Values.Items[lineNum++]->Value->Value;
-				}
-				//for(; i < tmpCount; i ++ )
-				//	val *= 2;
-				
-				switch(*format)
-				{
-				case 'x':
-					printf("%0*x", (i+3)/4, val);
-					break;
-				case 'i':
-					printf("%i", val);
-					break;
-				case 'b':
-				default:
-					for( ; i --; )
-						printf("%i", !!(val & (1 << i)));
-					break;
-				}
-				count -= tmpCount;
-				tmpCount = BITS_PER_BLOCK;
-			}	while( count >= BITS_PER_BLOCK );
-			#undef BITS_PER_BLOCK
-		}
-		else
-			printf("%c", *format);
-	}
-	
-	if(lineNum != DispItem->Values.NItems)
-		printf(": ");
-	for( ; lineNum < DispItem->Values.NItems; lineNum ++ )
-	{
-		printf("%i", DispItem->Values.Items[lineNum]->Value->Value);
-	}
-	printf("\n");
-}
-
+#if 0
 void CompressLinks(tTestCase *Root)
 {
 	 int	nVal = 0, nLink = 0;
@@ -850,19 +575,9 @@ void CompressLinks(tTestCase *Root)
 
 	free( links_merged );
 }
+#endif
 
-void DumpList(const tList *List, int bShowNames)
-{
-	if( bShowNames ) {
-		for( int i = 0; i < List->NItems; i ++ )
-			printf( "%s(%i) ", List->Items[i]->Name, List->Items[i]->Value->Value);
-	}
-	else {
-		for( int i = 0; i < List->NItems; i ++ )
-			printf( "%i", List->Items[i]->Value->Value);
-	}
-}
-
+#if 0
 void ResolveLinks(tLink *First)
 {
 	for( tLink *link = First; link; link = link->Next )
@@ -911,4 +626,5 @@ void ResolveEleLinks(tElement *First)
 	}
 
 }
+#endif
 

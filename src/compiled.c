@@ -24,11 +24,11 @@ void WriteCompiledVersion(const char *Path, int bBinary)
 	tElement	*ele;
 	 int	i;
 	
-	for( link = gpLinks; link; link = link->Next ) {
+	for( link = gRootUnit.Links; link; link = link->Next ) {
 		link->Backlink = (void*)(intptr_t)n_links;	// Save
 		n_links ++;
 	}
-	for( ele = gpElements; ele; ele = ele->Next )
+	for( ele = gRootUnit.Elements; ele; ele = ele->Next )
 		n_elements ++;
 	for( tElementDef *ed = gpElementDefs; ed; ed = ed->Next )
 		n_eletypes ++;
@@ -64,7 +64,7 @@ void WriteCompiledVersion(const char *Path, int bBinary)
 	}
 	
 	// Element info
-	for( ele = gpElements; ele; ele = ele->Next )
+	for( ele = gRootUnit.Elements; ele; ele = ele->Next )
 	{
 		if( bBinary ) {
 			 int	typeid = 0;
@@ -258,10 +258,10 @@ void ReadCompiledVersion(const char *Path, int bBinary)
 		last_ele = ele;
 	}
 	
-	links[n_links-1].Next = gpLinks;
-	gpLinks = links;
-	last_ele->Next = gpElements;
-	gpElements = first_ele;
+	links[n_links-1].Next = gRootUnit.Links;
+	gRootUnit.Links = links;
+	last_ele->Next = gRootUnit.Elements;
+	gRootUnit.Elements = first_ele;
 	goto _common;
 	
 _err:

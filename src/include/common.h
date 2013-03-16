@@ -9,11 +9,16 @@
 #define _STR(x)	#x
 #define STR(x)	_STR(x)
 
-#define ASSERT(cnd)	do{if(!(cnd)){fprintf(stderr,"ASSERT at "__FILE__":"STR(__LINE__)" ("#cnd" failed\n");exit(-1);}}while(0)
+#define DEBUG_S(fmt, v...)	printf("%s:%i: "fmt"\n", __func__, __LINE__ ,## v); 
 
 typedef struct sList	tList;
 typedef struct sDisplayItem	tDisplayItem;
 typedef struct sBreakpoint	tBreakpoint;
+typedef struct sAssertion	tAssertion;
+typedef struct sExecUnitRef	tExecUnitRef;
+// No tExecUnit here
+typedef struct sGroupDef	tGroupDef;
+typedef struct sUnitTemplate	tUnitTemplate;
 
 struct sList
 {
@@ -36,30 +41,79 @@ struct sDisplayItem
 	char	Label[];	//!< Display label
 };
 
-typedef struct sAssertion
+struct sAssertion
 {
 	struct sAssertion	*Next;
 	tList	Condition;
 	tList	Values;
 	tList	Expected;
-} tAssertion;
+};
+
+struct sExecUnitRef
+{
+	tExecUnitRef	*Next;
+	tList	Inputs;
+	tList	Outputs;
+	char	*Name;
+};
+
+typedef struct sExecUnit
+{
+	const char	*Name;
+	tList	Inputs;
+	tList	Outputs;
+	
+	tGroupDef	*Groups;
+	 int	nLinks;
+	tLink	*Links;
+	 int	nElements;
+	tExecUnitRef	*SubUnits;
+	struct	sElement	*Elements;
+	tDisplayItem	*DisplayItems;
+	tBreakpoint	*Breakpoints;
+	tAssertion	*Assertions;
+} tExecUnit;
 
 typedef struct sTestCase
 {
 	struct sTestCase	*Next;
-	
-	tLink	*Links;
-	struct sGroupDef	*Groups;
-	struct sElement	*Elements;
-	tDisplayItem	*DisplayItems;
 
-	tAssertion	*Assertions;
+	tExecUnit	Internals;
 	
 	tLink	*CompletionCondition;
 	 int	MaxLength;
 	char	Name[];
 } tTestCase;
 
+/**
+ * \brief Line array (group) definition structure
+ */
+struct sGroupDef
+{
+	tGroupDef	*Next;
+	 int	Size;	//!< Size of the group
+	char	Name[];	//!< Name
+};
+
+/**
+ * \brief #defunit structure
+ */
+struct sUnitTemplate
+{
+	tUnitTemplate	*Next;
+	tExecUnit	Internals;	
+	 int	InstanceCount;	//!< Number of times the unit has been used
+	char	Name[];
+};
+
+// Sim Engine
+extern void	Sim_UsageCheck(tExecUnit *Root);
+extern void	Sim_RunStep(tTestCase *Root);
+extern void	Sim_ShowDisplayItems(tDisplayItem *First);
+extern int	Sim_CheckBreakpoints(tExecUnit *Unit);
+extern int	Sim_CheckAssertions(tAssertion *First);
+
+// Everything else
 extern int	Unit_DefineUnit(const char *Name);
 extern int	Unit_AddSingleInput(const char *Name);
 extern int	Unit_AddGroupInput(const char *Name, int Size);
@@ -74,26 +128,26 @@ extern int	Test_AddCompletion(const tList *Condition);
 extern int	Test_CloseTest(void);
 extern int	Test_IsInTest(void);
 
-extern tLink	*gpLinks;
-extern tElement	*gpElements;
+extern tExecUnit	gRootUnit;
+extern tUnitTemplate	*gpUnits;
 extern int	gbDisableTests;
 
 /**
  * \brief Add a display item
  * \return Pointer to the item
  */
-extern tDisplayItem	*AddDisplayItem(const char *Name, const tList *Condition, const tList *Values);
+extern tDisplayItem	*Build_AddDisplayItem(const char *Name, const tList *Condition, const tList *Values);
 
 /**
  * \brief Add a breakpoint
  * \return Pointer to the breakpoint
  */
-extern tBreakpoint	*AddBreakpoint(const char *Name, const tList *Condition);
+extern tBreakpoint	*Build_AddBreakpoint(const char *Name, const tList *Condition);
 
 /**
  * \brief Create a line group
  */
-extern void	CreateGroup(const char *Name, int Size);
+extern void	Build_CreateGroup(const char *Name, int Size);
 
 /**
  * \brief Free an allocated list
@@ -102,30 +156,31 @@ extern void	List_Free(tList *List);
 /**
  * \brief Append one list to another
  */
-extern void AppendList(tList *DestList, tList *SourceList);
+extern void	List_AppendList(tList *DestList, const tList *SourceList);
 /**
  * \brief Append a line to a list
  */
-extern void AppendLine(tList *DestList, const char *Name);
+extern void	List_AppendLine(tList *DestList, const char *Name);
 /**
  * \brief Append a group to a list
  */
-extern int AppendGroup(tList *DestList, const char *Name);
+extern int	List_AppendGroup(tList *DestList, const char *Name);
 /**
  * \brief Append a group item to a list
  */
-extern int AppendGroupItem(tList *DestList, const char *Name, int Index);
+extern int	List_AppendGroupItem(tList *DestList, const char *Name, int Index);
 /**
  * \brief Merges the links from \a Src into \a Dest
  * Replaces the links in \a Dest with \a Src
  */
-extern int	MergeLinks(tList *Dest, tList *Src);
+extern int	List_EquateLinks(tList *Dest, const tList *Src);
 /**
  * \brief Create a gate/unit
  */
-extern tList	*CreateUnit(const char *Name, int NParams, int *Params, tList *Inputs);
+extern tList	*Build_ReferenceUnit(const char *Name, int NParams, const int *Params, const tList *Inputs);
 
 
+extern int	Build_IsConstValue(tLinkValue *Val);
 extern void	LinkValue_Ref(tLinkValue *Value);
 extern void	LinkValue_Deref(tLinkValue *Value);
 

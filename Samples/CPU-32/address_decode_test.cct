@@ -1,4 +1,4 @@
-%macro CPU32_ADDRESS_DECODE_BOILERPLATE	0
+%macro CPU32_ADDRESS_DECODE_BOILERPLATE	4
 #array dest_addr 32
 #array op1 32
 #array op2 32
@@ -7,11 +7,15 @@
 #array _ma 32
 #array _md 32
 #array _pc 32
+$done, $imd, @dest_addr, @op1, @op2, $_re,@_ra,$_me,@_ma = CPU32_ADDRESS_DECODE \
+	(DELAY 1), $rdy_clr, %1, %2, %3, %4,\
+	$_rr, @_rd, $_mr, @_md, @_pc
 %endmacro
 
 ; ---------------------------------------------------------------------
 #testcase 20 "Decode - R-, R10 (no decode r)"
-CPU32_ADDRESS_DECODE_BOILERPLATE
+
+CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0xF0BAFFFF[0:31]
 
 ; Pseudo register file
 ; - R10 = 0x12345678
@@ -19,11 +23,6 @@ CPU32_ADDRESS_DECODE_BOILERPLATE
 $_rr = DELAY $_re
 #testassert $_re @_ra[3:0] 10[3:0]
 #testassert 1	$_me	0
-
-$done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
-	(DELAY 1), 0, 0, 0, 1, 0xF0BAFFFf[0:31], \
-	$_re, @_ra, $_rr, @_rd, \
-	$_me, @_ma, $_mr, @_md, @_pc
 
 ; Final output
 #testassert $done  $imd 0
@@ -36,7 +35,7 @@ $done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
 
 ; ---------------------------------------------------------------------
 #testcase 20 "Decode - R-, R10 (no decode r, switch)"
-CPU32_ADDRESS_DECODE_BOILERPLATE
+CPU32_ADDRESS_DECODE_BOILERPLATE 1, 0, 1, 0xF0BAFFFf[0:31]
 
 ; Pseudo register file
 ; - R10 = 0x12345678
@@ -44,11 +43,6 @@ CPU32_ADDRESS_DECODE_BOILERPLATE
 $_rr = DELAY $_re
 #testassert $_re @_ra[3:0] 10[3:0]
 #testassert 1	$_me	0
-
-$done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
-	(DELAY 1), 0, 1, 0, 1, 0xF0BAFFFf[0:31], \
-	$_re, @_ra, $_rr, @_rd, \
-	$_me, @_ma, $_mr, @_md, @_pc
 
 ; Final output
 #testassert $done  $imd 0
@@ -61,7 +55,7 @@ $done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
 
 ; ---------------------------------------------------------------------
 #testcase 20 "Decode - R10, R11"
-CPU32_ADDRESS_DECODE_BOILERPLATE
+CPU32_ADDRESS_DECODE_BOILERPLATE 0, 1, 1, 0xF0ABAAAA[0:31]
 
 ; Pseudo register file
 ; - R10 = 0x12345678
@@ -76,12 +70,6 @@ $_rr = DELAY{2} $_re
 ; - Assert that memory is never accessed
 #testassert 1	$_me	0
 
-$done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
-	(DELAY 1), 0, 0, 1, 1, 0xF0ABAAAA[0:31], \
-	$_re, @_ra, $_rr, @_rd, \
-	$_me, @_ma, $_mr, @_md, \
-	@_pc
-
 ; Final output
 #testassert $done  $imd 0
 #testassert $done  @dest_addr[31:0] 10[31:0]
@@ -93,7 +81,7 @@ $done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
 
 ; ---------------------------------------------------------------------
 #testcase 20 "Decode - R10, Imm20"
-CPU32_ADDRESS_DECODE_BOILERPLATE
+CPU32_ADDRESS_DECODE_BOILERPLATE 0, 1, 1, 0xF1A12345[0:31]
 
 ; Pseudo register file
 ; - R10 = 0x12345678
@@ -105,11 +93,6 @@ $_rr = DELAY{2} $_re
 ; Simulated memory
 ; - Assert that memory is never accessed
 #testassert 1	$_me	0
-
-$done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
-	(DELAY 1), 0, 0, 1, 1, 0xF1A12345[0:31], \
-	$_re, @_ra, $_rr, @_rd, \
-	$_me, @_ma, $_mr, @_md, @_pc
 
 ; Final output
 #testassert $done  $imd 0
@@ -124,16 +107,11 @@ $done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
 ; Tests Imm16 decode
 ; - Also uses $read_r = 0 to make test simpler
 #testcase 20 "Decode - R-, Imm16 << 5"
-CPU32_ADDRESS_DECODE_BOILERPLATE
+CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0xF2057777[0:31]
 
 ; No register/memory accesses allowed
 #testassert 1	$_re	0
 #testassert 1	$_me	0
-
-$done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
-	(DELAY 1), 0, 0, 0, 1, 0xF2057777[0:31], \
-	$_re, @_ra, $_rr, @_rd, \
-	$_me, @_ma, $_mr, @_md, @_pc
 
 ; Final output
 #testassert $done  $imd 0
@@ -147,16 +125,11 @@ $done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
 ; Tests Imm16s decode
 ; - Also uses $read_r = 0 to make test simpler
 #testcase 20 "Decode - R-, Imm16s << 12"
-CPU32_ADDRESS_DECODE_BOILERPLATE
+CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0xF30C8777[0:31]
 
 ; No register/memory accesses allowed
 #testassert 1	$_re	0
 #testassert 1	$_me	0
-
-$done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
-	(DELAY 1), 0, 0, 0, 1, 0xF30C8777[0:31], \
-	$_re, @_ra, $_rr, @_rd, \
-	$_me, @_ma, $_mr, @_md, @_pc
 
 ; Final output
 #testassert $done  $imd 0
@@ -170,7 +143,7 @@ $done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
 ; Tests [r+imm16] decode
 ; - Also uses $read_r = 0 to make test simpler
 #testcase 50 "Decode - R-, [R15+imm16]"
-CPU32_ADDRESS_DECODE_BOILERPLATE
+CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0xF40F1234[0:31]
 
 ; Registers
 ; - R15 = 0x00FF0000
@@ -185,11 +158,6 @@ $_mr = DELAY $_me
 #display $_me "@_ma" @_ma
 #testassert $_me @_ma[31:0] 0x00FF2234[31:0]
 
-$done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
-	(DELAY 1), 0, 0, 0, 1, 0xF40F1234[0:31], \
-	$_re, @_ra, $_rr, @_rd, \
-	$_me, @_ma, $_mr, @_md, @_pc
-
 ; Final output
 #testassert $done  $imd 0
 #testassert $done  @dest_addr[31:0] 0[31:0]
@@ -202,7 +170,7 @@ $done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
 ; Tests [r + ri<<s +imm8s] decode
 ; - Also uses $read_r = 0 to make test simpler
 #testcase 100 "Decode - R-, [R15 + R14 << 4 + imm8s]"
-CPU32_ADDRESS_DECODE_BOILERPLATE
+CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0xF50FE4FC[0:31]
 
 ; Registers
 ; - R15 = 0x00FF0000
@@ -219,11 +187,6 @@ $_mr = DELAY $_me
 #display $_me "@_ma" @_ma
 #testassert $_me @_ma[31:0] 0x00FF14FC[31:0]
 
-$done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
-	(DELAY 1), 0, 0, 0, 1, 0xF50FE4FC[0:31], \
-	$_re, @_ra, $_rr, @_rd, \
-	$_me, @_ma, $_mr, @_md, @_pc
-
 ; Final output
 #testassert $done  $imd 0
 #testassert $done  @dest_addr[31:0] 0[31:0]
@@ -235,7 +198,7 @@ $done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
 ; ---------------------------------------------------------------------
 ; Tests [r+imm16] destination decode
 #testcase 60 "Decode - R15, [R15+imm16] (switch)"
-CPU32_ADDRESS_DECODE_BOILERPLATE
+CPU32_ADDRESS_DECODE_BOILERPLATE 1, 1, 1, 0xF4FF1234[0:31]
 
 ; Registers
 ; - R15 = 0x00FF0000
@@ -249,11 +212,6 @@ $_mr = DELAY $_me
 @_md[31:0] = AND{32} $_me, 0xF0E1D2C3[31:0]
 #display $_me "@_ma" @_ma
 #testassert $_me @_ma[31:0] 0x00FF2234[31:0]
-
-$done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
-	(DELAY 1), 0, 1, 1, 1, 0xF4FF1234[0:31], \
-	$_re, @_ra, $_rr, @_rd, \
-	$_me, @_ma, $_mr, @_md, @_pc
 
 ; Final output
 $hold = HOLD{10} $done
@@ -270,7 +228,7 @@ $comp = DELAY{10} $done
 ; ---------------------------------------------------------------------
 ; Tests [PC+imm16]
 #testcase 60 "Decode - R15, [PC+imm16]"
-CPU32_ADDRESS_DECODE_BOILERPLATE
+CPU32_ADDRESS_DECODE_BOILERPLATE 1, 1, 1, 0xF6F01234[0:31]
 
 ; Registers
 ; - R15 = 0x00FF0000
@@ -278,7 +236,7 @@ $_rr = DELAY $_re
 @_rd[31:0] = AND{32} $_re, @_ra, 0xFF1000[31:0]
 #testassert $_re @_ra[3:0] 15[3:0]
 
-@_pc[31:0] = 0xF000[31:0]
+@_pc[31:0] = DELAY{32} 0xF000[31:0]
 
 ; Memory
 ; - Must be 0x10234 (0xF000 + 0x1234)
@@ -286,11 +244,6 @@ $_mr = DELAY $_me
 @_md[31:0] = AND{32} $_me, 0xF0E1D2C3[31:0]
 #display $_me "@_ma" @_ma
 #testassert $_me @_ma[31:0] 0x00010234[31:0]
-
-$done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
-	(DELAY 1), 0, 1, 1, 1, 0xF6F01234[0:31], \
-	$_re, @_ra, $_rr, @_rd, \
-	$_me, @_ma, $_mr, @_md, @_pc
 
 ; Final output
 $hold = HOLD{10} $done
@@ -307,7 +260,7 @@ $comp = DELAY{10} $done
 ; ---------------------------------------------------------------------
 ; Tests [PC + ri<<s +imm8s]
 #testcase 100 "Decode - R15, [PC + R14 << 4 + imm8s] (switch)"
-CPU32_ADDRESS_DECODE_BOILERPLATE
+CPU32_ADDRESS_DECODE_BOILERPLATE 1, 1, 1, 0xF7FFE4FC[0:31]
 
 ; Registers
 ; - R15 = 0x00FF0000
@@ -325,12 +278,6 @@ $_mr = DELAY $_me
 
 @_pc[31:0] = DELAY 0xFF2000[31:0]
 
-$done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
-	(DELAY 1), 0, 1, 1, 1, 0xF7FFE4FC[0:31], \
-	$_re, @_ra, $_rr, @_rd, \
-	$_me, @_ma, $_mr, @_md, \
-	@_pc
-
 ; Final output
 $hold = HOLD{10} $done
 $comp = DELAY{10} $done
@@ -346,7 +293,7 @@ $comp = DELAY{10} $done
 ; ---------------------------------------------------------------------
 ; Tests decoder reset (trivial)
 #testcase 50 "Decode - R11, R10; reset"
-CPU32_ADDRESS_DECODE_BOILERPLATE
+CPU32_ADDRESS_DECODE_BOILERPLATE 0, 1, 1, 0xF0BAFFFF[0:31]
 
 #array state	5
 $next = PULSE $done
@@ -356,7 +303,7 @@ $enable = DELAY @state[0]
 // $next set by completion
 
 // Clear and wait for it to happen
-$clear = PULSE @state[1]
+$rdy_clr = PULSE @state[1]
 $next = DELAY{10} (PULSE @state[1])
 
 // Ensure clear worked
@@ -378,12 +325,6 @@ $_rr = DELAY $_re
 #testassert @state[4]	@dest_addr[31:0] 11[31:0]
 #testassert @state[4]	@op1[31:0] 0[31:0]
 #testassert @state[4]	@op2[31:0] 0[31:0]
-
-$done, $imd, @dest_addr, @op1, @op2 = CPU32_ADDRESS_DECODE \
-	$enable, $clear, 0, 1, 1, 0xF0BAFFFF[0:31], \
-	$_re, @_ra, $_rr, @_rd, \
-	$_me, @_ma, $_mr, @_md, \
-	@_pc
 
 #testcomplete @state[4]
 

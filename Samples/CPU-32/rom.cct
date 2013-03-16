@@ -1,11 +1,14 @@
 
 #defunit CPU32ROM_LL
-#input $enable, @addr[12], $write, @write_mask[32], @data_in[32]
+#input $enable, @addr[12]
+;, $write, @write_mask[32], @data_in[32]
 #output $ready, @data_out[32]
 
 // Size: 128 bytes (32 words)
 #array ROM_select	32
-@ROM_select = DEMUX{5} $enable, @addr[0:4]
+$_en = AND (DELAY $enable), (NOR @addr[5:11])
+@ROM_select = DEMUX{5} $_en, @addr[0:4]
+$ready = DELAY{2} $_en
 
 // - Address is in 32-bit words
 @data_out[0:31] = AND{32} @ROM_select[0x0000], 0x11131337[0:31]	; OR R1, 0x31337
@@ -40,8 +43,6 @@
 @data_out[0:31] = AND{32} @ROM_select[0x001d], 0x00000000[0:31]	; NOP
 @data_out[0:31] = AND{32} @ROM_select[0x001e], 0x00000000[0:31]	; NOP
 @data_out[0:31] = AND{32} @ROM_select[0x001f], 0x00000000[0:31]	; NOP
-
-$ready = DELAY{2} $enable
 
 #endunit
 

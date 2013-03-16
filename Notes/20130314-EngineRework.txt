@@ -7,3 +7,8 @@ Create full mesh just before execution
 
 Simulation pass iterates through all instances in the simulation two/three times
 - First to prepare values
+
+## CreateMesh - Takes root definition and returns a flattened definition?
+- Give links a reference to original definition?
+- Name/instance number?
+

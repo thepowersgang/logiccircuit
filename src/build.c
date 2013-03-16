@@ -7,56 +7,32 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <assert.h>
 
 #define	USE_LINKS	1
 
-/**
- * \brief Line array (group) definition structure
- */
-typedef struct sGroupDef
-{
-	struct sGroupDef	*Next;
-	 int	Size;	//!< Size of the group
-	char	Name[];	//!< Name
-} tGroupDef;
+// === PROTOTYPES ===
+void	Link_Ref(tLink *Link);
 
-/**
- * \brief #defunit structure
- */
-typedef struct sUnitTemplate
-{
-	struct sUnitTemplate	*Next;
-	
-	tLink	*Links;
-	tGroupDef	*Groups;
-	tElement	*Elements;
-	tList	Inputs;	//!< Input links
-	tList	Outputs;	//!< Output links
-	tDisplayItem	*DisplayItems;
-	tBreakpoint	*Breakpoints;
-	
-	 int	InstanceCount;	//!< Number of times the unit has been used
-	
-	char	Name[];
-}	tUnitTemplate;
-
-tLinkValue	gValue_Zero;
-tLinkValue	gValue_One;
 
 // === GLOBALS ===
-tLink	*gpLinks = NULL;
-tGroupDef	*gpGroups = NULL;
-tElement	*gpElements;
-tElement	*gpLastElement = (tElement*)&gpElements;
+tLinkValue	gValue_Zero;
+tLinkValue	gValue_One;
 tElementDef	*gpElementDefs;
+// - Mesh State
+tExecUnit	gRootUnit;
 tUnitTemplate	*gpUnits;
 tTestCase	*gpTests;
-tBreakpoint	*gpBreakpoints;
-tDisplayItem	*gpDisplayItems;
+// - Parser State
 tUnitTemplate	*gpCurUnit;
 tTestCase	*gpCurTest;
 
 // === CODE ===
+int Build_IsConstValue(tLinkValue *Val)
+{
+	return (Val == &gValue_Zero || Val == &gValue_One);
+}
+
 /**
  * \brief Define a unit (#defunit)
  */
@@ -79,6 +55,7 @@ int Unit_DefineUnit(const char *Name)
 	// Create new one
 	tpl = calloc( 1, sizeof(tUnitTemplate) + strlen(Name) + 1 );
 	strcpy(tpl->Name, Name);
+	tpl->Internals.Name = tpl->Name;
 	
 	// Add to list
 	if(prev) {
@@ -98,119 +75,36 @@ int Unit_DefineUnit(const char *Name)
 int Unit_AddSingleInput(const char *Name)
 {
 	if(!gpCurUnit)	return -1;
-	AppendLine( &gpCurUnit->Inputs, Name );
+	List_AppendLine( &gpCurUnit->Internals.Inputs, Name );
 	return 0;
 }
 
 int Unit_AddGroupInput(const char *Name, int Size)
 {
 	if(!gpCurUnit)	return -1;
-	CreateGroup( Name+1, Size );
-	AppendGroup( &gpCurUnit->Inputs, Name );
+	Build_CreateGroup( Name+1, Size );
+	List_AppendGroup( &gpCurUnit->Internals.Inputs, Name );
 	return 0;
 }
 
 int Unit_AddSingleOutput(const char *Name)
 {
 	if(!gpCurUnit)	return -1;
-	AppendLine( &gpCurUnit->Outputs, Name );
+	List_AppendLine( &gpCurUnit->Internals.Outputs, Name );
 	return 0;
 }
 
 int Unit_AddGroupOutput(const char *Name, int Size)
 {
 	if(!gpCurUnit)	return -1;
-	CreateGroup( Name+1, Size );
-	AppendGroup( &gpCurUnit->Outputs, Name );
+	Build_CreateGroup( Name+1, Size );
+	List_AppendGroup( &gpCurUnit->Internals.Outputs, Name );
 	return 0;
 }
 
 int Unit_CloseUnit(void)
 {
 	if(!gpCurUnit)	return -1;
-
-	// Reduce all links to at most 1 level deep
-	for(tLink *link = gpCurUnit->Links; link; link = link->Next)
-	{
-		while(link->Link && link->Link->Link)
-			link->Link = link->Link->Link;
-		if(link->Link)
-		{
-			// Join values
-			LinkValue_Ref(link->Link->Value);
-			LinkValue_Deref(link->Value);
-			link->Value = link->Link->Value;
-		}
-		
-		link->Backlink = NULL;
-	}
-
-	void _merge(tLink **Links, int Count)
-	{
-		for( int i = 0; i < Count; i ++ )
-		{
-			if(Links[i]->Link)
-				Links[i] = Links[i]->Link;
-			Links[i]->Backlink = (void*)1;
-		}
-	}
-
-	// Reduce to a single layer
-	for(tElement *ele = gpCurUnit->Elements; ele; ele = ele->Next)
-	{
-		_merge(ele->Inputs,  ele->NInputs);
-		_merge(ele->Outputs, ele->NOutputs);
-	}
-	for( tDisplayItem *disp = gpCurUnit->DisplayItems; disp; disp = disp->Next )
-	{
-		_merge(disp->Condition.Items, disp->Condition.NItems);
-		_merge(disp->Values.Items, disp->Values.NItems);
-	}
-	for( tBreakpoint *bp = gpCurUnit->Breakpoints; bp; bp = bp->Next )
-	{
-		_merge(bp->Condition.Items, bp->Condition.NItems);
-	}
-	_merge(gpCurUnit->Inputs.Items, gpCurUnit->Inputs.NItems);
-	_merge(gpCurUnit->Outputs.Items, gpCurUnit->Outputs.NItems);
-
-	// Remove any unused links
-	 int	nTrimmed = 0;
-	for(tLink *link = gpCurUnit->Links, *prev = (void*)&gpCurUnit->Links; link; )
-	{
-		if( link->Backlink )
-		{
-			link->Backlink = NULL;
-			prev = link;
-			link = link->Next;
-			continue ;
-		}
-		
-		prev->Next = link->Next;
-		free(link);
-		link = prev->Next;
-		nTrimmed ++;
-	}
-//	printf("Trimmed %i links in close of '%s'\n", nTrimmed, gpCurUnit->Name);
-
-	#if 0
-	for( tElement *ele = gpCurUnit->Elements; ele; ele = ele->Next )
-	{
-		for( int i = 0; i < ele->NOutputs; i ++ ) {
-			if( ele->Outputs[i]->Name[0] )
-				printf(" %s", ele->Outputs[i]->Name);
-			else
-				printf(" %p", ele->Outputs[i]->Value);
-		}
-		printf(" = %s", ele->Type->Name);
-		for( int i = 0; i < ele->NInputs; i ++ ) {
-			if( ele->Inputs[i]->Name[0] )
-				printf(" %s", ele->Inputs[i]->Name);
-			else
-				printf(" %p", ele->Inputs[i]->Value);
-		}
-		printf("\n");
-	}
-	#endif
 
 	gpCurUnit = NULL;
 	return 0;
@@ -260,20 +154,23 @@ int Test_AddAssertion(const tList *Condition, const tList *Values, const tList *
 	a->Expected.NItems = Values->NItems;
 	a->Values.NItems = Expected->NItems;
 	a->Condition.Items = (void*)(a + 1);
-	memcpy(a->Condition.Items, Condition->Items, Condition->NItems*sizeof(tLink*));
 	a->Expected.Items = a->Condition.Items + Condition->NItems;
-	memcpy(a->Expected.Items, Expected->Items, Expected->NItems*sizeof(tLink*));
 	a->Values.Items = a->Expected.Items + Expected->NItems;
+	for(int i = 0; i < Condition->NItems; i ++ )	Link_Ref(Condition->Items[i]);
+	for(int i = 0; i < Expected->NItems; i ++ )	Link_Ref(Expected->Items[i]);
+	for(int i = 0; i < Values->NItems; i ++ )	Link_Ref(Values->Items[i]);
+	memcpy(a->Condition.Items, Condition->Items, Condition->NItems*sizeof(tLink*));
+	memcpy(a->Expected.Items, Expected->Items, Expected->NItems*sizeof(tLink*));
 	memcpy(a->Values.Items, Values->Items, Values->NItems*sizeof(tLink*));
 
 	// Append on to the end of the assertion list
 	tAssertion *p;
-	for( p = gpCurTest->Assertions; p && p->Next; p = p->Next )
+	for( p = gpCurTest->Internals.Assertions; p && p->Next; p = p->Next )
 		;
 	if(p)
 		p->Next = a;
 	else
-		gpCurTest->Assertions = a;
+		gpCurTest->Internals.Assertions = a;
 	a->Next = NULL;
 
 	return 0;
@@ -289,6 +186,7 @@ int Test_AddCompletion(const tList *Condition)
 	if( gpCurTest->CompletionCondition )
 		return -1;
 	
+	// TODO: Reference link
 	gpCurTest->CompletionCondition = Condition->Items[0];
 	return 0;
 }
@@ -296,74 +194,6 @@ int Test_AddCompletion(const tList *Condition)
 int Test_CloseTest(void)
 {
 	if(!gpCurTest)	return -1;
-
-	// Reduce all links to at most 1 level deep
-	for(tLink *link = gpCurTest->Links; link; link = link->Next)
-	{
-		while(link->Link && link->Link->Link)
-			link->Link = link->Link->Link;
-		if(link->Link)
-		{
-			// Join values
-			LinkValue_Ref(link->Link->Value);
-			LinkValue_Deref(link->Value);
-			link->Value = link->Link->Value;
-		}
-		
-		link->Backlink = NULL;
-	}
-
-	void _merge(tLink **Links, int Count)
-	{
-		for( int i = 0; i < Count; i ++ )
-		{
-			if(Links[i]->Link)
-				Links[i] = Links[i]->Link;
-			Links[i]->Backlink = (void*)1;
-		}
-	}
-
-	// Reduce to a single layer
-	for(tElement *ele = gpCurTest->Elements; ele; ele = ele->Next)
-	{
-		_merge(ele->Inputs,  ele->NInputs);
-		_merge(ele->Outputs, ele->NOutputs);
-	}
-	for( tDisplayItem *disp = gpCurTest->DisplayItems; disp; disp = disp->Next )
-	{
-		_merge(disp->Condition.Items, disp->Condition.NItems);
-		_merge(disp->Values.Items, disp->Values.NItems);
-	}
-	for( tAssertion *a = gpCurTest->Assertions; a; a = a->Next )
-	{
-		_merge(a->Condition.Items, a->Condition.NItems);
-		_merge(a->Values.Items, a->Values.NItems);
-		_merge(a->Expected.Items, a->Expected.NItems);
-	}
-	if( gpCurTest->CompletionCondition )
-		_merge(&gpCurTest->CompletionCondition, 1);
-
-	// Remove any unused links
-	 int	nTrimmed = 0;
-	for(tLink *link = gpCurTest->Links, *prev = (void*)&gpCurTest->Links; link; )
-	{
-		if( link->Backlink )
-		{
-//			if( link->ReferenceCount == 1 && link->Name[0] != '\0' ) {
-//				printf("Link '%s' may be a typo\n", link->Name);
-//			}
-			link->Backlink = NULL;
-			prev = link;
-			link = link->Next;
-			continue ;
-		}
-		
-		prev->Next = link->Next;
-		free(link);
-		link = prev->Next;
-		nTrimmed ++;
-	}
-//	printf("Trimmed %i links in close of test '%s'\n", nTrimmed, gpCurTest->Name);
 
 	gpCurTest = NULL;
 	return 0;
@@ -376,21 +206,24 @@ int Test_IsInTest(void)
 
 // --------------------------------------------------------------------
 
-tBreakpoint *AddBreakpoint(const char *Name, const tList *Condition)
+tExecUnit *Build_int_GetCurExecUnit(void)
+{
+	if( gpCurUnit )
+		return &gpCurUnit->Internals;
+	else if( gpCurTest )
+		return &gpCurTest->Internals;
+	else
+		return &gRootUnit;
+}
+
+tBreakpoint *Build_AddBreakpoint(const char *Name, const tList *Condition)
 {
 	tBreakpoint	*bp, *prev = NULL;
 	 int	pos, i;
 	tBreakpoint	**listHead;
 	
 	
-	if( gpCurUnit )
-		listHead = &gpCurUnit->Breakpoints;
-	else if( gpCurTest ) {
-		// TODO: Breakpoints in tests?
-		return NULL;
-	}
-	else
-		listHead = &gpBreakpoints;
+	listHead = &Build_int_GetCurExecUnit()->Breakpoints;
 	
 	for( bp = *listHead; bp; prev = bp, bp = bp->Next )
 	{
@@ -405,7 +238,7 @@ tBreakpoint *AddBreakpoint(const char *Name, const tList *Condition)
 	bp->Condition.NItems = Condition->NItems;
 	bp->Condition.Items = (void*)&bp->Label[pos];
 	for( i = 0; i < Condition->NItems; i ++ )
-		bp->Condition.Items[i] = Condition->Items[i];
+		Link_Ref(bp->Condition.Items[i] = Condition->Items[i]);
 	
 	strcpy(bp->Label, Name);
 	
@@ -421,19 +254,13 @@ tBreakpoint *AddBreakpoint(const char *Name, const tList *Condition)
 	return bp;
 }
 
-tDisplayItem *AddDisplayItem(const char *Name, const tList *Condition, const tList *Values)
+tDisplayItem *Build_AddDisplayItem(const char *Name, const tList *Condition, const tList *Values)
 {
 	tDisplayItem	*dispItem, *prev = NULL;
-	 int	namelen, i;
+	 int	namelen;
 	tDisplayItem	**listHead;
 	
-	
-	if( gpCurUnit )
-		listHead = &gpCurUnit->DisplayItems;
-	else if( gpCurTest )
-		listHead = &gpCurTest->DisplayItems;
-	else
-		listHead = &gpDisplayItems;
+	listHead = &Build_int_GetCurExecUnit()->DisplayItems;
 	
 	for( dispItem = *listHead; dispItem; prev = dispItem, dispItem = dispItem->Next )
 	{
@@ -449,10 +276,14 @@ tDisplayItem *AddDisplayItem(const char *Name, const tList *Condition, const tLi
 	dispItem->Condition.Items = (void*)&dispItem->Label[namelen];
 	dispItem->Values.NItems = Values->NItems;
 	dispItem->Values.Items = dispItem->Condition.Items + Condition->NItems;
-	for( i = 0; i < Condition->NItems; i ++ )
+	for( int i = 0; i < Condition->NItems; i ++ ) {
+		Link_Ref(Condition->Items[i]);
 		dispItem->Condition.Items[i] = Condition->Items[i];
-	for( i = 0; i < Values->NItems; i ++ )
+	}
+	for( int i = 0; i < Values->NItems; i++ ) {
+		Link_Ref(Values->Items[i]);
 		dispItem->Values.Items[i] = Values->Items[i];
+	}
 	
 	strcpy(dispItem->Label, Name);
 	
@@ -471,7 +302,7 @@ tDisplayItem *AddDisplayItem(const char *Name, const tList *Condition, const tLi
 /**
  * \brief Create a new group
  */
-void CreateGroup(const char *Name, int Size)
+void Build_CreateGroup(const char *Name, int Size)
 {
 	tGroupDef	**listhead;
 	tGroupDef	*ret, *def, *prev = NULL;
@@ -481,12 +312,7 @@ void CreateGroup(const char *Name, int Size)
 	ret->Name[0] = '@';
 	strcpy(&ret->Name[1], Name);
 	
-	if( gpCurUnit )
-		listhead = &gpCurUnit->Groups;
-	else if( gpCurTest )
-		listhead = &gpCurTest->Groups;
-	else
-		listhead = &gpGroups;
+	listhead = &Build_int_GetCurExecUnit()->Groups;
 	
 	//printf("ret->Name = '%s', def = %p\n", ret->Name, def);
 	for( def = *listhead; def; prev = def, def = def->Next )
@@ -513,8 +339,6 @@ void CreateGroup(const char *Name, int Size)
 		ret->Next = *listhead;
 		*listhead = ret;
 	}
-	
-//	printf("'%s' added to %s\n", ret->Name, (gpCurUnit?gpCurUnit->Name:"."));
 }
 
 /**
@@ -524,12 +348,7 @@ tGroupDef *GetGroup(const char *Name)
 {
 	tGroupDef	*def;
 	
-	if( gpCurUnit )
-		def = gpCurUnit->Groups;
-	else if( gpCurTest )
-		def = gpCurTest->Groups;
-	else
-		def = gpGroups;
+	def = Build_int_GetCurExecUnit()->Groups;
 	
 	for( ; def; def = def->Next )
 	{
@@ -546,10 +365,8 @@ tGroupDef *GetGroup(const char *Name)
 tLinkValue *LinkValue_Create(void)
 {
 	tLinkValue	*ret;
-	ret = malloc(sizeof(tLinkValue));
-	//if(!ret)	return NULL;
-	ret->NDrivers = 0;
-	ret->Value = 0;
+	ret = calloc(sizeof(tLinkValue),1);
+	assert(ret);
 	ret->ReferenceCount = 1;
 	return ret;
 }
@@ -563,9 +380,24 @@ void LinkValue_Deref(tLinkValue *Value)
 {
 	Value->ReferenceCount --;
 	if( !Value->ReferenceCount ) {
-		if( Value != &gValue_Zero && Value != &gValue_One )
+		if( !Build_IsConstValue(Value) )
 			free(Value);
 	}
+}
+
+void Link_Ref(tLink *Link)
+{
+	Link->ReferenceCount ++;
+}
+
+void Link_Deref(tLink *Link)
+{
+	assert(Link->ReferenceCount);
+	Link->ReferenceCount --;
+	//if( Link->ReferenceCount == 0 )
+	//{
+	//	free(Link);
+	//}
 }
 
 /**
@@ -574,19 +406,13 @@ void LinkValue_Deref(tLinkValue *Value)
 tLink *CreateAnonLink(void)
 {
 	tLink	**first;
-	tLink	*ret = malloc(sizeof(tLink)+1);
+	tLink	*ret = calloc(sizeof(tLink)+1, 1);
 	ret->Name[0] = '\0';
 	ret->Value = LinkValue_Create();
-	ret->Link = NULL;
+	ret->Value->FirstLink = ret;
 	ret->ReferenceCount = 1;
-	ret->Backlink = NULL;
 
-	if( gpCurUnit )
-		first = &gpCurUnit->Links;
-	else if( gpCurTest )
-		first = &gpCurTest->Links;
-	else
-		first = &gpLinks;
+	first = &Build_int_GetCurExecUnit()->Links;
 	ret->Next = *first;
 	*first = ret;
 	
@@ -599,20 +425,15 @@ tLink *CreateAnonLink(void)
 tLink *CreateNamedLink(const char *Name)
 {
 	tLink	**first;
-	tLink	*ret, *def, *prev = NULL;
+	tLink	*ret, *prev = NULL;
 
-	if( gpCurUnit )
-		first = &gpCurUnit->Links;
-	else if( gpCurTest )
-		first = &gpCurTest->Links;
-	else
-		first = &gpLinks;
+	first = &Build_int_GetCurExecUnit()->Links;
 	
-	for(def = *first; def; prev = def, def = def->Next )
+	for(ret = *first; ret; prev = ret, ret = ret->Next )
 	{
-		if(strcmp(Name, def->Name) == 0)	return def;
+		if(strcmp(Name, ret->Name) == 0)	return ret;
 		#if SORTED_LINK_LIST
-		if(strcmp(Name, def->Name) < 0)	break;
+		if(strcmp(Name, ret->Name) < 0)	break;
 		#endif
 	}
 	
@@ -634,6 +455,9 @@ tLink *CreateNamedLink(const char *Name)
 	else
 		ret->Value = LinkValue_Create();
 	
+	ret->ValueNext = ret->Value->FirstLink;
+	ret->Value->FirstLink = ret;
+	
 	
 	if(prev) {
 		ret->Next = prev->Next;
@@ -650,285 +474,61 @@ tLink *CreateNamedLink(const char *Name)
 /**
  * \brief Append a #defunit unit to the state
  */
-tList *AppendUnit(tUnitTemplate *Unit, tList *Inputs)
+tList *Build_AppendUnit(tUnitTemplate *Unit, const tList *Inputs)
 {
-	tElement	**listhead;
-	tLink	**linkhead;
-	
-	tLink	*link, *newLink;
-	tDisplayItem	*dispItem;
-	tBreakpoint	*bp;
-	tList	*ret;
-	 int	i;
-
-//	printf("Importing %s\n", Unit->Name);
-	
 	// Check input counts
-	if( Inputs->NItems != Unit->Inputs.NItems ) {
+	if( Inputs->NItems != Unit->Internals.Inputs.NItems ) {
 		// TODO: Error message?
 		fprintf(stderr, "ERROR: %s takes %i lines, %i given\n",
-			Unit->Name, Unit->Inputs.NItems, Inputs->NItems);
+			Unit->Name, Unit->Internals.Inputs.NItems, Inputs->NItems);
 		return NULL;
 	}
-	
-	if( gpCurUnit ) {
-		listhead = &gpCurUnit->Elements;
-		linkhead = &gpCurUnit->Links;
+
+	// - Allocate reference
+	size_t	extrasize = (Unit->Internals.Outputs.NItems + Inputs->NItems)*sizeof(tLink*)
+		+ strlen(Unit->Name) + 1;
+	tExecUnitRef	*ref;
+	ref = malloc(sizeof(tExecUnitRef) + extrasize);
+	assert(ref);
+	// - Base values
+	ref->Inputs.NItems = Inputs->NItems;
+	ref->Outputs.NItems = Unit->Internals.Outputs.NItems;
+	// - Set up pointers
+	ref->Inputs.Items = (void*)(ref + 1);
+	ref->Outputs.Items = (void*)(ref->Inputs.Items + Inputs->NItems);
+	ref->Name = (void*)(ref->Outputs.Items + Unit->Internals.Outputs.NItems);
+	// - Initialise lists
+	for( int i = 0; i < Inputs->NItems; i ++ )
+	{
+		Link_Ref(Inputs->Items[i]);
+		ref->Inputs.Items[i] = Inputs->Items[i];
 	}
-	else if( gpCurTest ) {
-		listhead = &gpCurTest->Elements;
-		linkhead = &gpCurTest->Links;
-	}
-	else {
-		listhead = &gpElements;
-		linkhead = &gpLinks;
+	for( int i = 0; i < ref->Outputs.NItems; i ++ )
+	{
+		ref->Outputs.Items[i] = CreateAnonLink();
 	}
 
-	// Create the prefix to add to the name
-	 int	prefixLen = snprintf(NULL, 0, "%s#%i", Unit->Name, Unit->InstanceCount);
-	char	namePrefix[prefixLen+1];
-	snprintf(namePrefix, prefixLen+1, "%s#%i", Unit->Name, Unit->InstanceCount);
-	Unit->InstanceCount ++;
-	
-	// Create duplicates of all links (renamed)
-	for( link = Unit->Links; link; link = link->Next )
-	{
-		 int	len = 0;
-		 int	bPrefix = 1;
-		
-		// Only append prefix to named links
-		if( link->Name[0] == '\0' )	bPrefix = 0;
-		if( link->Name[0] == '0' && link->Name[1] == '\0' )	bPrefix = 0;
-		if( link->Name[0] == '1' && link->Name[1] == '\0' )	bPrefix = 0;
-		
-		len = strlen(link->Name);
-		if( bPrefix )	len += prefixLen;
-		
-		// Create link
-		newLink = malloc( sizeof(tLink) + len + 1 );
-		newLink->ReferenceCount = 2;
-		newLink->Name[0] = '\0';
-		// Only append prefix to named links
-		if( bPrefix ) {
-			strcpy(newLink->Name, namePrefix);
-		}
-		strcat(newLink->Name, link->Name);
-		newLink->Link = NULL;
-		newLink->Backlink = NULL;
-		if( link->Value == &gValue_Zero || link->Value == &gValue_One )
-			newLink->Value = link->Value;
-		else
-			newLink->Value = LinkValue_Create();
-		
-		link->Backlink = newLink;	// Set a back link to speed up remapping inputs
-		
-		// Append to the current list
-		#if SORTED_LINK_LIST
-		tLink	*prev = NULL;
-		for( tLink *def = *linkhead; def; prev = def, def = def->Next )
-		{
-			if(strcmp(newLink->Name, def->Name) < 0)
-				break;
-		}
-		if(prev) {
-			newLink->Next = prev->Next;
-			prev->Next = newLink;
-		}
-		else {
-			newLink->Next = *linkhead;
-			*linkhead = newLink;
-		}
-		#else
-		newLink->Next = *linkhead;
-		*linkhead = newLink;
-		#endif
-		
-//		if( bPrefix ) {
-//			printf("Duplicated %p %s as %p %s\n", link, link->Name, newLink, newLink->Name);
-//		}
-	}
-	
-	// Re-resolve links
-	for( link = Unit->Links; link; link = link->Next )
-	{
-		if( link->Link ) {
-			tLink	*newlink = link->Backlink;
-			tLink	*target = link->Link->Backlink;
-			// Set new links's ->Link field
-			newlink->Link = target;
-			// And merge the two values
-			LinkValue_Ref(target->Value);
-			LinkValue_Deref(newlink->Value);
-			newlink->Value = target->Value;
-		}
-	}
-	
-	// Replace input lines
-	for( i = 0; i < Unit->Inputs.NItems; i ++ )
-	{
-		link = Unit->Inputs.Items[i]->Backlink;
-		#if USE_LINKS
-		if( link->Link )
-			link->Link->Link = Inputs->Items[i];
-		link->Link = Inputs->Items[i];
-		#endif
-		
-		// Link values
-		LinkValue_Ref( Inputs->Items[i]->Value );
-		LinkValue_Deref( link->Value );
-		link->Value = Inputs->Items[i]->Value;
-		Inputs->Items[i]->ReferenceCount ++;
-	}
-	
-	// Append display items
-	for( dispItem = Unit->DisplayItems; dispItem; dispItem = dispItem->Next )
-	{
-		tDisplayItem	*newItem;
-		char	newName[ prefixLen + strlen(dispItem->Label) + 1 ];
-		
-		strcpy(newName, namePrefix);
-		strcat(newName, dispItem->Label);
+	// Append to list
+	tExecUnitRef	**imphead = &Build_int_GetCurExecUnit()->SubUnits;
+	ref->Next = *imphead;
+	*imphead = ref;
 
-		newItem = AddDisplayItem(newName, &dispItem->Condition, &dispItem->Values);
-		if( !newItem ) {
-			fprintf(stderr, "Warning: AddDisplayItem('%s', %p, %p) failed\n",
-				newName, &dispItem->Condition, &dispItem->Values);
-			continue ;
-		}
-		// Resolve backlinks
-		for( i = 0; i < newItem->Condition.NItems; i ++ )
-			newItem->Condition.Items[i] = newItem->Condition.Items[i]->Backlink;
-		
-		for( i = 0; i < newItem->Values.NItems; i ++ )
-			newItem->Values.Items[i] = newItem->Values.Items[i]->Backlink;
-	}
-	
-	// Append display items
-	for( bp = Unit->Breakpoints; bp; bp = bp->Next )
-	{
-		tBreakpoint	*newBP;
-		
-		newBP = AddBreakpoint(bp->Label, &bp->Condition);
-		if( !newBP )	continue;
-		
-		// Resolve backlinks
-		for( i = 0; i < newBP->Condition.NItems; i ++ )
-			newBP->Condition.Items[i] = newBP->Condition.Items[i]->Backlink;
-	}
-	
-	// Duplicate elements and replace links
-	for( tElement *ele = Unit->Elements; ele; ele = ele->Next )
-	{
-		tElement	*newele;		
-
-		newele = ele->Type->Duplicate( ele );
-		if(!newele) {
-			fprintf(stderr, "Error in creating copy of %s", ele->Type->Name);
-			return NULL;
-		}
-
-		if( newele->Inputs == ele->Inputs ) {
-			fprintf(stderr, "BUG: Element %s didn't update input list pointer\n",
-				ele->Type->Name);
-			exit(-1);
-		}
-		if( newele->Outputs == ele->Outputs ) {
-			fprintf(stderr, "BUG: Element %s didn't update output list pointer\n",
-				ele->Type->Name);
-			exit(-1);
-		}
-
-//		if(ele->NInputs > 2) {
-//			printf("Duplicated '%s' %p -> %p\n", ele->Type->Name, ele, newele);
-//		}
-
-		for( i = 0; i < ele->NInputs; i ++ ) {
-			if( ele->Inputs[i]->Backlink ) {
-//				if( ele->NInputs > 2 )
-//					printf("IN  %p %s -> %p %s\n",
-//						ele->Inputs[i], ele->Inputs[i]->Name,
-//						ele->Inputs[i]->Backlink, ele->Inputs[i]->Backlink->Name
-//						);
-				newele->Inputs[i] = ele->Inputs[i]->Backlink;
-			}
-			else {
-				printf("No backlink on %s input %i %p (%s)\n",
-					ele->Type->Name, i, ele->Inputs[i], ele->Inputs[i]->Name);
-				newele->Inputs[i] = ele->Inputs[i];
-			}
-		}
-		for( i = 0; i < ele->NOutputs; i ++ ) {
-			if( ele->Outputs[i]->Backlink ) {
-//				if( ele->NInputs > 2)
-//					printf("OUT %p %s -> %p %s\n",
-//						ele->Outputs[i], ele->Outputs[i]->Name,
-//						ele->Outputs[i]->Backlink, ele->Outputs[i]->Backlink->Name
-//						);
-				newele->Outputs[i] = ele->Outputs[i]->Backlink;
-			}
-			else {
-				printf("No backlink on %s output %i %p (%s)\n",
-					ele->Type->Name, i, ele->Outputs[i], ele->Outputs[i]->Name);
-				newele->Outputs[i] = ele->Outputs[i];
-			}
-		}
-		
-		newele->Next = *listhead;
-		*listhead = newele;
-	}
-	
 	// Create output return
-	ret = malloc( sizeof(tList) + Unit->Outputs.NItems * sizeof(tLink*) );
-	ret->NItems = Unit->Outputs.NItems;
+	tList *ret = malloc( sizeof(tList) + ref->Outputs.NItems * sizeof(tLink*) );
+	ret->NItems = ref->Outputs.NItems;
 	ret->Items = (void *)( ret + 1 );
-	for( i = 0; i < Unit->Outputs.NItems; i ++ )
-		ret->Items[i] = Unit->Outputs.Items[i]->Backlink;
-	
-	// Clean up after ourselves
-	for( link = Unit->Links; link; link = link->Next )
-	{
-		link->Backlink = NULL;
+	for( int i = 0; i < ref->Outputs.NItems; i ++ ) {
+		Link_Ref(ref->Outputs.Items[i]);
+		ret->Items[i] = ref->Outputs.Items[i];
 	}
 	
 	return ret;	
 }
 
-/**
- * \brief Create a new unit instance
- */
-tList *CreateUnit(const char *Name, int NParams, int *Params, tList *Inputs)
+tList *Build_AppendElement(tElementDef *def, int NParams, const int *Params, const tList *Inputs)
 {
-	tElement	**listhead;
-	
 	tElement	*ele;
 	tList	*ret = NULL;
-	 int	i;
-	tElementDef	*def;
-	
-	// First, check for template units (#defunit)
-	for( tUnitTemplate *tpl = gpUnits; tpl; tpl = tpl->Next )
-	{
-		// We can't recurse, so also check that
-		if( tpl != gpCurUnit && strcmp(Name, tpl->Name) == 0 ) {
-			return AppendUnit(tpl, Inputs);
-		}
-	}
-
-	// Next, check for builtins
-	for( def = gpElementDefs; def; def = def->Next )
-	{
-		if( strcmp(Name, def->Name) == 0 )
-			break;
-	}
-	if(!def)	return NULL;
-	
-	// Determine current list
-	if( gpCurUnit )
-		listhead = &gpCurUnit->Elements;
-	else if( gpCurTest )
-		listhead = &gpCurTest->Elements;
-	else
-		listhead = &gpElements;
 	
 	// Sanity check input numbers
 	if( Inputs->NItems < def->MinInput ) {
@@ -945,34 +545,67 @@ tList *CreateUnit(const char *Name, int NParams, int *Params, tList *Inputs)
 	}
 	
 	// Create an instance
-	ele = def->Create(NParams, Params, Inputs->NItems, Inputs->Items);
+	ele = def->Create(NParams, (int*)Params, Inputs->NItems, Inputs->Items);
 	if(!ele) {
 		fprintf(stderr, "Error in creating '%s'\n", def->Name);
 		return NULL;
 	}
 	ele->Type = def;	// Force type to be set
-	for( i = 0; i < Inputs->NItems; i ++ ) {
+	for( int i = 0; i < Inputs->NItems; i ++ ) {
+		Link_Ref(Inputs->Items[i]);
 		ele->Inputs[i] = Inputs->Items[i];
-		ele->Inputs[i]->ReferenceCount ++;
 	}
+	for( int i = 0; i < ele->NOutputs; i ++ )
+		ele->Outputs[i] = CreateAnonLink();
 	ele->NParams = NParams;
-	for( i = 0; i < NParams; i ++ )
+	for( int i = 0; i < NParams; i ++ )
 		ele->Params[i] = Params[i];
 	
 	// Append to element list
+	tElement **listhead = &Build_int_GetCurExecUnit()->Elements;
 	ele->Next = *listhead;
 	*listhead = ele;
 	
 	// Create return list
 	ret = malloc( sizeof(tList) + ele->NOutputs*sizeof(tLink*) );
 	ret->NItems = ele->NOutputs;
-	ret->Items = (void *)( (intptr_t)ret + sizeof(tList) );
-	for( i = 0; i < ele->NOutputs; i ++ ) {
-		ele->Outputs[i] = CreateAnonLink();
+	ret->Items = (void *)( ret + 1 );
+	for( int i = 0; i < ele->NOutputs; i ++ ) {
+		Link_Ref(ele->Outputs[i]);
 		ret->Items[i] = ele->Outputs[i];
 	}
 	
 	return ret;
+	
+}
+
+/**
+ * \brief Create a new unit instance
+ */
+tList *Build_ReferenceUnit(const char *Name, int NParams, const int *Params, const tList *Inputs)
+{
+	// First, check for template units (#defunit)
+	for( tUnitTemplate *tpl = gpUnits; tpl; tpl = tpl->Next )
+	{
+		// We can't recurse, so also check that
+		if( strcmp(Name, tpl->Name) == 0 )
+		{
+			if( tpl == gpCurUnit )
+				break;
+			return Build_AppendUnit(tpl, Inputs);
+		}
+	}
+
+	// Next, check for builtins
+	for( tElementDef *def = gpElementDefs; def; def = def->Next )
+	{
+		if( strcmp(Name, def->Name) == 0 )
+		{
+			return Build_AppendElement(def, NParams, Params, Inputs);
+		}
+	}
+	
+	return NULL;
 }
 
 /**
@@ -980,7 +613,7 @@ tList *CreateUnit(const char *Name, int NParams, int *Params, tList *Inputs)
 void List_Free(tList *List)
 {
 	for( int i = 0; i < List->NItems; i ++ )
-		List->Items[i]->ReferenceCount --;
+		Link_Deref(List->Items[i]);
 	if( List->Items != (void *)( (intptr_t)List + sizeof(tList) ) )
 		free(List->Items);
 	else
@@ -990,22 +623,22 @@ void List_Free(tList *List)
 /**
  * \brief Append one list to another
  */
-void AppendList(tList *Dest, tList *Src)
+void List_AppendList(tList *Dest, const tList *Src)
 {
 	 int	oldOfs = Dest->NItems;
 	Dest->NItems += Src->NItems;
 	Dest->Items = realloc( Dest->Items, Dest->NItems * sizeof(tLink*) );
 	for( int i = 0; i < Src->NItems; i ++ )
 	{
+		Link_Ref(Src->Items[i]);
 		Dest->Items[oldOfs+i] = Src->Items[i];
-		Dest->Items[oldOfs+i]->ReferenceCount ++;
 	}
 }
 
 /**
  * \brief Append a named line to a list
  */
-void AppendLine(tList *Dest, const char *Name)
+void List_AppendLine(tList *Dest, const char *Name)
 {
 	Dest->NItems ++;
 	Dest->Items = realloc( Dest->Items, Dest->NItems * sizeof(tLink*) );
@@ -1015,7 +648,7 @@ void AppendLine(tList *Dest, const char *Name)
 /**
  * \brief Append a single line of a group to a list
  */
-int AppendGroupItem(tList *Dest, const char *Name, int Index)
+int List_AppendGroupItem(tList *Dest, const char *Name, int Index)
 {
 	 int	len, i, digits;
 	tGroupDef	*grp = GetGroup(Name);
@@ -1053,7 +686,7 @@ int AppendGroupItem(tList *Dest, const char *Name, int Index)
 /**
  * \brief Append every line in a group to a list
  */
-int AppendGroup(tList *Dest, const char *Name)
+int List_AppendGroup(tList *Dest, const char *Name)
 {
 	tGroupDef	*grp = GetGroup(Name);
 	 int	i, ofs, len;
@@ -1087,47 +720,13 @@ int AppendGroup(tList *Dest, const char *Name)
 }
 
 /**
- * \brief Append every line in a group to a list (reversed)
- */
-int AppendGroupRev(tList *Dest, const char *Name)
-{
-	tGroupDef	*grp = GetGroup(Name);
-	 int	i, ofs, len;
-	 int	digits = 0;
-	
-	//printf("AppendGroup: (%p, %s)\n", Dest, Name);
-	if(!grp) {
-		// ERROR:
-		fprintf(stderr, "ERROR: Unknown group %s\n", Name);
-		return 1;
-	}
-	
-	len = snprintf(NULL, 0, "%s[%i]", Name, grp->Size-1);
-	
-	for( i = grp->Size-1; i; i /= 10 )	digits ++;
-	
-	ofs = Dest->NItems;
-	Dest->NItems += grp->Size;
-	Dest->Items = realloc( Dest->Items, Dest->NItems * sizeof(tLink*) );
-	
-	for( i = 0; i < grp->Size; i ++ )
-	{
-		char	newname[len + 1];
-		snprintf(newname, len, "%s[%*i]", Name, digits, grp->Size - i - 1);
-		
-		Dest->Items[ofs+i] = CreateNamedLink(newname);
-	}
-	
-	return 0;
-}
-
-/**
  * \brief Link two sets of links (Sets the aliases for \a Src to \a Dest)
  * \return Boolean Failure
  */
-int MergeLinks(tList *Dest, tList *Src)
+int List_EquateLinks(tList *Dest, const tList *Src)
 {
 	 int	i;
+	
 	if( Dest->NItems != Src->NItems ) {
 		fprintf(stderr, "ERROR: MergeLinks - Mismatch of source and destination counts\n");
 		return -1;
@@ -1135,17 +734,51 @@ int MergeLinks(tList *Dest, tList *Src)
 	
 	for( i = 0; i < Dest->NItems; i ++ )
 	{
-		//printf("%p(%s) <= %p(%s)\n",
-		//	Dest->Items[i], Dest->Items[i]->Name,
-		//	Src->Items[i], Src->Items[i]->Name
-		//	);
-		LinkValue_Ref( Src->Items[i]->Value );
-		LinkValue_Deref( Dest->Items[i]->Value );
-		Dest->Items[i]->Value = Src->Items[i]->Value;
-		
-		#if USE_LINKS
-		Src->Items[i]->Link = Dest->Items[i];
-		#endif
+		tLink	*left = Dest->Items[i];
+		tLink	*right = Src->Items[i];
+
+		if( left->Value == right->Value )
+		{
+			fprintf(stderr, "Note: Equating same-valued links ('%s' = '%s' %p)\n",
+				left->Name, right->Name, left->Value);
+		}
+		else
+		{
+			tLinkValue	*lval = left->Value;
+			tLinkValue	*rval = right->Value;
+
+			// Never destroy a constant
+//			if( Build_IsConstValue(rval) ) {
+//				tLinkValue	*tmp;
+//				tmp = rval;
+//				rval = lval;
+//				lval = tmp;
+//			}
+			// If both are constant, return error
+			if( Build_IsConstValue(rval) ) {
+				fprintf(stderr, "ERROR: Merging '0' and '1'\n");
+				return 1;
+			}
+
+			// Transfer links from rval to lval
+			int nTrans = 0;
+			while( rval->FirstLink )
+			{
+				tLink	*link = rval->FirstLink;
+				// Remove from rval
+				rval->FirstLink = link->ValueNext;
+				// Set to lval
+				link->Value = lval;
+				// Add to lval
+				link->ValueNext = lval->FirstLink;
+				lval->FirstLink = link;
+				nTrans ++;
+			}
+			if( nTrans > 1 )
+				DEBUG_S("%i links moved to value of '%s'", nTrans, left->Name);
+			// rval should now be unused
+			free(rval);
+		}
 	}
 	return 0;
 }

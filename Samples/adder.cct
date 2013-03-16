@@ -26,7 +26,9 @@ $ret, $carry = ADDER $en, $en, $en
 
 ;
 ; 4-bit Carry-Bypass adder
+; TODO: Complete
 ;
+%if 0
 #defunit ADDER_4BYPASS
 #input $carry_in, @val1[4], @val2[4]
 #output $carry_out, @ret[4]
@@ -45,8 +47,8 @@ $ret, $carry = ADDER $en, $en, $en
 $bypass = AND @p
 $carry_out = MUX{1} $bypass, $carry_in, $_carry	// 1-bit MUX
 $carry_out = AND @p, $carry_in
-
 #endunit
+%endif
 
 ;
 ; 4-Bit Ripple-Carry Adder
@@ -111,6 +113,7 @@ $g = AND $b, $c
 // 4-Bit Carry-Lookahead Adder
 // Delay of ??
 // NOTE: Incomplete
+%if 0
 #defunit ADDER_4BIT_CL
 #input $enable, @val1[4], @val2[4], $carry_in
 #output $ready, @ret[4], $carry_out
@@ -120,8 +123,8 @@ $g = AND $b, $c
 #array carry 4
 
 @_ret[0], @_p[0], @_g[0] = ADDER_CL @val1[0], @val1[0], $carry_in
-
 #endunit
+%endif
 
 // 8-Bit Carry-Select Adder
 // - Delay of 13 (ADDER_4BIT_RIPPLE + 2)

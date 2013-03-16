@@ -13,6 +13,7 @@ struct sLink
 	tLink	*Backlink;	//!< Used by #defunit when importing
 	
 	tLinkValue	*Value;
+	tLink	*ValueNext;
 	
 	 int	ReferenceCount;	//!< Number of references to this link
 	
@@ -24,6 +25,8 @@ struct sLinkValue
 	 int	Value;	//!< Current value of the link
 	 int	NDrivers;	//!< Number of elements raising the line
 	 int	ReferenceCount;	//!< Number of references to this value
+	tLink	*FirstLink;
+	void	*Info;
 };
 
 static inline int GetLink(tLink *Link)
