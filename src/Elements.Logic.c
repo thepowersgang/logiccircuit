@@ -7,11 +7,8 @@
 
 typedef struct
 {
-	tElement	Ele;
 	 int	BusCount;
-	
-	tLink	*_links[];
-}	t_element;
+}	t_info;
 
 // === CODE ===
 /**
@@ -23,7 +20,7 @@ typedef struct
  * - 1: Bus Count (Defaults to 1) - UNIMPLEMENTED
  *  - Determines the number of busses at the end of input
  */
-static tElement *_Create(int NParams, int *Params, int NInputs, tLink **Inputs)
+static tElement *_Create(int NParams, int *Params, int NInputs)
 {
 	 int	busSize = 1, busCount = 1;
 	
@@ -40,40 +37,25 @@ static tElement *_Create(int NParams, int *Params, int NInputs, tLink **Inputs)
 		return NULL;
 	}
 	
-	t_element *ret = calloc( 1, sizeof(t_element) + (busSize+NInputs)*sizeof(tLink*) );
+	tElement *ret = EleHelp_CreateElement(NInputs, busSize, sizeof(t_info));
 	if(!ret)	return NULL;
+	t_info	*info = ret->Info;
 	
-	ret->BusCount = busCount;
-	ret->Ele.NOutputs = busSize;
-	ret->Ele.NInputs = NInputs;
-	ret->Ele.Outputs = &ret->_links[0];
-	ret->Ele.Inputs = &ret->_links[busSize];
-	return &ret->Ele;
-}
-
-static tElement *_Duplicate(tElement *Source)
-{
-	 int	size = sizeof(t_element) + (Source->NOutputs+Source->NInputs)*sizeof(tLink*);
-	t_element *ret = malloc( size );
-	memcpy(ret, Source, size);
-	
-	ret->Ele.Outputs = &ret->_links[0];
-	ret->Ele.Inputs = &ret->_links[Source->NOutputs];
-	
-	return &ret->Ele;
+	info->BusCount = busCount;
+	return ret;
 }
 
 #define MAKE_ELE_UPDATE(__name, __init, __operation, __invert) static void _Update_##__name(tElement *Ele) { \
 	 int	out = __init; \
 	 int	i, j, base; \
-	t_element *ele = (void*)Ele; \
-	base = Ele->NInputs - Ele->NOutputs*ele->BusCount; \
+	t_info *info = Ele->Info; \
+	base = Ele->NInputs - Ele->NOutputs*info->BusCount; \
 	for( i = 0; i < base; i++ ) {\
 		out = out __operation (!!GetLink(Ele->Inputs[i])); \
 	} \
 	for( j = 0; j < Ele->NOutputs; j ++ ) { \
 		 int	outTmp = out; \
-		for(i = 0; i < ele->BusCount; i ++) { \
+		for(i = 0; i < info->BusCount; i ++) { \
 			outTmp = outTmp __operation (!!GetLink(Ele->Inputs[base+i*Ele->NOutputs+j])); \
 		} \
 		if( outTmp == !(__invert) ) \
@@ -89,7 +71,7 @@ MAKE_ELE_UPDATE(NOR, 0, ||, 1);
 MAKE_ELE_UPDATE(NXOR, 0, ^, 1);
 
 #define CREATE_ELE(__name) tElementDef gElement_##__name = {\
-	NULL, #__name, 1, -1, _Create, _Duplicate, _Update_##__name \
+	NULL, #__name, 1, -1, _Create, NULL, _Update_##__name \
 } \
 
 CREATE_ELE(AND);

@@ -10,7 +10,6 @@ struct sLink
 {
 	tLink	*Next;
 	tLink	*Link;	//!< Allows aliasing (1 deep only)
-	tLink	*Backlink;	//!< Used by #defunit when importing
 	
 	tLinkValue	*Value;
 	tLink	*ValueNext;
@@ -22,6 +21,7 @@ struct sLink
 
 struct sLinkValue
 {
+	tLinkValue	*Next;	//!< Next link in unit
 	 int	Value;	//!< Current value of the link
 	 int	NDrivers;	//!< Number of elements raising the line
 	 int	ReferenceCount;	//!< Number of references to this value

@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <ctype.h>
+#include <string.h>
 
 // === PROTOTYPES ===
 void	PrintDisplayItem(tDisplayItem *dispItem);
@@ -157,17 +158,250 @@ void Sim_UsageCheck(tExecUnit *Root)
 	free(usage);
 }
 
-void Sim_RunStep(tTestCase *TestCase)
+void Sim_CreateMesh_IMerge(tList *Left, tList *Right)
 {
-	tLink	**links;
-	tElement	**elements;
+	tLink	*ref_in_a[Left->NItems];
+	tLink	*def_in_a[Right->NItems];
+	tList	ref_in, def_in;
 	
-	if( TestCase == NULL )
-		GetLists(&gRootUnit, &links, &elements, NULL);
-	else
-		GetLists(&TestCase->Internals, &links, &elements, NULL);
+	ref_in.NItems = Left->NItems;
+	ref_in.Items = ref_in_a;
+	for(int i = 0; i < ref_in.NItems; i ++ ) {
+		assert(Left->Items[i]->Link);
+		ref_in_a[i] = Left->Items[i]->Link;
+	}
+	
+	def_in.NItems = Right->NItems;
+	def_in.Items = def_in_a;
+	for(int i = 0; i < def_in.NItems; i ++ ) {
+		assert(Right->Items[i]->Link);
+		def_in_a[i] = Right->Items[i]->Link;
+	}
+	
+	List_EquateLinks(&ref_in, &def_in);
+}
 
-	for( tLink *link = *links; link; link = link->Next )
+void Sim_CreateMesh_LinkList(tList *Dst, const tList *Src)
+{
+	assert(Dst->NItems == Src->NItems);
+	for( int i = 0; i < Src->NItems; i ++ ) {
+		assert(Src->Items[i]->Link);
+		Dst->Items[i] = Src->Items[i]->Link;
+	}
+}
+
+void Sim_CreateMesh_ImportBlock(tExecUnit *DstUnit, const tExecUnit *SrcUnit)
+{
+	for( tLink *link = SrcUnit->Links; link; link = link->Next )
+		link->Link = NULL;
+	// Duplicate values/links
+	for( tLinkValue *val = SrcUnit->Values; val; val = val->Next )
+	{
+		tLinkValue	*newval = calloc(sizeof(tLinkValue), 1);
+		assert(newval);		
+
+		// Add to value list
+		newval->Next = DstUnit->Values;
+		DstUnit->Values = newval;
+	
+		for( const tLink *link = val->FirstLink; link; link = link->ValueNext )
+		{
+			assert(!link->Link);
+
+			tLink *newlink = malloc(sizeof(tLink) + strlen(link->Name) + 1);
+			assert(newlink);
+			
+			((tLink*)link)->Link = newlink;
+			
+			strcpy(newlink->Name, link->Name);
+			newlink->Value = newval;
+		
+			newlink->ValueNext = newval->FirstLink;
+			newval->FirstLink = newlink;
+		
+			newlink->Next = DstUnit->Links;
+			DstUnit->Links = newlink;
+		}
+	}
+	for( const tLink *link = SrcUnit->Links; link; link = link->Next )
+	{
+		if( Build_IsConstValue(link->Value) )
+		{
+			tLink *newlink = malloc(sizeof(tLink) + strlen(link->Name) + 1);
+			assert(newlink);
+			
+			((tLink*)link)->Link = newlink;
+
+			strcpy(newlink->Name, link->Name);
+						
+			newlink->Value = link->Value;
+			
+			// Don't bother :)
+		
+			newlink->Next = DstUnit->Links;
+			DstUnit->Links = newlink;
+
+			continue ;
+		}
+		if( !link->Link && link->ReferenceCount )
+		{
+			fprintf(stderr, "%s: %p(%s) [%i] was not renamed (val %p)\n",
+				SrcUnit->Name, link, link->Name, link->ReferenceCount, link->Value);
+			for( tLink *l2 = link->Value->FirstLink; l2; l2 = l2->ValueNext )
+				fprintf(stderr, " %p(%s)", l2, l2->Name);
+			fprintf(stderr, "\n");
+			assert(link->Link);
+		}
+	}
+	
+	// Duplicate elements
+	for( const tElement *ele = SrcUnit->Elements; ele; ele = ele->Next )
+	{
+		tElement *newele = Build_DuplicateElement(ele);
+		newele->Next = DstUnit->Elements;
+		DstUnit->Elements = newele;
+		for( int i = 0; i < newele->NInputs; i ++ )
+			newele->Inputs[i] = newele->Inputs[i]->Link;
+		for( int i = 0; i < newele->NOutputs; i ++ )
+			newele->Outputs[i] = newele->Outputs[i]->Link;
+	}
+	
+	// Display Items
+	for(const tDisplayItem *disp = SrcUnit->DisplayItems; disp; disp = disp->Next )
+	{
+		size_t	size = sizeof(tDisplayItem) + (disp->Condition.NItems + disp->Values.NItems)*sizeof(tLink*)
+			+ strlen(disp->Label) + 1;
+		tDisplayItem *newdisp = malloc(size);
+		assert(newdisp);
+		memcpy(newdisp, disp, size);
+		newdisp->Condition.Items = (void*)(newdisp->Label + strlen(disp->Label) + 1);
+		newdisp->Values.Items = newdisp->Condition.Items + newdisp->Condition.NItems;
+
+		newdisp->Next = DstUnit->DisplayItems;
+		DstUnit->DisplayItems = newdisp;
+
+		Sim_CreateMesh_LinkList(&newdisp->Condition, &disp->Condition);
+		Sim_CreateMesh_LinkList(&newdisp->Values, &disp->Values);
+	}
+	
+	// Assertions
+	for( const tAssertion *a = SrcUnit->Assertions; a; a = a->Next )
+	{
+		size_t	size = sizeof(tAssertion)
+			+ (a->Condition.NItems + a->Values.NItems + a->Expected.NItems) * sizeof(tLink*);
+		tAssertion *newa = malloc(size);
+		assert(newa);
+		memcpy(newa, a, size);
+		newa->Condition.Items = (void*)(newa + 1);
+		newa->Values.Items = newa->Condition.Items + newa->Condition.NItems;
+		newa->Expected.Items = newa->Values.Items + newa->Values.NItems;
+		
+		newa->Next = DstUnit->Assertions;
+		DstUnit->Assertions = newa;
+		
+		Sim_CreateMesh_LinkList(&newa->Condition, &a->Condition);
+		Sim_CreateMesh_LinkList(&newa->Values, &a->Values);
+		Sim_CreateMesh_LinkList(&newa->Expected, &a->Expected);
+	}
+	
+	// Breakpoints
+	for( const tBreakpoint *bp = SrcUnit->Breakpoints; bp; bp = bp->Next )
+	{
+		size_t	size = sizeof(tBreakpoint) + (bp->Condition.NItems)*sizeof(tLink*) + strlen(bp->Label) + 1;
+		tBreakpoint *newbp = malloc(size);
+		assert(newbp);
+		memcpy(newbp, bp, size);
+		newbp->Condition.Items = (void*)(newbp->Label + strlen(bp->Label) + 1);
+
+		newbp->Next = DstUnit->Breakpoints;
+		DstUnit->Breakpoints = newbp;		
+
+		Sim_CreateMesh_LinkList(&newbp->Condition, &bp->Condition);
+	}
+	
+	// Bring in imports
+	for( tExecUnitRef *ref = SrcUnit->SubUnits; ref; ref = ref->Next )
+	{
+		// Get sub unit definition
+		tUnitTemplate	*def = ref->Def;
+
+		// Sanity check
+		assert(ref->Inputs.NItems == def->Internals.Inputs.NItems);
+		assert(ref->Outputs.NItems == def->Internals.Outputs.NItems);
+
+		// Recurse
+		Sim_CreateMesh_ImportBlock(DstUnit, &def->Internals);
+		
+		// Perform Input/Output merge
+		Sim_CreateMesh_IMerge(&ref->Inputs, &def->Internals.Inputs);
+		Sim_CreateMesh_IMerge(&ref->Outputs, &def->Internals.Outputs);
+	}
+}
+
+tExecUnit *Sim_CreateMesh(tTestCase *Template, tLink **CompletionCond)
+{
+	tExecUnit	*ret;
+	tExecUnit	*unit;
+	
+	if( Template )
+		unit = &Template->Internals;
+	else
+		unit = &gRootUnit;
+	ret = calloc(sizeof(tExecUnit), 1);
+	assert(ret);
+	
+	Sim_CreateMesh_ImportBlock(ret, unit);
+
+	if( CompletionCond )
+	{
+		if( Template && Template->CompletionCondition )
+			*CompletionCond = Template->CompletionCondition->Link;
+		else
+			*CompletionCond = NULL;
+	}
+	
+	return ret;
+}
+
+void Sim_FreeMesh(tExecUnit *Unit)
+{
+	void	*next;
+	for( tLinkValue *val = Unit->Values; val; val = next )
+	{
+		next = val->Next;
+		free(val);
+	}
+	for( tLink *link = Unit->Links; link; link = next )
+	{
+		next = link->Next;
+		free(link);
+	}
+	for( tElement *ele = Unit->Elements; ele; ele = next )
+	{
+		next = ele->Next;
+		free(ele);
+	}
+	for( tDisplayItem *di = Unit->DisplayItems; di; di = next )
+	{
+		next = di->Next;
+		free(di);
+	}
+	for( tBreakpoint *bp = Unit->Breakpoints; bp; bp = next )
+	{
+		next = bp->Next;
+		free(bp);
+	}
+	for( tAssertion *a = Unit->Assertions; a; a= next )
+	{
+		next = a->Next;
+		free(a);
+	}
+	free(Unit);
+}
+
+void Sim_RunStep(tExecUnit *Unit)
+{
+	for( tLink *link = Unit->Links; link; link = link->Next )
 	{
 		assert(link != link->Next);
 		link->Value->NDrivers = 0;
@@ -184,45 +418,31 @@ void Sim_RunStep(tTestCase *TestCase)
 	}
 	
 	// === Update elements ===
-	for( tElement *ele = *elements; ele; ele = ele->Next )
+	for( tElement *ele = Unit->Elements; ele; ele = ele->Next )
 	{
 		assert(ele != ele->Next);
 		ele->Type->Update( ele );
 	}
 	
 	// Set values
-	for( tLink *link = *links; link; link = link->Next )
+	for( tLink *link = Unit->Links; link; link = link->Next )
 	{
 		assert(link != link->Next);
-		link->Value->Value = !!link->Value->NDrivers;
 		
 		// Ensure 0 and 1 stay as 0 and 1
-		if( link->Name[0] == '1' )
+		if( link->Value == &gValue_One )
 		{
 			link->Value->Value = 1;
 			link->Value->NDrivers = 1;
 		}
-		else if( link->Name[0] == '0' )
+		else if( link->Value == &gValue_Zero )
 		{
-			link->Value->Value = 0;
-		}
-	}
-	
-	for( tLink *link = *links; link; link = link->Next )
-	{
-		assert(link != link->Next);
-		link->Value->NDrivers = 0;
-		if( link->Name[0] == '1' )
-		{
-			assert( link->Value->Value );
-			link->Value->Value = 1;
-			link->Value->NDrivers = 1;
-		}
-		else if( link->Name[0] == '0' )
-		{
-			assert( !link->Value->Value );
 			link->Value->Value = 0;
 			link->Value->NDrivers = 0;
+		}
+		else
+		{
+			link->Value->Value = !!link->Value->NDrivers;
 		}
 	}
 }

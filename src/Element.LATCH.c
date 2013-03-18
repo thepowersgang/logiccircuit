@@ -1,6 +1,6 @@
 /*
- * PULSE element
- * - Raises the output for only one tick when input rises
+ * LATCH element
+ * - RS Latch
  */
 #include <element.h>
 #include <stdlib.h>
@@ -9,16 +9,13 @@
 
 typedef struct
 {
-	tElement	Ele;
 	 int	Size;
-	 int	*CurVal;
-	tLink	*_links[];
-}	t_element;
+	char	*CurVal;
+}	t_info;
 
 // === CODE ===
-static tElement *_Create(int NParams, int *Param, int NInputs, tLink **Inputs)
+static tElement *_Create(int NParams, int *Param, int NInputs)
 {
-	t_element *ret;
 	 int	size = 0;
 	
 	if(NParams >= 1)	size = Param[0];
@@ -28,41 +25,33 @@ static tElement *_Create(int NParams, int *Param, int NInputs, tLink **Inputs)
 	if(NInputs != 2 + size)	return NULL;
 
 
-	ret = calloc( 1, sizeof(t_element) + (1+size + 2+size + size)*sizeof(tLink*) );
+	tElement *ret = EleHelp_CreateElement(2+size, 1+size, sizeof(t_info) + size*sizeof(char));
 	if(!ret)	return NULL;
+	t_info	*info = ret->Info;
 	
-	ret->CurVal = (void*)&ret->_links[1+size+2+size];
-	ret->Size = size;
+	info->Size = size;
+	info->CurVal = (void*)(info + 1);
+	memset(info->CurVal, 0, size);
 	
-	ret->Ele.NOutputs = 1+size;
-	ret->Ele.NInputs = 2+size;
-	ret->Ele.Outputs = &ret->_links[0];
-	ret->Ele.Inputs = &ret->_links[1+size];
-	return &ret->Ele;
+	return ret;
 }
 
-static tElement *_Duplicate(tElement *Source)
+static int _Duplicate(const tElement *Source, tElement *New)
 {
-	t_element *orig = (void*)Source;
-	 int	size = sizeof(t_element) + (Source->NOutputs+Source->NInputs+orig->Size)*sizeof(tLink*);
-	t_element *ret = malloc( size );
-	memcpy(ret, Source, size);
-	ret->Ele.Outputs = &ret->_links[0];
-	ret->Ele.Inputs = &ret->_links[Source->NOutputs];
-	ret->CurVal = (void*)&ret->_links[Source->NOutputs+Source->NInputs];
-	return &ret->Ele;
+	t_info	*info = New->Info;
+	info->CurVal = (void*)(info + 1);
+	return 0;
 }
 
 static void _Update(tElement *Ele)
 {
-	t_element	*this = (t_element *)Ele;
-	 int	i;
+	t_info	*this = Ele->Info;
 	
 	if( GetLink(Ele->Inputs[1]) )	// Reset
 		memset(this->CurVal, 0, sizeof(*this->CurVal)*this->Size);
 	else
 	{	// Set
-		for( i = 0; i < this->Size; i ++ )
+		for( int i = 0; i < this->Size; i ++ )
 			if( GetLink(Ele->Inputs[2+i]) )
 				this->CurVal[i] = 1;
 	}
@@ -71,7 +60,7 @@ static void _Update(tElement *Ele)
 	if( GetLink(Ele->Inputs[0]) )	RaiseLink(Ele->Outputs[0]);
 	
 	// Output
-	for( i = 0; i < this->Size; i ++ )
+	for( int i = 0; i < this->Size; i ++ )
 	{
 		if( this->CurVal[i] )
 			RaiseLink(Ele->Outputs[1+i]);

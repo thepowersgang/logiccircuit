@@ -9,41 +9,24 @@
 
 typedef struct
 {
-	tElement	Ele;
 	 int	CurVal;
-	tLink	*_links[];
-}	t_element;
+}	t_info;
 
 // === CODE ===
-static tElement *_Create(int NParams, int *Param, int NInputs, tLink **Inputs)
+static tElement *_Create(int NParams, int *Param, int NInputs)
 {
-	t_element *ret;
-
-	ret = calloc( 1, sizeof(t_element) + 2*sizeof(tLink*) );
+	tElement *ret = EleHelp_CreateElement(1, 1, sizeof(t_info));
 	if(!ret)	return NULL;
+	t_info *info = ret->Info;
 	
-	ret->CurVal = 0;
+	info->CurVal = 0;
 	
-	ret->Ele.NOutputs = 1;
-	ret->Ele.NInputs = 1;
-	ret->Ele.Outputs = &ret->_links[0];
-	ret->Ele.Inputs = &ret->_links[1];
-	return &ret->Ele;
-}
-
-static tElement *_Duplicate(tElement *Source)
-{
-	 int	size = sizeof(t_element) + (Source->NOutputs+Source->NInputs)*sizeof(tLink*);
-	t_element *ret = malloc( size );
-	memcpy(ret, Source, size);
-	ret->Ele.Outputs = &ret->_links[0];
-	ret->Ele.Inputs = &ret->_links[1];
-	return &ret->Ele;
+	return ret;
 }
 
 static void _Update(tElement *Ele)
 {
-	t_element	*this = (t_element *)Ele;
+	t_info	*this = Ele->Info;
 	
 	// Single pulse on rising edge
 	if( !this->CurVal && GetLink(Ele->Inputs[0]) ) {
@@ -56,6 +39,6 @@ tElementDef gElement_PULSE = {
 	NULL, "PULSE",
 	1, 1,
 	_Create,
-	_Duplicate,
+	NULL,
 	_Update
 };

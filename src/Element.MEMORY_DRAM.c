@@ -4,21 +4,18 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdio.h>	// printf
 
 typedef struct
 {
-	tElement	Ele;
 	 int	DataLines;
 	 int	AddressLines;
 	void	*Data;
-	tLink	*_links[];
-}	t_element;
+}	t_info;
 
 // === CODE ===
-static tElement *_Create(int NParams, int *Params, int NInputs, tLink **Inputs)
+static tElement *_Create(int NParams, int *Params, int NInputs)
 {
-	t_element *ret;
-
 	if( NParams != 2 )	return NULL;
 
 	 int	n_data_lines = Params[0];
@@ -38,37 +35,27 @@ static tElement *_Create(int NParams, int *Params, int NInputs, tLink **Inputs)
 		return NULL;
 	}
 
-	ret = calloc( 1, sizeof(t_element) + (NInputs + 1 + n_data_lines) * sizeof(tLink*)
-		+ (1 << n_addr_lines) * (n_data_lines / 8) );
+	tElement *ret = EleHelp_CreateElement( NInputs, 1 + n_data_lines,
+		sizeof(t_info) + (1 << n_addr_lines) * (n_data_lines / 8) );
 	if(!ret)	return NULL;
+	t_info	*info = ret->Info;
 
-	ret->DataLines = n_data_lines;
-	ret->AddressLines = n_addr_lines;
-	
-	ret->Ele.NOutputs = 1 + n_data_lines;
-	ret->Ele.NInputs = NInputs;
-	ret->Ele.Outputs = &ret->_links[0];
-	ret->Ele.Inputs = &ret->Ele.Outputs[ret->Ele.NOutputs];
-	ret->Data = &ret->Ele.Inputs[NInputs];
-	return &ret->Ele;
+	info->DataLines = n_data_lines;
+	info->AddressLines = n_addr_lines;
+	info->Data = (void*)(info + 1);
+	return ret;
 }
 
-static tElement *_Duplicate(tElement *Source)
+static int _Duplicate(const tElement *Source, tElement *New)
 {
-	t_element	*this = (t_element*)Source;
-	 int	size = sizeof(t_element) + (Source->NOutputs+Source->NInputs)*sizeof(tLink*)
-		+ (1 << this->AddressLines) * (this->DataLines / 8);
-	t_element *ret = malloc( size );
-	memcpy(ret, Source, size);
-	ret->Ele.Outputs = &ret->_links[0];
-	ret->Ele.Inputs = &ret->Ele.Outputs[ret->Ele.NOutputs];
-	ret->Data = &ret->Ele.Inputs[ret->Ele.NInputs];
-	return &ret->Ele;
+	t_info	*info = New->Info;
+	info->Data = (void*)(info + 1);
+	return 0;
 }
 
 static void _Update(tElement *Ele)
 {
-	t_element	*this = (t_element *)Ele;
+	t_info	*this = Ele->Info;
 	size_t	addr = 0;
 	uint64_t	rv;
 	uint64_t	val = 0, mask = 0;

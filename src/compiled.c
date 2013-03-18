@@ -25,7 +25,7 @@ void WriteCompiledVersion(const char *Path, int bBinary)
 	 int	i;
 	
 	for( link = gRootUnit.Links; link; link = link->Next ) {
-		link->Backlink = (void*)(intptr_t)n_links;	// Save
+		link->Link = (void*)(intptr_t)n_links;	// Save
 		n_links ++;
 	}
 	for( ele = gRootUnit.Elements; ele; ele = ele->Next )
@@ -77,9 +77,9 @@ void WriteCompiledVersion(const char *Path, int bBinary)
 			for( i = 0; i < ele->NParams; i ++ )
 				_Write32(fp, ele->Params[i]);
 			for( i = 0; i < ele->NInputs; i ++ )
-				_Write16(fp, (intptr_t)ele->Inputs[i]->Backlink);
+				_Write16(fp, (intptr_t)ele->Inputs[i]->Link);
 			for( i = 0; i < ele->NOutputs; i ++ )
-				_Write16(fp, (intptr_t)ele->Outputs[i]->Backlink);
+				_Write16(fp, (intptr_t)ele->Outputs[i]->Link);
 		}
 		else {
 			fprintf(fp,
@@ -89,9 +89,9 @@ void WriteCompiledVersion(const char *Path, int bBinary)
 			for( i = 0; i < ele->NParams; i ++ )
 				fprintf(fp, " %x", ele->Params[i]);
 			for( i = 0; i < ele->NInputs; i ++ )
-				fprintf(fp, " %x", (int)(intptr_t)ele->Inputs[i]->Backlink);
+				fprintf(fp, " %x", (int)(intptr_t)ele->Inputs[i]->Link);
 			for( i = 0; i < ele->NOutputs; i ++ )
-				fprintf(fp, " %x", (int)(intptr_t)ele->Outputs[i]->Backlink);
+				fprintf(fp, " %x", (int)(intptr_t)ele->Outputs[i]->Link);
 			fprintf(fp, "\n");
 		}
 	}
@@ -102,8 +102,8 @@ void WriteCompiledVersion(const char *Path, int bBinary)
 void ReadCompiledVersion(const char *Path, int bBinary)
 {
 	int n_links, n_elements;
-	char	**elenames;
-	 int	n_elenames;
+	char	**elenames = NULL;
+	 int	n_elenames = 0;
 	FILE	*fp;
 
 	tElement	*first_ele = NULL;
@@ -213,7 +213,7 @@ void ReadCompiledVersion(const char *Path, int bBinary)
 		}
 	
 		// Create unit
-		ele = def->Create(n_params, params, n_input, NULL);
+		ele = def->Create(n_params, params, n_input);
 		if( !ele ) {
 			fprintf(stderr, "Unit %s errored\n", name);
 			goto _err;

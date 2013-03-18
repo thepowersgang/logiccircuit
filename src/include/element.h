@@ -4,6 +4,7 @@
 #define _ELEMENT_H_
 
 #include <link.h>
+#include <stddef.h>	// size_t
 
 #define MAX_PARAMS	4
 
@@ -19,8 +20,8 @@ struct sElementDef
 	 * \param NParams	Number of parameters
 	 * \param Params	List of numeric parameters
 	 */
-	tElement	*(*Create)(int NParams, int *Params, int NInputs, tLink **Inputs);
-	tElement	*(*Duplicate)(tElement *this);
+	tElement	*(*Create)(int NParams, int *Params, int NInputs);
+	 int	(*Duplicate)(const tElement *this, tElement *New);
 	void	(*Update)(tElement *this);
 };
 
@@ -28,6 +29,8 @@ struct sElement
 {
 	tElement	*Next;
 	tElementDef	*Type;
+	size_t	InfoSize;
+	void	*Info;
 
 	 int	NParams;
 	 int	Params[MAX_PARAMS];
@@ -38,5 +41,8 @@ struct sElement
 	 int	NOutputs;
 	tLink	**Outputs;
 };
+
+
+extern tElement	*EleHelp_CreateElement(size_t NInputs, size_t NOutputs, size_t ExtraData);
 
 #endif

@@ -6,49 +6,32 @@
 
 typedef struct
 {
-	tElement	Ele;
 	 int	Size;
 	 int	Pos;
-	tLink	*_links[];
-}	t_element;
+}	t_info;
 
 // === CODE ===
-static tElement *_Create(int NParams, int *Params, int NInputs, tLink **Inputs)
+static tElement *_Create(int NParams, int *Params, int NInputs)
 {
-	t_element *ret;
 	 int	nOutput;
 	
 	if( NParams != 1 )	return NULL;
 
 	nOutput = Params[0];
 
-	ret = calloc( 1, sizeof(t_element) + (2+nOutput)*sizeof(tLink*) );
+	tElement *ret = EleHelp_CreateElement(2, nOutput, sizeof(t_info));
 	if(!ret)	return NULL;
+	t_info	*info = ret->Info;
 	
-	ret->Size = nOutput;
-	ret->Pos = 0;
+	info->Size = nOutput;
+	info->Pos = 0;
 	
-	ret->Ele.NOutputs = nOutput;
-	ret->Ele.NInputs = 2;
-	ret->Ele.Inputs = &ret->_links[0];
-	ret->Ele.Outputs = &ret->_links[2];
-	return &ret->Ele;
-}
-
-static tElement *_Duplicate(tElement *Source)
-{
-	 int	size = sizeof(t_element) + (Source->NOutputs+Source->NInputs)*sizeof(tLink*);
-	t_element *ret = malloc( size );
-	memcpy(ret, Source, size);
-	ret->Ele.Inputs = &ret->_links[0];
-	ret->Ele.Outputs = &ret->_links[2];
-	return &ret->Ele;
+	return ret;
 }
 
 static void _Update(tElement *Ele)
 {
-	t_element	*this = (t_element *)Ele;
-	 int	i;
+	t_info	*this = Ele->Info;
 	
 	// Reset
 	if( GetLink(Ele->Inputs[0]) )
@@ -63,7 +46,7 @@ static void _Update(tElement *Ele)
 		this->Pos = 0;
 	
 	// Output
-	for( i = 0; i < this->Size; i ++ ) {
+	for( int i = 0; i < this->Size; i ++ ) {
 		if( this->Pos & (1 << i) )
 			RaiseLink(Ele->Outputs[i]);
 	}
@@ -73,6 +56,6 @@ tElementDef gElement_COUNTER = {
 	NULL, "COUNTER",
 	2, 2,
 	_Create,
-	_Duplicate,
+	NULL,
 	_Update
 };

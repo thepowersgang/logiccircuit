@@ -54,7 +54,7 @@ struct sExecUnitRef
 	tExecUnitRef	*Next;
 	tList	Inputs;
 	tList	Outputs;
-	char	*Name;
+	struct sUnitTemplate	*Def;
 };
 
 typedef struct sExecUnit
@@ -66,6 +66,9 @@ typedef struct sExecUnit
 	tGroupDef	*Groups;
 	 int	nLinks;
 	tLink	*Links;
+
+	tLinkValue	*Values;
+
 	 int	nElements;
 	tExecUnitRef	*SubUnits;
 	struct	sElement	*Elements;
@@ -108,7 +111,9 @@ struct sUnitTemplate
 
 // Sim Engine
 extern void	Sim_UsageCheck(tExecUnit *Root);
-extern void	Sim_RunStep(tTestCase *Root);
+extern tExecUnit	*Sim_CreateMesh(tTestCase *Template, tLink **CompletionCond);
+extern void	Sim_FreeMesh(tExecUnit *Unit);
+extern void	Sim_RunStep(tExecUnit *Root);
 extern void	Sim_ShowDisplayItems(tDisplayItem *First);
 extern int	Sim_CheckBreakpoints(tExecUnit *Unit);
 extern int	Sim_CheckAssertions(tAssertion *First);
@@ -131,6 +136,8 @@ extern int	Test_IsInTest(void);
 extern tExecUnit	gRootUnit;
 extern tUnitTemplate	*gpUnits;
 extern int	gbDisableTests;
+extern tLinkValue	gValue_Zero;
+extern tLinkValue	gValue_One;
 
 /**
  * \brief Add a display item
@@ -179,10 +186,10 @@ extern int	List_EquateLinks(tList *Dest, const tList *Src);
  */
 extern tList	*Build_ReferenceUnit(const char *Name, int NParams, const int *Params, const tList *Inputs);
 
+extern tElement	*Build_DuplicateElement(const tElement *Element);
+
 
 extern int	Build_IsConstValue(tLinkValue *Val);
-extern void	LinkValue_Ref(tLinkValue *Value);
-extern void	LinkValue_Deref(tLinkValue *Value);
 
 #endif
 

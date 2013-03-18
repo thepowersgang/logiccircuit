@@ -14,43 +14,26 @@
 
 typedef struct
 {
-	tElement	Ele;
 	 int	Position;
-	tLink	*_links[];
-}	t_element;
+}	t_info;
 
 // === CODE ===
-static tElement *_Create(int NParams, int *Params, int NInputs, tLink **Inputs)
+static tElement *_Create(int NParams, int *Params, int NInputs)
 {
-	t_element *ret;
-
 	if( NParams != 1 )	return NULL;
 
-	ret = calloc( 1, sizeof(t_element) + (3+Params[0])*sizeof(tLink*) );
+	tElement *ret = EleHelp_CreateElement(3, Params[0], sizeof(t_info));
 	if(!ret)	return NULL;	
+	t_info *info = ret->Info;
 
-	ret->Position = 0;
+	info->Position = 0;
 	
-	ret->Ele.NOutputs = Params[0];
-	ret->Ele.NInputs = 3;
-	ret->Ele.Outputs = &ret->_links[0];
-	ret->Ele.Inputs = &ret->_links[ret->Ele.NOutputs];
-	return &ret->Ele;
-}
-
-static tElement *_Duplicate(tElement *Source)
-{
-	 int	size = sizeof(t_element) + (Source->NOutputs+Source->NInputs)*sizeof(tLink*);
-	t_element *ret = malloc( size );
-	memcpy(ret, Source, size);
-	ret->Ele.Outputs = &ret->_links[0];
-	ret->Ele.Inputs = &ret->_links[ret->Ele.NOutputs];
-	return &ret->Ele;
+	return ret;
 }
 
 static void _Update(tElement *Ele)
 {
-	t_element	*this = (t_element *)Ele;
+	t_info	*this = Ele->Info;
 	if( GetLink(Ele->Inputs[0]) ) 
 	{
 		if( GetLink(Ele->Inputs[1]) )
@@ -72,7 +55,7 @@ tElementDef gElement_SEQUENCER = {
 	NULL, "SEQUENCER",
 	3, 3,
 	_Create,
-	_Duplicate,
+	NULL,
 	_Update
 };
 

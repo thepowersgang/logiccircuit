@@ -35,6 +35,7 @@ void	SigINT_Handler(int Signum);
 void	CompressLinks(tTestCase *Root);
 void	WriteCompiledVersion(const char *Path, int bBinary);
 void	DumpList(const tList *List, int bShowNames);
+void	CompileStatistics(tExecUnit *Unit);
 void	ResolveLinks(tLink *First);
 void	ResolveEleLinks(tElement *First);
 
@@ -54,11 +55,6 @@ const char	*gsTestName;
 // === CODE ===
 int main(int argc, char *argv[])
 {
-	tLink	*link;
-	tElement	*ele;
-	 int	i;
-	 int	timestamp;
-	
 	// Add element definitions
 	ADD_ELEDEF( AND); ADD_ELEDEF( OR); ADD_ELEDEF( XOR);
 	ADD_ELEDEF(NAND); ADD_ELEDEF(NOR); ADD_ELEDEF(NXOR);
@@ -79,7 +75,7 @@ int main(int argc, char *argv[])
 	ADD_ELEDEF(MEMORY_DRAM);
 	
 	// Load Circuit file(s)
-	for( i = 1; i < argc; i ++ )
+	for( int i = 1; i < argc; i ++ )
 	{
 		if( argv[i][0] == '-' )
 		{
@@ -123,40 +119,25 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	// Resolve links
-	printf("Resolving links...\n");
-//	ResolveLinks(gpLinks);
-//	ResolveEleLinks(gpElements);
-//	for( tTestCase *test = gpTests; test; test = test->Next )
-//	{
-//		ResolveLinks(test->Internals.Links);
-////		ResolveEleLinks(test->Elements);
-//	}
-	
 	// Print links
 	// > Scan all links and find ones that share a value pointer 
 	if( gbPrintLinks )
 	{
-		for( link = gRootUnit.Links; link; link = link->Next )
+		for( tLinkValue *val = gRootUnit.Values; val; val = val->Next )
 		{
-			 int	linkCount;
-			tLink	*link2;
-			if(link->Backlink)	continue;	// Skip ones already done
-			linkCount = 0;
-			printf("(tValue)%p:", link->Value);
-			for( link2 = link; link2; link2 = link2->Next )
+			 int	linkCount = 0;
+			printf("(tValue)%p:", val);
+			for( tLink *link = val->FirstLink; link; link = link->Next )
 			{
-				if(link2->Backlink)	continue;
-				if(link2->Value != link->Value)	continue;
-				if( link2->Name[0] )
-					printf(" '%s'", link2->Name);
+				assert(link->Value == val);
+				if( link->Name[0] )
+					printf(" '%s'", link->Name);
 				else
-				#if 0
-					printf(" (tLink)%p", link2);
+				#if 1
+					printf(" (tLink)%p", link);
 				#else	// HACK: Relies on change in build.c
-					printf(" '%s'", link2->Name+1);
+					printf(" '%s'", link->Name+1);
 				#endif
-				link2->Backlink = link;	// Make backlink non-zero
 				linkCount ++;
 			}
 			printf(" (Used %i times)", linkCount);
@@ -166,66 +147,12 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
-	#if 0
-	if( gbCompress )
-	{
-		CompressLinks(NULL);
-		for( tTestCase *test = gpTests; test; test = test->Next )
-			CompressLinks(test);
-	}
-	#endif
-
 	// Check for links that aren't set/read
 	Sim_UsageCheck(&gRootUnit);
 	for( tUnitTemplate *tpl = gpUnits; tpl; tpl = tpl->Next )
 		Sim_UsageCheck(&tpl->Internals); 
 //	for( tTestCase *test = gpTests; test; test = test->Next )
 //		UsageCheck(&test->Internals);
-
-	// TODO: Fix later sections
-	return 0;
-	
-	if( gbPrintStats )
-	{
-		 int	totalLinks = 0;
-		 int	totalNamedLinks = 0;
-		 int	totalValues = 0;
-		 int	totalElements = 0;
-		printf("Gathering statistics...\n");
-		for( link = gRootUnit.Links; link; link = link->Next )
-			link->Backlink = NULL;
-		for( link = gRootUnit.Links; link; link = link->Next )
-		{
-			tLink	*link2;
-
-			totalLinks ++;
-			
-			if(link->Name[0])
-			{
-				totalNamedLinks ++;
-			}
-
-			if(link->Backlink)	continue;	// Skip ones already done
-
-			for( link2 = link; link2; link2 = link2->Next )
-			{
-				if(link2->Backlink)	continue;
-				if(link2->Value != link->Value)	continue;
-				link2->Backlink = link;	// Make backlink non-zero
-			}
-			totalValues ++;
-		}
-		
-		for( ele = gRootUnit.Elements; ele; ele = ele->Next )
-			totalElements ++;
-
-		printf("%i Links (joins)\n", totalLinks);
-		printf("- %i are named\n", totalNamedLinks);
-		printf("%i values (nodes)\n", totalValues);
-		printf("%i elements\n", totalElements);
-
-		return 0;
-	}
 
 	// TODO: Support saving tree to a file
 	if( 1 ) {
@@ -249,17 +176,22 @@ int main(int argc, char *argv[])
 
 			nTests ++;
 
-			printf("Test '%s'...", test->Name);
+			printf("Test '%s'", test->Name);
+			fflush(stdout);
+			tLink	*cc;
+			tExecUnit *compiled_test = Sim_CreateMesh(test, &cc);
+			printf("...");
+			fflush(stdout);
 			while( steps_elapsed != test->MaxLength && !bFailure )
 			{
-				Sim_RunStep(test);
+				Sim_RunStep(compiled_test);
 				if( gbTest_ShowDisplay )
-					Sim_ShowDisplayItems(test->Internals.DisplayItems);
+					Sim_ShowDisplayItems(compiled_test->DisplayItems);
 				steps_elapsed ++;
 			
-				bFailure = Sim_CheckAssertions(test->Internals.Assertions);
+				bFailure = Sim_CheckAssertions(compiled_test->Assertions);
 				
-				if( test->CompletionCondition && GetLink(test->CompletionCondition) )
+				if( cc && GetLink(cc) )
 					break;
 			}
 			if( bFailure == 1 ) {
@@ -273,9 +205,21 @@ int main(int argc, char *argv[])
 			else {
 				printf(" PASS (%i cycles)\n", steps_elapsed);
 			}
+			
+			Sim_FreeMesh(compiled_test);
 		}
 		
 		printf("%i/%i Tests passed\n", nTests-nFailure, nTests);
+		return 0;
+	}
+
+	printf("Compiling root...\n");
+	tExecUnit *compiled_root = Sim_CreateMesh(NULL, NULL);
+
+	if( gbPrintStats )
+	{
+		CompileStatistics(compiled_root);
+		Sim_FreeMesh(compiled_root);
 		return 0;
 	}
 
@@ -292,7 +236,7 @@ int main(int argc, char *argv[])
 	}
 	
 	// Execute
-	for( timestamp = 0; gbRunSimulation; timestamp ++ )
+	for( int timestamp = 0; gbRunSimulation; timestamp ++ )
 	{
 		 int	breakPointFired = 0;
 
@@ -300,15 +244,14 @@ int main(int argc, char *argv[])
 			break;	
 	
 		// Clear drivers
-		for( link = gRootUnit.Links; link; link = link->Next ) {
-			link->Value->NDrivers = 0;
-			// Ensure 0 and 1 stay as 0 and 1
-			if( link->Name[0] == '1' ) {
-				link->Value->Value = 1;
-				link->Value->NDrivers = 1;
+		for( tLinkValue *val = compiled_root->Values; val; val = val->Next ) {
+			val->NDrivers = 0;
+			if( val == &gValue_Zero )
+				val->Value = 0;
+			if( val == &gValue_One ) {
+				val->NDrivers = 1;
+				val->Value = 1;
 			}
-			else if( link->Name[0] == '0' )
-				link->Value->Value = 0;
 		}
 
 		// === Show Display ===
@@ -319,10 +262,10 @@ int main(int argc, char *argv[])
 		}
 		printf("---- %6i ----\n", timestamp);
 		
-		Sim_ShowDisplayItems(gRootUnit.DisplayItems);
+		Sim_ShowDisplayItems(compiled_root->DisplayItems);
 	
 		// Check breakpoints
-		breakPointFired = Sim_CheckBreakpoints(&gRootUnit);
+		breakPointFired = Sim_CheckBreakpoints(compiled_root);
 		
 		// === User Input ===
 		if( giSimulationSteps == 0 && ( gbStepping || breakPointFired ) )
@@ -361,7 +304,7 @@ int main(int argc, char *argv[])
 				// Display
 				else if( strcmp(commandBuffer, "d") == 0 ) {
 					// Find named link
-					for( link = gRootUnit.Links; link; link = link->Next ) {
+					for( tLink *link = compiled_root->Links; link; link = link->Next ) {
 						if( strcmp(link->Name, argBuffer) == 0 ) {
 							printf("%s: %i\n", link->Name, link->Value->Value);
 							break;
@@ -370,7 +313,7 @@ int main(int argc, char *argv[])
 				}
 				else if( strcmp(commandBuffer, "dispall") == 0 ) {
 					 int	len = strlen(argBuffer);
-					for( link = gRootUnit.Links; link; link = link->Next ) {
+					for( tLink *link = compiled_root->Links; link; link = link->Next ) {
 						if( link->Name[0] && strncmp(link->Name, argBuffer, len) == 0 ) {
 							printf("%s: %i\n", link->Name, link->Value->Value);
 						}
@@ -382,11 +325,13 @@ int main(int argc, char *argv[])
 			}
 		}
 		
-		Sim_RunStep(NULL);
+		Sim_RunStep(compiled_root);
 	}
 	
 	// Swap back to main buffer
 	printf("\x1B[?1047l");
+
+	Sim_FreeMesh(compiled_root);
 	
 	return 0;
 }
@@ -436,6 +381,33 @@ void SigINT_Handler(int Signum)
 	//gbRunSimulation = 0;
 	gbStepping = 1;
 	#endif
+}
+
+void CompileStatistics(tExecUnit *Unit)
+{
+	 int	totalLinks = 0;
+	 int	totalNamedLinks = 0;
+	 int	totalValues = 0;
+	 int	totalElements = 0;
+	 int	totalSubunits = 0;
+	
+	printf("Gathering statistics...\n");
+	for( tLink *link = Unit->Links; link; link = link->Next )
+	{
+		if(link->Name[0])
+			totalNamedLinks ++;
+		totalLinks ++;
+	}
+	for( tLinkValue *val = Unit->Values; val; val = val->Next )
+		totalValues ++;
+	for( tElement *ele = Unit->Elements; ele; ele = ele->Next )
+		totalElements ++;
+	for( tExecUnitRef *ref = Unit->SubUnits; ref; ref = ref->Next )
+		totalSubunits ++;
+	
+
+	printf("%i Links (%i named) for %i values\n", totalLinks, totalNamedLinks, totalValues);
+	printf("%i atomic elements and %i sub-units\n", totalElements, totalSubunits);
 }
 
 #if 0
@@ -576,55 +548,3 @@ void CompressLinks(tTestCase *Root)
 	free( links_merged );
 }
 #endif
-
-#if 0
-void ResolveLinks(tLink *First)
-{
-	for( tLink *link = First; link; link = link->Next )
-	{
-		// Expand n-deep linking
-		while( link->Link && link->Link->Link ) {
-			link->Link = link->Link->Link;
-		}
-		
-		if( link->Link )
-		{
-			LinkValue_Ref(link->Link->Value);
-			LinkValue_Deref(link->Value);
-			link->Value = link->Link->Value;
-		}
-		
-		// Zero out
-		link->Value->NDrivers = 0;
-		link->Value->Value = 0;
-	}
-}
-
-void ResolveEleLinks(tElement *First)
-{
-	tLink	*link;	
-	for( tElement *ele = First; ele; ele = ele->Next )
-	{
-		for( int i = 0; i < ele->NInputs; i ++ )
-		{
-			// Is it direct?
-			if( !ele->Inputs[i]->Link )
-				continue ;
-			
-			link = ele->Inputs[i]->Link;
-			// TODO: Reference counting
-			ele->Inputs[i] = link;
-		}
-		for( int i = 0; i < ele->NOutputs; i ++ )
-		{
-			if( !ele->Outputs[i]->Link )
-				continue ;
-			
-			link = ele->Outputs[i]->Link;
-			ele->Outputs[i] = link;
-		}
-	}
-
-}
-#endif
-

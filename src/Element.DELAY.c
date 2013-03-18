@@ -8,17 +8,14 @@
 
 typedef struct
 {
-	tElement	Ele;
 	 int	Delay;
 	 int	Pos;
 	int8_t	*Cache;
-	tLink	*_links[];
-}	t_element;
+}	t_info;
 
 // === CODE ===
-static tElement *_Create(int NParams, int *Params, int NInputs, tLink **Inputs)
+static tElement *_Create(int NParams, int *Params, int NInputs)
 {
-	t_element *ret;
 	 int	delay_time = 0;
 	
 	if( NParams > 1 )	return NULL;
@@ -27,35 +24,24 @@ static tElement *_Create(int NParams, int *Params, int NInputs, tLink **Inputs)
 	
 	if( delay_time < 1 )	delay_time = 1;
 
-	ret = calloc( 1, sizeof(t_element) + 2*NInputs*sizeof(tLink*) + NInputs*(delay_time - 1) );
+	size_t	cache_size = (delay_time-1)*NInputs;
+	tElement *ret = EleHelp_CreateElement( NInputs, NInputs, sizeof(t_info) + cache_size);
 	if(!ret)	return NULL;
+	t_info	*info = ret->Info;
 	
-	ret->Delay = delay_time - 1;
-	ret->Cache = (int8_t *) &ret->_links[NInputs*2];
-	if(delay_time > 1)
-		ret->Cache[0] = 0;
+	info->Pos = 0;
+	info->Delay = delay_time - 1;
+	info->Cache = (void*)(info + 1);
+	memset(info->Cache, 0, cache_size);
 	
-	//printf("ret->Delay = %i\n", ret->Delay);
-	
-	ret->Ele.NOutputs = NInputs;
-	ret->Ele.NInputs = NInputs;
-	ret->Ele.Outputs = &ret->_links[0];
-	ret->Ele.Inputs = &ret->_links[NInputs];
-	return &ret->Ele;
+	return ret;
 }
 
-static tElement *_Duplicate(tElement *Source)
+static int _Duplicate(const tElement *Source, tElement *New)
 {
-	t_element	*ele = (void*)Source;
-	 int	size = sizeof(t_element) + (2*Source->NInputs)*sizeof(tLink*)
-		+ Source->NInputs*ele->Delay;
-	t_element *ret = malloc( size );
-	memcpy(ret, Source, size);
-	ret->Ele.Outputs = &ret->_links[0];
-	ret->Ele.Inputs = &ret->_links[Source->NInputs];
-	ret->Cache = (int8_t *) &ret->_links[Source->NInputs*2];
-	if(ele->Delay)	ret->Cache[0] = 0;
-	return &ret->Ele;
+	t_info	*info = New->Info;
+	info->Cache = (void*)(info + 1);
+	return 0;
 }
 
 // DELAY{1}:
@@ -70,7 +56,7 @@ static tElement *_Duplicate(tElement *Source)
 
 static void _Update(tElement *Ele)
 {
-	t_element	*this = (t_element *)Ele;
+	t_info	*this = Ele->Info;
 	 int	i;
 	
 	// Single cycle delay
@@ -88,15 +74,6 @@ static void _Update(tElement *Ele)
 		
 		for( i = 0; i < Ele->NInputs; i ++ )
 		{
-#if 0
-			if( this->Delay == 7 ) {
-				printf("DELAY{%i} Cache[%i] = %i (update [%i] = (%p %s)%i)\n",
-					this->Delay+1,
-					ofs + i, this->Cache[ ofs + i ],
-					ofs + i, Ele->Inputs[i], Ele->Inputs[i]->Name, GetLink(Ele->Inputs[i])
-					);
-			}
-#endif
 			if( this->Cache[ ofs + i ] )
 				RaiseLink(Ele->Outputs[i]);
 	

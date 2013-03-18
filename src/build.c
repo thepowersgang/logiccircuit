@@ -20,7 +20,7 @@ tLinkValue	gValue_Zero;
 tLinkValue	gValue_One;
 tElementDef	*gpElementDefs;
 // - Mesh State
-tExecUnit	gRootUnit;
+tExecUnit	gRootUnit = {.Name="_ROOT_"};
 tUnitTemplate	*gpUnits;
 tTestCase	*gpTests;
 // - Parser State
@@ -125,6 +125,7 @@ int Test_CreateTest(int MaxLength, const char *Name, int NameLength)
 	gpCurTest->MaxLength = MaxLength;
 	memcpy(gpCurTest->Name, Name, NameLength);
 	gpCurTest->Name[NameLength] = '\0';
+	gpCurTest->Internals.Name = gpCurTest->Name;
 
 	tTestCase *p;
 	for( p = gpTests; p && p->Next; p = p->Next )
@@ -368,21 +369,18 @@ tLinkValue *LinkValue_Create(void)
 	ret = calloc(sizeof(tLinkValue),1);
 	assert(ret);
 	ret->ReferenceCount = 1;
+
+	tExecUnit *unit = Build_int_GetCurExecUnit();
+	ret->Next = unit->Values;
+	unit->Values = ret;
+
 	return ret;
 }
 
-void LinkValue_Ref(tLinkValue *Value)
+void LinkValue_Free(tLinkValue *Value)
 {
-	Value->ReferenceCount ++;
-}
-
-void LinkValue_Deref(tLinkValue *Value)
-{
-	Value->ReferenceCount --;
-	if( !Value->ReferenceCount ) {
-		if( !Build_IsConstValue(Value) )
-			free(Value);
-	}
+	assert(Value->ReferenceCount != -1);
+	Value->ReferenceCount = -1;
 }
 
 void Link_Ref(tLink *Link)
@@ -440,7 +438,6 @@ tLink *CreateNamedLink(const char *Name)
 	ret = malloc(sizeof(tLink) + strlen(Name) + 1);
 	strcpy(ret->Name, Name);
 	ret->Link = NULL;
-	ret->Backlink = NULL;
 	ret->ReferenceCount = 1;
 
 	if( strcmp(Name, "0") == 0 ) {
@@ -496,7 +493,7 @@ tList *Build_AppendUnit(tUnitTemplate *Unit, const tList *Inputs)
 	// - Set up pointers
 	ref->Inputs.Items = (void*)(ref + 1);
 	ref->Outputs.Items = (void*)(ref->Inputs.Items + Inputs->NItems);
-	ref->Name = (void*)(ref->Outputs.Items + Unit->Internals.Outputs.NItems);
+	ref->Def = Unit;
 	// - Initialise lists
 	for( int i = 0; i < Inputs->NItems; i ++ )
 	{
@@ -545,12 +542,20 @@ tList *Build_AppendElement(tElementDef *def, int NParams, const int *Params, con
 	}
 	
 	// Create an instance
-	ele = def->Create(NParams, (int*)Params, Inputs->NItems, Inputs->Items);
+	ele = def->Create(NParams, (int*)Params, Inputs->NItems);
 	if(!ele) {
 		fprintf(stderr, "Error in creating '%s'\n", def->Name);
 		return NULL;
 	}
 	ele->Type = def;	// Force type to be set
+	
+	if( Inputs->NItems != ele->NInputs ) {
+		fprintf(stderr, "%s requested %i inputs, %i passed\n", def->Name, ele->NInputs, Inputs->NItems);
+		free(ele);
+		return NULL;
+	}
+
+	// Populate
 	for( int i = 0; i < Inputs->NItems; i ++ ) {
 		Link_Ref(Inputs->Items[i]);
 		ele->Inputs[i] = Inputs->Items[i];
@@ -774,11 +779,44 @@ int List_EquateLinks(tList *Dest, const tList *Src)
 				lval->FirstLink = link;
 				nTrans ++;
 			}
-			if( nTrans > 1 )
-				DEBUG_S("%i links moved to value of '%s'", nTrans, left->Name);
+			//if( nTrans > 1 )
+			//	DEBUG_S("%i links moved to value of '%s'", nTrans, left->Name);
 			// rval should now be unused
-			free(rval);
+			
+			LinkValue_Free(rval);
 		}
 	}
 	return 0;
+}
+
+
+tElement *EleHelp_CreateElement(size_t NInputs, size_t NOutputs, size_t ExtraData)
+{
+	tElement *ret = malloc(sizeof(tElement) + (NInputs + NOutputs)*sizeof(tLink*) + ExtraData);
+	assert(ret);
+
+	ret->NInputs = NInputs;
+	ret->Inputs = (void*)(ret + 1);
+
+	ret->NOutputs = NOutputs;
+	ret->Outputs = ret->Inputs + NInputs;
+	
+	ret->InfoSize = ExtraData;
+	ret->Info = ret->Outputs + NOutputs;
+	return ret;
+}
+
+tElement *Build_DuplicateElement(const tElement *Ele)
+{
+	size_t	size = sizeof(tElement) + (Ele->NInputs + Ele->NOutputs)*sizeof(tLink*) + Ele->InfoSize;
+	tElement *ret = malloc(size);
+	assert(ret);
+	memcpy(ret, Ele, size);
+	ret->Inputs = (void*)(ret + 1);
+	ret->Outputs = ret->Inputs + ret->NInputs;
+	ret->Info = ret->Outputs + ret->NOutputs;
+	
+	if( Ele->Type && Ele->Type->Duplicate )
+		Ele->Type->Duplicate(Ele, ret);
+	return ret;
 }
