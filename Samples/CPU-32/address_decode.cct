@@ -107,7 +107,7 @@ $op_2_read_set, @op_2[0:31] = ROTATE_LEFT_N_32 $reading_Ri16, @instr[16:19],0, @
 #array _mem_add_op2 32
 #array _mem8_reg_shifted 32
 
-; === RM16 / M16R ===
+; === RM16 / RPC16 ===
 $is_M16 = OR $is_op_RM16, $is_op_RPC16
 ; - Prepare add (M16)
 $reading_M16 = AND $pulse, $is_op_RM16

@@ -236,7 +236,7 @@ $_rr = DELAY $_re
 @_rd[31:0] = AND{32} $_re, @_ra, 0xFF1000[31:0]
 #testassert $_re @_ra[3:0] 15[3:0]
 
-@_pc[31:0] = DELAY{32} 0xF000[31:0]
+@_pc[31:0] = DELAY 0xF000[31:0]
 
 ; Memory
 ; - Must be 0x10234 (0xF000 + 0x1234)
