@@ -390,8 +390,9 @@ void Link_Ref(tLink *Link)
 
 void Link_Deref(tLink *Link)
 {
-	assert(Link->ReferenceCount);
-	Link->ReferenceCount --;
+	//assert(Link->ReferenceCount);
+	if( Link->ReferenceCount > 0 )
+		Link->ReferenceCount --;
 	//if( Link->ReferenceCount == 0 )
 	//{
 	//	free(Link);

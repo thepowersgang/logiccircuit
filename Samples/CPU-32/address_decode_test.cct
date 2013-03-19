@@ -8,14 +8,14 @@
 #array _md 32
 #array _pc 32
 $done, $imd, @dest_addr, @op1, @op2, $_re,@_ra,$_me,@_ma = CPU32_ADDRESS_DECODE \
-	(DELAY 1), $rdy_clr, %1, %2, %3, %4,\
+	(DELAY 1), $rdy_clr, %1, %2, %3, %4[0:26],\
 	$_rr, @_rd, $_mr, @_md, @_pc
 %endmacro
 
 ; ---------------------------------------------------------------------
 #testcase 20 "Decode - R-, R10 (no decode r)"
 
-CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0xF0BAFFFF[0:31]
+CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0x0BAFFFF
 
 ; Pseudo register file
 ; - R10 = 0x12345678
@@ -35,7 +35,7 @@ $_rr = DELAY $_re
 
 ; ---------------------------------------------------------------------
 #testcase 20 "Decode - R-, R10 (no decode r, switch)"
-CPU32_ADDRESS_DECODE_BOILERPLATE 1, 0, 1, 0xF0BAFFFf[0:31]
+CPU32_ADDRESS_DECODE_BOILERPLATE 1, 0, 1, 0x0BAFFFF
 
 ; Pseudo register file
 ; - R10 = 0x12345678
@@ -55,7 +55,7 @@ $_rr = DELAY $_re
 
 ; ---------------------------------------------------------------------
 #testcase 20 "Decode - R10, R11"
-CPU32_ADDRESS_DECODE_BOILERPLATE 0, 1, 1, 0xF0ABAAAA[0:31]
+CPU32_ADDRESS_DECODE_BOILERPLATE 0, 1, 1, 0x0ABAAAA
 
 ; Pseudo register file
 ; - R10 = 0x12345678
@@ -81,7 +81,7 @@ $_rr = DELAY{2} $_re
 
 ; ---------------------------------------------------------------------
 #testcase 20 "Decode - R10, Imm20"
-CPU32_ADDRESS_DECODE_BOILERPLATE 0, 1, 1, 0xF1A12345[0:31]
+CPU32_ADDRESS_DECODE_BOILERPLATE 0, 1, 1, 0x1A12345
 
 ; Pseudo register file
 ; - R10 = 0x12345678
@@ -107,7 +107,7 @@ $_rr = DELAY{2} $_re
 ; Tests Imm16 decode
 ; - Also uses $read_r = 0 to make test simpler
 #testcase 20 "Decode - R-, Imm16 << 5"
-CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0xF2057777[0:31]
+CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0x2057777
 
 ; No register/memory accesses allowed
 #testassert 1	$_re	0
@@ -125,7 +125,7 @@ CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0xF2057777[0:31]
 ; Tests Imm16s decode
 ; - Also uses $read_r = 0 to make test simpler
 #testcase 20 "Decode - R-, Imm16s << 12"
-CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0xF30C8777[0:31]
+CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0x30C8777
 
 ; No register/memory accesses allowed
 #testassert 1	$_re	0
@@ -143,7 +143,7 @@ CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0xF30C8777[0:31]
 ; Tests [r+imm16] decode
 ; - Also uses $read_r = 0 to make test simpler
 #testcase 50 "Decode - R-, [R15+imm16]"
-CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0xF40F1234[0:31]
+CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0x40F1234
 
 ; Registers
 ; - R15 = 0x00FF0000
@@ -170,7 +170,7 @@ $_mr = DELAY $_me
 ; Tests [r + ri<<s +imm8s] decode
 ; - Also uses $read_r = 0 to make test simpler
 #testcase 100 "Decode - R-, [R15 + R14 << 4 + imm8s]"
-CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0xF50FE4FC[0:31]
+CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0x50FE4FC
 
 ; Registers
 ; - R15 = 0x00FF0000
@@ -198,7 +198,7 @@ $_mr = DELAY $_me
 ; ---------------------------------------------------------------------
 ; Tests [r+imm16] destination decode
 #testcase 60 "Decode - R15, [R15+imm16] (switch)"
-CPU32_ADDRESS_DECODE_BOILERPLATE 1, 1, 1, 0xF4FF1234[0:31]
+CPU32_ADDRESS_DECODE_BOILERPLATE 1, 1, 1, 0x4FF1234
 
 ; Registers
 ; - R15 = 0x00FF0000
@@ -228,7 +228,7 @@ $comp = DELAY{10} $done
 ; ---------------------------------------------------------------------
 ; Tests [PC+imm16]
 #testcase 60 "Decode - R15, [PC+imm16]"
-CPU32_ADDRESS_DECODE_BOILERPLATE 1, 1, 1, 0xF6F01234[0:31]
+CPU32_ADDRESS_DECODE_BOILERPLATE 1, 1, 1, 0x6F01234
 
 ; Registers
 ; - R15 = 0x00FF0000
@@ -260,7 +260,7 @@ $comp = DELAY{10} $done
 ; ---------------------------------------------------------------------
 ; Tests [PC + ri<<s +imm8s]
 #testcase 100 "Decode - R15, [PC + R14 << 4 + imm8s] (switch)"
-CPU32_ADDRESS_DECODE_BOILERPLATE 1, 1, 1, 0xF7FFE4FC[0:31]
+CPU32_ADDRESS_DECODE_BOILERPLATE 1, 1, 1, 0x7FFE4FC
 
 ; Registers
 ; - R15 = 0x00FF0000
@@ -293,7 +293,7 @@ $comp = DELAY{10} $done
 ; ---------------------------------------------------------------------
 ; Tests decoder reset (trivial)
 #testcase 50 "Decode - R11, R10; reset"
-CPU32_ADDRESS_DECODE_BOILERPLATE 0, 1, 1, 0xF0BAFFFF[0:31]
+CPU32_ADDRESS_DECODE_BOILERPLATE 0, 1, 1, 0x0BAFFFF
 
 #array state	5
 $next = PULSE $done

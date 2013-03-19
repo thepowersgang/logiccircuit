@@ -32,7 +32,7 @@
 ; - @mem_data_in[32] : Memory data
 ; - @pc[32]       : Program counter
 #defunit CPU32_ADDRESS_DECODE
-#input $trigger, $in_rdy_clear, $switch, $read_r, $read_m, @instr[32], \
+#input $trigger, $in_rdy_clear, $switch, $read_r, $read_m, @instr[27], \
 	$reg_ready, @reg_data_in[32], $mem_ready, @mem_data_in[32], @pc[32]
 #output $rdy, $is_mem_dest, @dest_addr[32], @op_1[32], @op_2[32], \
 	$reg_enable, @reg_addr[4], $mem_enable, @mem_addr[32]

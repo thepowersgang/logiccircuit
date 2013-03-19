@@ -164,7 +164,7 @@ $decode_clear = PULSE @stage_state[0]
 #display $decode_start "Decode @instr=%32x" @instr
 $decode_complete, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src,\
 	$reg_enable, @reg_addr, $mem_enable, @mem_addr = CPU32_ADDRESS_DECODE \
-	$decode_start, $decode_clear, $switch_operands, (NOT $no_decode_r), (NOT $no_read_m), @instr, \
+	$decode_start, $decode_clear, $switch_operands, (NOT $no_decode_r), (NOT $no_read_m), @instr[0:26], \
 	$reg_ready, @reg_data_in, $mem_ready, @mem_data_in, @pc
 
 #display $decode_complete "@alu_addr   = %32x" @alu_addr[31:0]
