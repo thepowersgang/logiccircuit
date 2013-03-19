@@ -10,7 +10,7 @@
 %include "registers.cct"
 %include "common.h.cct"
 
-%define NUM_FLAGS	3
+%define NUM_FLAGS	4
 
 %macro next_stage	3+
 $_next_stage_%1 = %3
@@ -127,11 +127,17 @@ $is_BRANCH  = AND $decode_enable, (NXOR{3,2} @instr[31:29], 0b100[2:0])
 $is_IBRANCH = AND $decode_enable, (NXOR{4,2} @instr[31:28], 0b1010[3:0])
 ; 10110mmm 000xxxxx	- Push/Pop
 ;$is_PUSHPOP = AND $decode_enable, (NXOR{8,2} @instr[31:27],@instr[23:21], 0b01100000[7:0])
+; 10110mmm 001xxxxx	- BSWAP[W]
+;$is_BSWAP   = AND $decode_enable, (NXOR{8,2} @instr[31:27],@instr[23:21], 0b01100001[7:0])
+; 10111000 00000000	- Load Flags
+$is_LDF     = AND $decode_enable, (NXOR{16,2} @instr[31:16], 0xB800[15:0])
+; 101111mm	- LEA R, op2
+$is_LEA     = AND $decode_enable, (NXOR{6,2} @instr[31:26], 0b101111[5:0])
 ; 1100xxxx	- Non-word Load/Store
 ;$is_NONWLS  = AND $decode_enable, (NXOR{4,2} @instr[31:28], 0b1100[3:0])
 
 // === Handle Undefined Opcodes ===
-$is_UNDEF = AND (DELAY{2} $decode_enable), (NOR $is_ALU, $is_BRANCH, $is_IBRANCH)
+$is_UNDEF = AND (DELAY{2} $decode_enable), (NOR $is_ALU, $is_BRANCH, $is_IBRANCH, $is_LDF, $is_LEA)
 #display $is_UNDEF "UNDEFINED INSTRUCTION!" 0
 ; $next_instruction = AND @stage_state[1], $is_UNDEF
 
@@ -140,6 +146,10 @@ $no_decode_r = AND $decode_enable, $is_IBRANCH
 $no_decode_r = AND $decode_enable, (NXOR{5,2} @instr[31:27], 0b00000[4:0])	// MOV
 $no_read_m   = AND $decode_enable, (NXOR{5,2} @instr[31:27], 0b01000[4:0])	// Reversed MOV
 ;$no_decode_r = AND $decode_enable, $is_PUSHPOP
+;$no_read_m   = AND $decode_enable, $is_PUSHPOP, @instr[20]
+$no_read_m       = AND $decode_enable, $is_LEA
+$no_decode_r     = AND $decode_enable, $is_LEA
+$switch_operands = AND $decode_enable, $is_LEA
 // - Swap ALU operands
 $switch_operands = AND $decode_enable, $is_ALU, @instr[30]
 // - Push/Swap uses swapped operands
@@ -147,6 +157,7 @@ $switch_operands = AND $decode_enable, $is_ALU, @instr[30]
 
 $decode_start = AND @stage_state[2], $is_ALU
 $decode_start = AND @stage_state[2], $is_IBRANCH
+$decode_start = AND @stage_state[2], $is_LEA
 $decode_clear = PULSE @stage_state[4]
 $decode_clear = PULSE @stage_state[0]
 
@@ -162,10 +173,62 @@ $decode_complete, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src,\
 
 // === ALU Handling ===
 $alu_data_rdy = AND $is_ALU, $decode_complete
-$alu_done, $alu_nosave, @alu_out = CPU32_ALU $alu_data_rdy, @instr[27:29], @alu_in_dst, @alu_in_src,\
-	$flags_C, $flags_O, $flags_Z, $flags_C_clear, $flags_O_clear, $flags_Z_clear
+$alu_done, $alu_nosave, @alu_out, $flags_C_clear, $flags_O_clear, $flags_Z_clear \
+	= CPU32_ALU $alu_data_rdy, @instr[27:29], @alu_in_dst, @alu_in_src,\
+	$flags_C, $flags_O, $flags_Z
 #display $alu_done "next_stage (ALUDONE)" 0
 $next_stage = PULSE $alu_done
+
+// ==============================
+// === Stage 3: Save ALU Data ===
+// ==============================
+#display @stage_state[3] "Data save" 1
+$alu_save = AND @stage_state[3], $is_ALU
+// --- Save to memory
+$_alu_save_mem = AND $alu_save, (NOT $alu_nosave), $addr_is_mem
+#display $_alu_save_mem "Memory 0x%32x = 0x%32x" @alu_addr[31:0], @alu_out[31:0]
+@mem_addr     = AND{32} $_alu_save_mem, @alu_addr
+@mem_data_out = AND{32} $_alu_save_mem, @alu_out
+$mem_write  = DELAY $_alu_save_mem
+$mem_enable = DELAY $_alu_save_mem
+$_next_stage_ALUMEMSAVE = AND $_alu_save_mem, $mem_ready
+#display $_next_stage_ALUMEMSAVE "next_stage (ALUMEMSAVE)" 0
+$next_stage = PULSE $_next_stage_ALUMEMSAVE
+// --- Save to register
+$_alu_save_reg = AND $alu_save, (NOT $alu_nosave), (NOT $addr_is_mem)
+#display $_alu_save_reg "Register 0x%4x = 0x%32x" @alu_addr[3:0], @alu_out[31:0]
+@reg_addr[3:0] = AND{4} $_alu_save_reg, @alu_addr[3:0]
+@reg_data_out = AND{32} $_alu_save_reg, @alu_out
+$reg_write = DELAY $_alu_save_reg
+$reg_enable = DELAY $_alu_save_reg
+$_next_stage_ALUREGSAVE = DELAY{4} $_alu_save_reg
+#display $_next_stage_ALUREGSAVE "next_stage (ALUREGSAVE)" 0
+$next_stage = PULSE $_next_stage_ALUREGSAVE	// wait for update :)
+// --- No writeback
+$_alu_save_none = AND $alu_save, $alu_nosave
+#display $_alu_save_none "Not saving 0x%32x" @alu_out[31:0]
+#display $_alu_save_none "next_stage (ALUNOSAVE)" 0
+$next_stage = PULSE $_alu_save_none
+
+// === ALU Done ===
+$alu_complete = AND $is_ALU, @stage_state[4]
+#display $alu_complete "ALU Complete" 1
+$next_instruction = PULSE $alu_complete
+
+// === Load Flags (LDF) ===
+@flags_clear[0:3] = AND{4} (PULSE $is_LDF), (NOT   @instr[8:11])
+@flags[0:3]       = AND{4} (PULSE $is_LDF), (DELAY @instr[0:3])
+
+$next_instruction = PULSE (DELAY{3} $is_LDF)
+
+// === Load Effective Address (LEA) ===
+$_LEA_active = AND $is_LEA, $decode_complete
+$reg_enable = PULSE $_LEA_active
+$reg_write = PULSE $_LEA_active
+@reg_addr[0:3] = AND{4} $_LEA_active, @instr[20:23]
+@reg_data_out[0:31] = AND{32} $_LEA_active, @alu_addr[0:31]
+
+$next_instruction = PULSE (DELAY{3} $_LEA_active)
 
 // === Conditional Jumps / Calls ===
 #array cond 8
@@ -234,43 +297,6 @@ $do_ijump = AND $is_IBRANCH, @stage_state[4]
 $pc_clear = DELAY $do_ijump
 @pc = AND{32} (DELAY{2} $do_ijump), @alu_in_src
 $next_instruction = DELAY{5} $do_ijump
-
-
-// ==============================
-// === Stage 3: Save ALU Data ===
-// ==============================
-#display @stage_state[3] "Data save" 1
-$alu_save = AND @stage_state[3], $is_ALU
-// --- Save to memory
-$_alu_save_mem = AND $alu_save, (NOT $alu_nosave), $addr_is_mem
-#display $_alu_save_mem "Memory 0x%32x = 0x%32x" @alu_addr[31:0], @alu_out[31:0]
-@mem_addr     = AND{32} $_alu_save_mem, @alu_addr
-@mem_data_out = AND{32} $_alu_save_mem, @alu_out
-$mem_write  = DELAY $_alu_save_mem
-$mem_enable = DELAY $_alu_save_mem
-$_next_stage_ALUMEMSAVE = AND $_alu_save_mem, $mem_ready
-#display $_next_stage_ALUMEMSAVE "next_stage (ALUMEMSAVE)" 0
-$next_stage = PULSE $_next_stage_ALUMEMSAVE
-// --- Save to register
-$_alu_save_reg = AND $alu_save, (NOT $alu_nosave), (NOT $addr_is_mem)
-#display $_alu_save_reg "Register 0x%4x = 0x%32x" @alu_addr[3:0], @alu_out[31:0]
-@reg_addr[3:0] = AND{4} $_alu_save_reg, @alu_addr[3:0]
-@reg_data_out = AND{32} $_alu_save_reg, @alu_out
-$reg_write = DELAY $_alu_save_reg
-$reg_enable = DELAY $_alu_save_reg
-$_next_stage_ALUREGSAVE = DELAY{4} $_alu_save_reg
-#display $_next_stage_ALUREGSAVE "next_stage (ALUREGSAVE)" 0
-$next_stage = PULSE $_next_stage_ALUREGSAVE	// wait for update :)
-// --- No writeback
-$_alu_save_none = AND $alu_save, $alu_nosave
-#display $_alu_save_none "Not saving 0x%32x" @alu_out[31:0]
-#display $_alu_save_none "next_stage (ALUNOSAVE)" 0
-$next_stage = PULSE $_alu_save_none
-
-// === ALU Done ===
-$alu_complete = AND $is_ALU, @stage_state[4]
-#display $alu_complete "ALU Complete" 1
-$next_instruction = PULSE $alu_complete
 
 #endunit
 

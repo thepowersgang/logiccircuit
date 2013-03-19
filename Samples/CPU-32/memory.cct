@@ -38,10 +38,10 @@ $_write_enable = AND $_data_write, $size_32
 @_data_word_in  [24:31] = AND{8} $_data_write, $size_8, (DELAY @addr[1]), (DELAY @addr[0]), @data_input[0:7]
 
 // DRAM
-// 0x10000000 0x1FFFFFFF
+// 0x10000000 0x100FFFFF
 // 
-$is_DRAM = AND (DELAY $enable), (NOT   @addr[31]), (NOT   @addr[30]), (NOT   @addr[29]), (DELAY @addr[28])
-$_data_rdy, @_data_word_out = MEMORY_DRAM{32,16} $is_DRAM, @addr[2:17], $_write_enable, @_data_word_mask, @_data_word_in
+$is_DRAM = AND (DELAY $enable), (NXOR{12,2} @addr[31:20], 0x100[11:0])
+$_data_rdy, @_data_word_out = MEMORY_DRAM{32,18} $is_DRAM, @addr[2:19], $_write_enable, @_data_word_mask, @_data_word_in
 
 // ROM area
 //  Reserved range: 0x0000 - 0xFFF

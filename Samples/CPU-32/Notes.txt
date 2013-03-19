@@ -2,6 +2,7 @@ An attempt at designing a CPU to be built using virtual logic gates
 
 32-bit opcodes, usually with 8 operation, 4+4 register, 16 operand
 All data operations are 32 bits
+- 'x' means "Don't Care" - should be zero
 
 Special Registers
 R12 - Frame Pointer (Suggested)
@@ -11,6 +12,8 @@ R15 - PIC base (suggested)
 
 TODO:
 - Shifts
+- MMU / Permission levels
+- CPUID?
 
 Normal Format:
 |---Op---|Dest Src|      Value      |

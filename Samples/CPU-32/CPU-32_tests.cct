@@ -229,4 +229,27 @@ $reg_ready = DELAY $reg_enable
 
 #endtestcase
 
+
+//#testcase 100 "CPU - LDF (clear)"
+//
+//#testassert $ins_end @
+//
+//#testcomplete $ins_end
+//#endtestcase
+
+#testcase 100 "CPU - LEA"
+
+__CPU32_TEST_WRAPPER 1
+
+#testassert $reg_enable @reg_addr[3:0] 0x8[3:0]
+#testassert $reg_enable $reg_write 1
+#testassert $reg_enable @reg_data_out[31:0] 0x00001234[31:0]
+
+$mem_ready = DELAY $mem_enable
+@mem_data_in[0:31] = AND{32} $mem_enable, 0xBE801234[0:31]
+
+#testcomplete $ins_end
+#endtestcase
+
+
 ; vim: ft=logiccircuit

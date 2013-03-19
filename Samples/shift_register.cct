@@ -16,13 +16,15 @@ $carry_out = DELAY{2} @value[0]
 @value_out[1:7] = AND{7} (DELAY $pulse), (NOT $dir_is_right), (DELAY @value[0:6])
 $carry_out = DELAY{2} @value[7]
 
+$ready = DELAY{2} $pulse
+
 #endunit
 
 
 //
 // Variable distance 8-bit shifter
 //
-#defunit SHIFT_LEFT_N_8
+#defunit SHIFT_RIGHT_N_8
 #input $pulse, @count[3], @value[8], $carry_in
 #output $ready, @value_out[8], $carry_out
 
@@ -34,11 +36,20 @@ $carry_out = DELAY{2} @value[7]
 %rep 8
  %assign j i
  %rep 8-i
-@value[i] = AND (DELAY $pulse), @count_enable[j], (DELAY @value[j])
+@value_out[i] = AND (DELAY $pulse), @count_enable[j], (DELAY @value[j])
  %assign j j+1
  %endrep
 %assign i i+1
 %endrep
+
+%assign i 1
+%rep 7
+$carry_out = AND (DELAY $pulse), @count_enable[i], (DELAY @value[i-1])
+@value[8-i] = AND (DELAY $pulse), @count_enable[i], (DELAY $carry_in)
+%assign i i+1
+%endrep
+
+$ready = DELAY{2} $pulse
 
 #endunit
 
