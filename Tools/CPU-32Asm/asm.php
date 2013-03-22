@@ -480,7 +480,7 @@ function AssembleFile($filename)
 			if( $code == "" )
 				continue ;
 
-			echo $code, " -- ", $args, "\n";
+			//echo $code, " -- ", $args, "\n";
 			
 			switch( $code )
 			{
