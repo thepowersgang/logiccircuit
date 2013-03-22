@@ -170,7 +170,7 @@ $_mr = DELAY $_me
 ; Tests [r + ri<<s +imm8s] decode
 ; - Also uses $read_r = 0 to make test simpler
 #testcase 100 "Decode - R-, [R15 + R14 << 4 + imm8s]"
-CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0x50FE4FC
+CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0x50FE9FC
 
 ; Registers
 ; - R15 = 0x00FF0000
@@ -260,7 +260,7 @@ $comp = DELAY{10} $done
 ; ---------------------------------------------------------------------
 ; Tests [PC + ri<<s +imm8s]
 #testcase 100 "Decode - R15, [PC + R14 << 4 + imm8s] (switch)"
-CPU32_ADDRESS_DECODE_BOILERPLATE 1, 1, 1, 0x7FFE4FC
+CPU32_ADDRESS_DECODE_BOILERPLATE 1, 1, 1, 0x7FFE9FC
 
 ; Registers
 ; - R15 = 0x00FF0000

@@ -26,9 +26,9 @@ ooooo001 RRRRvvvv vvvvvvvv vvvvvvvv	- R = R <op> imm20
 ooooo010 RRRRssss vvvvvvvv vvvvvvvv	- R = R <op> imm16 <<< s
 ooooo011 RRRRssss vvvvvvvv vvvvvvvv	- R = R <op> imm16s <<< s
 ooooo100 RRRRrrrr vvvvvvvv vvvvvvvv	- R = R <op> [r + imm16s]
-ooooo101 RRRRrrrr iiiissss vvvvvvvv	- R = R <op> [r + Ri << s + imm8s]
+ooooo101 RRRRrrrr iiiisssv vvvvvvvv	- R = R <op> [r + Ri << s + imm9s]
 ooooo110 RRRRxxxx vvvvvvvv vvvvvvvv	- R = R <op> [PC + imm16s]
-ooooo111 RRRRxxxx iiiissss vvvvvvvv	- R = R <op> [PC + Ri << s + imm8s]
+ooooo111 RRRRxxxx iiiisssv vvvvvvvv	- R = R <op> [PC + Ri << s + imm9s]
 
 Operations
 
@@ -63,7 +63,8 @@ Operations
 == Misc instructions
 10111000 00000000 mmmmmmmm vvvvvvvv	- LDF m, v	- Load (Set) Flags (Mask, Value)
     1000 00000001 - ?
-    1000 0000001x - ?
+    1000 00000010 RRRRrrrr odci vvvv	- <op> R, r, Rv/imm4	- Rotate/Shift {o} Left/Right {d} (Carry {c}) Rv/imm4 {i}
+    1000 00000011 - ?
     1000 000001xx - ?
     1000 00001xxx - ?
     1000 0001xxxx - ?
@@ -81,7 +82,7 @@ Operations
     0101 RRRRrrrr ssssssss ssssssss	- LDRWZ R, [r + imm16s] 	- Load 16-bits zero extended
     0110 RRRRrrrr ssssssss ssssssss	- LDRBS R, [r + imm16s] 	- Load 8-bits sign extended
     0111 RRRRrrrr ssssssss ssssssss	- LDRBZ R, [r + imm16s] 	- Load 8-bits zero extended
-    1oo0 RRRRrrrr ssssssss ssssssss	- STRB R,o, [r + imm16s]	- Store 8 bits from register
+    1oo0 RRRRrrrr ssssssss ssssssss	- STRB R.o, [r + imm16s]	- Store 8 bits from register
     1oo1 RRRRrrrr ssssssss ssssssss	- LDRB R.o, [r + imm16s]	- Load 8 bits to register
 
 1111xxxx	- ?
