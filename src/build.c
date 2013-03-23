@@ -426,8 +426,9 @@ tLink *CreateNamedLink(const char *Name)
 {
 	tLink	**first;
 	tLink	*ret, *prev = NULL;
+	tExecUnit	*unit = Build_int_GetCurExecUnit();
 
-	first = &Build_int_GetCurExecUnit()->Links;
+	first = &unit->Links;
 	
 	for(ret = *first; ret; prev = ret, ret = ret->Next )
 	{

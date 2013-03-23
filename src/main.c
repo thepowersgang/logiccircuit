@@ -10,6 +10,7 @@
 #include <ctype.h>
 #include <compiled.h>
 #include <assert.h>
+#include <filerom.h>
 
 #define PRINT_ELEMENTS	0
 
@@ -51,6 +52,10 @@ void	ResolveEleLinks(tElement *First);
 const char	*gsTestName;
  int	gbTest_ShowDisplay = 0;
  int	gbDisableTests = 0;
+// - File-backed ROMs
+ int	giNumROMFiles;
+size_t	gaROMFileSizes[MAX_FILEROMS];
+void	*gaROMFileData[MAX_FILEROMS];
 
 // === CODE ===
 int main(int argc, char *argv[])
@@ -73,6 +78,7 @@ int main(int argc, char *argv[])
 	ADD_ELEDEF(VALUESET);
 	ADD_ELEDEF(SEQUENCER);
 	ADD_ELEDEF(MEMORY_DRAM);
+	ADD_ELEDEF(FILEROM);
 	
 	// Load Circuit file(s)
 	for( int i = 1; i < argc; i ++ )
@@ -106,6 +112,23 @@ int main(int argc, char *argv[])
 				if(i + 1 == argc)	return -1;
 				ReadCompiledVersion(argv[++i], 0);
 			}
+			else if( strcmp(argv[i], "-rom") == 0 ) {
+				if(i + 1 == argc)	return -1;
+				assert(giNumROMFiles != MAX_FILEROMS);
+				FILE *fp = fopen(argv[++i], "rb");
+				if(!fp) {
+					perror("Opening ROM");
+					return -1;
+				}
+				fseek(fp, 0, SEEK_END);
+				gaROMFileSizes[giNumROMFiles] = ftell(fp);
+				assert(gaROMFileSizes[giNumROMFiles] <= MAX_ROMFILE_SIZE);
+				fseek(fp, 0, SEEK_SET);
+				gaROMFileData[giNumROMFiles] = malloc(gaROMFileSizes[giNumROMFiles]);
+				fread(gaROMFileData[giNumROMFiles], 1, gaROMFileSizes[giNumROMFiles], fp);
+				fclose(fp);
+				giNumROMFiles ++;
+			}
 			else {
 				// ERROR
 				fprintf(stderr, "Unknown option '%s'\n", argv[i]);
@@ -119,40 +142,12 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	// Print links
-	// > Scan all links and find ones that share a value pointer 
-	if( gbPrintLinks )
-	{
-		for( tLinkValue *val = gRootUnit.Values; val; val = val->Next )
-		{
-			 int	linkCount = 0;
-			printf("(tValue)%p:", val);
-			for( tLink *link = val->FirstLink; link; link = link->Next )
-			{
-				assert(link->Value == val);
-				if( link->Name[0] )
-					printf(" '%s'", link->Name);
-				else
-				#if 1
-					printf(" (tLink)%p", link);
-				#else	// HACK: Relies on change in build.c
-					printf(" '%s'", link->Name+1);
-				#endif
-				linkCount ++;
-			}
-			printf(" (Used %i times)", linkCount);
-			printf("\n");
-		}
-		
-		return 0;
-	}
-
 	// Check for links that aren't set/read
 	Sim_UsageCheck(&gRootUnit);
 	for( tUnitTemplate *tpl = gpUnits; tpl; tpl = tpl->Next )
 		Sim_UsageCheck(&tpl->Internals); 
 //	for( tTestCase *test = gpTests; test; test = test->Next )
-//		UsageCheck(&test->Internals);
+//		Sim_UsageCheck(&test->Internals);
 
 	// TODO: Support saving tree to a file
 	if( 1 ) {
@@ -216,6 +211,29 @@ int main(int argc, char *argv[])
 	printf("Compiling root...\n");
 	tExecUnit *compiled_root = Sim_CreateMesh(NULL, NULL);
 
+	// Print links
+	if( gbPrintLinks )
+	{
+		for( tLinkValue *val = compiled_root->Values; val; val = val->Next )
+		{
+			 int	linkCount = 0;
+			printf("(tValue)%p:", val);
+			for( tLink *link = val->FirstLink; link; link = link->Next )
+			{
+				assert(link->Value == val);
+				if( link->Name[0] )
+					printf(" '%s'", link->Name);
+				else
+					printf(" (tLink)%p", link);
+				linkCount ++;
+			}
+			printf(" (Used %i times)", linkCount);
+			printf("\n");
+		}
+		
+		return 0;
+	}
+	// Print statistics
 	if( gbPrintStats )
 	{
 		CompileStatistics(compiled_root);
@@ -244,14 +262,10 @@ int main(int argc, char *argv[])
 			break;	
 	
 		// Clear drivers
+		gValue_Zero.Value = 0;
+		gValue_One.Value = 1;
 		for( tLinkValue *val = compiled_root->Values; val; val = val->Next ) {
 			val->NDrivers = 0;
-			if( val == &gValue_Zero )
-				val->Value = 0;
-			if( val == &gValue_One ) {
-				val->NDrivers = 1;
-				val->Value = 1;
-			}
 		}
 
 		// === Show Display ===

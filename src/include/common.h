@@ -66,6 +66,7 @@ typedef struct sExecUnit
 	tGroupDef	*Groups;
 	 int	nLinks;
 	tLink	*Links;
+	tLink	*FirstNamedLink;
 
 	tLinkValue	*Values;
 
