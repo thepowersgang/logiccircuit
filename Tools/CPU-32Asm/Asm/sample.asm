@@ -1,7 +1,7 @@
 [org 0x0]
 _rst:	jmp rel main
 _irq:	jmp rel $
-_dabrt:	jmp rel $
+_mabrt:	jmp rel $
 _undef:	jmp rel $
 
 main:
@@ -38,3 +38,4 @@ putch:
 
 hex: dw	"0123456789abcdef"
 
+[ALIGN 0x4000]

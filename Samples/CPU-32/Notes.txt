@@ -23,8 +23,8 @@ Addressing Modes (for most commands)
  > Decoder allows order of operands to be reversed (causing op2 = op2 <op> op1)
 ooooo000 RRRRrrrr xxxxxxxx xxxxxxxx	- R = R <op> r
 ooooo001 RRRRvvvv vvvvvvvv vvvvvvvv	- R = R <op> imm20
-ooooo010 RRRRssss vvvvvvvv vvvvvvvv	- R = R <op> imm16 <<< s
-ooooo011 RRRRssss vvvvvvvv vvvvvvvv	- R = R <op> imm16s <<< s
+ooooo010 RRRRssss vvvvvvvv vvvvvvvv	- R = R <op> imm16 <<< s*2
+ooooo011 RRRRssss vvvvvvvv vvvvvvvv	- R = R <op> imm16s <<< s*2
 ooooo100 RRRRrrrr vvvvvvvv vvvvvvvv	- R = R <op> [r + imm16s]
 ooooo101 RRRRrrrr iiiisssv vvvvvvvv	- R = R <op> [r + Ri << s + imm9s]
 ooooo110 RRRRxxxx vvvvvvvv vvvvvvvv	- R = R <op> [PC + imm16s]

@@ -106,8 +106,8 @@ $_rr = DELAY{2} $_re
 ; ---------------------------------------------------------------------
 ; Tests Imm16 decode
 ; - Also uses $read_r = 0 to make test simpler
-#testcase 20 "Decode - R-, Imm16 << 5"
-CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0x2057777
+#testcase 20 "Decode - R-, Imm16 << 6"
+CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0x2037777
 
 ; No register/memory accesses allowed
 #testassert 1	$_re	0
@@ -116,7 +116,7 @@ CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0x2057777
 ; Final output
 #testassert $done  $imd 0
 #testassert $done  @dest_addr[31:0] 0[31:0]
-#testassert $done  @op2[31:0] 0x000EEEE0[31:0]
+#testassert $done  @op2[31:0] 0x001DDDC0[31:0]
 #testcomplete $done
 
 #endtestcase
@@ -125,7 +125,7 @@ CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0x2057777
 ; Tests Imm16s decode
 ; - Also uses $read_r = 0 to make test simpler
 #testcase 20 "Decode - R-, Imm16s << 12"
-CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0x30C8777
+CPU32_ADDRESS_DECODE_BOILERPLATE 0, 0, 1, 0x3068777
 
 ; No register/memory accesses allowed
 #testassert 1	$_re	0

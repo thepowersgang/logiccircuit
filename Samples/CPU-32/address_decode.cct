@@ -97,11 +97,10 @@ $op_2_read_set = DELAY $reading_Ri20
 @op_2[19:0] = AND{20} $reading_Ri20, @instr[19:0]
 
 ; Ri16 / Rs16
-; - This can use ROTATE because 16 bits shifted by 2^^4-1 will not wrap in a 32-bit container
 $reading_Ri16 = AND $pulse, $is_op_Ri16
 $reading_Ri16 = AND $pulse, $is_op_Rs16
 $_Ri16_sign = AND $is_op_Rs16, @instr[15]
-$op_2_read_set, @op_2[0:31] = ROTATE_LEFT_N_32 $reading_Ri16, @instr[16:19],0, @instr[0:15],$_Ri16_sign*16
+$op_2_read_set, @op_2[0:31] = ROTATE_LEFT_N_32 $reading_Ri16, 0,@instr[16:19], @instr[0:15],$_Ri16_sign*16
 
 #array _mem_add_op1 32
 #array _mem_add_op2 32

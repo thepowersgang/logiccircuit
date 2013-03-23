@@ -126,7 +126,7 @@ $is_BRANCH  = AND $decode_enable, (NXOR{3,2} @instr[31:29], 0b100[2:0])
 ; 1010xmmm xxxxxxxx	- Indirect Branch
 $is_IBRANCH = AND $decode_enable, (NXOR{4,2} @instr[31:28], 0b1010[3:0])
 ; 10110mmm 000xxxxx	- Push/Pop
-;$is_PUSHPOP = AND $decode_enable, (NXOR{8,2} @instr[31:27],@instr[23:21], 0b01100000[7:0])
+$is_PUSHPOP = AND $decode_enable, (NXOR{8,2} @instr[31:27],@instr[23:21], 0b01100000[7:0])
 ; 10110mmm 001xxxxx	- BSWAP[W]
 ;$is_BSWAP   = AND $decode_enable, (NXOR{8,2} @instr[31:27],@instr[23:21], 0b01100001[7:0])
 ; 10111000 00000000	- Load Flags
@@ -139,6 +139,7 @@ $is_LEA     = AND $decode_enable, (NXOR{6,2} @instr[31:26], 0b101111[5:0])
 // === Handle Undefined Opcodes ===
 $is_UNDEF = AND (DELAY{2} $decode_enable), (NOR $is_ALU, $is_BRANCH, $is_IBRANCH, $is_LDF, $is_LEA)
 #display $is_UNDEF "UNDEFINED INSTRUCTION!" 0
+#breakpoint $is_UNDEF "#UD"
 ; $next_instruction = AND @stage_state[1], $is_UNDEF
 
 // === Address/Operand Decoding ===
@@ -171,7 +172,7 @@ $decode_complete, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src,\
 #display $decode_complete "@alu_in_dst = %32x" @alu_in_dst[31:0]
 #display $decode_complete "@alu_in_src = %32x" @alu_in_src[31:0]
 
-// === ALU Handling ===
+// === Stage 2.5 ALU Core ===
 $alu_data_rdy = AND $is_ALU, $decode_complete
 $alu_done, $alu_nosave, @alu_out, $flags_C_clear, $flags_O_clear, $flags_Z_clear \
 	= CPU32_ALU $alu_data_rdy, @instr[27:29], @alu_in_dst, @alu_in_src,\
@@ -179,9 +180,7 @@ $alu_done, $alu_nosave, @alu_out, $flags_C_clear, $flags_O_clear, $flags_Z_clear
 #display $alu_done "next_stage (ALUDONE)" 0
 $next_stage = PULSE $alu_done
 
-// ==============================
 // === Stage 3: Save ALU Data ===
-// ==============================
 #display @stage_state[3] "Data save" 1
 $alu_save = AND @stage_state[3], $is_ALU
 // --- Save to memory

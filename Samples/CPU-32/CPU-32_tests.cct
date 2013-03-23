@@ -251,5 +251,39 @@ $mem_ready = DELAY $mem_enable
 #testcomplete $ins_end
 #endtestcase
 
+//
+//
+//
+#testcase 300 "CPU - Memory Read/Write (0x10100000)"
+__CPU32_TEST_WRAPPER 1
+#array stage 6
+@stage = SEQUENCER{6} 1, 0, $mem_ready
+
+$reg_ready,@reg_data_in = REGISTER_BANK_16_32 $reg_enable,@reg_addr,$reg_write,@reg_data_out
+$mem_ready = PULSE $mem_enable
+
+@mem_data_in[0:31] = AND{32} @stage[0], $mem_enable, 0x020A0101[0:31] ;	MOV R0, 0x101<<20
+#testassert @stage[0],$mem_enable @mem_addr[0:31] 0x00000000[0:31]
+#testassert @stage[0],$mem_enable $mem_write 0
+#testassert @stage[1],$reg_enable $reg_write 1
+#testassert @stage[1],$reg_enable @reg_data_out[0:31] 0x10100000[0:31]
+@mem_data_in[0:31] = AND{32} @stage[1], $mem_enable, 0x04100004[0:31] ;	MOV R1, [R0+4]
+#testassert @stage[1],$mem_enable @mem_addr[0:31] 0x00000004[0:31]
+#testassert @stage[1],$mem_enable $mem_write 0
+@mem_data_in[0:31] = AND{32} @stage[2], $mem_enable, 0x12345678[0:31] ;	0x12345678 = [R0+4]
+#testassert @stage[2],$mem_enable @mem_addr[0:31] 0x10100004[0:31]
+#testassert @stage[2],$mem_enable $mem_write 0
+@mem_data_in[0:31] = AND{32} @stage[3], $mem_enable, 0x44100000[0:31] ;	MOV [R0], R1
+#testassert @stage[3],$mem_enable @mem_addr[0:31] 0x00000008[0:31]
+#testassert @stage[3],$mem_enable $mem_write 0
+                                                                      ; [R0] = 0x12345678
+#testassert @stage[4],$mem_enable @mem_data_out[0:31] 0x12345678[0:31]
+#testassert @stage[4],$mem_enable @mem_addr[0:31] 0x10100000[0:31]
+#testassert @stage[4],$mem_enable $mem_write 1
+
+#testcomplete @stage[5]
+
+#endtestcase
+
 
 ; vim: ft=logiccircuit

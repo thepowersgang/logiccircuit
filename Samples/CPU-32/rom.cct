@@ -11,11 +11,11 @@ $_en = AND (DELAY $enable), (NOR @addr[5:11])
 $ready = DELAY{2} $_en
 
 // - Address is in 32-bit words
-@data_out[0:31] = AND{32} @ROM_select[0x0000], 0x11131337[0:31]	; OR R1, 0x31337
-@data_out[0:31] = AND{32} @ROM_select[0x0001], 0x010FFFFF[0:31]	; MOV R0, 0xFFFFF
-@data_out[0:31] = AND{32} @ROM_select[0x0002], 0x21000001[0:31]	; ADD R0, 0x00001
-@data_out[0:31] = AND{32} @ROM_select[0x0003], 0x8EFFFFFD[0:31]	; JMP .-3*4
-@data_out[0:31] = AND{32} @ROM_select[0x0004], 0x00000000[0:31]	; NOP
+@data_out[0:31] = AND{32} @ROM_select[0x0000], 0x8E000003[0:31]	; JMP +3	- RST
+@data_out[0:31] = AND{32} @ROM_select[0x0001], 0x8EFFFFFF[0:31]	; JMP -1	- IRQ
+@data_out[0:31] = AND{32} @ROM_select[0x0002], 0x8EFFFFFF[0:31]	; JMP -1	- PF
+@data_out[0:31] = AND{32} @ROM_select[0x0003], 0x8EFFFFFF[0:31]	; JMP -1	- UD
+@data_out[0:31] = AND{32} @ROM_select[0x0004], 0x02DA0101[0:31]	; MOV R13, 0x101<<10*2
 @data_out[0:31] = AND{32} @ROM_select[0x0005], 0x00000000[0:31]	; NOP
 @data_out[0:31] = AND{32} @ROM_select[0x0006], 0x00000000[0:31]	; NOP
 @data_out[0:31] = AND{32} @ROM_select[0x0007], 0x00000000[0:31]	; NOP

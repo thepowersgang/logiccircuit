@@ -297,11 +297,11 @@ function AppendMMM($str, $validmask = 0xFF)
 		else
 		{
 			$val = $const;
-			for( $shift = 1; $shift < 32 && !($val & 1); $shift ++ )
+			for( $shift = 2; $shift < 32 && !($val & 3); $shift += 2 )
 			{
-				$val >>= 1;
-				if( $val < (1<<15) ) {
-					$rv = (0x02<<24) | ($shift << 16) | ($val);
+				$val >>= 2;
+				if( ValueFitsInBits($val, 16, false) ) {
+					$rv = (0x02<<24) | ($shift/2 << 16) | ($val);
 					break;
 				}
 			}
@@ -438,6 +438,7 @@ function ParseNWLS($maxOfs, $args)
 function AssembleFile($filename)
 {
 	global $gFile, $gLine;
+	global $gCodepos;
 	
 	$gFile = $filename;
 	$gLine = 0;
@@ -453,8 +454,15 @@ function AssembleFile($filename)
 		if( $line == "" )
 			continue ;
 
-		if( preg_match('~^\[(.*)\]$~', $line, $m) )
+		if( preg_match('~^\[\s*(.*)\s*\]$~', $line, $m) )
 		{
+			$meta = $m[1];
+			if( preg_match('~^ALIGN (0x[0-9A-F]+|0[0-7]*|[1-9]\d*)$~', $meta, $m) )
+			{
+				$count = intval($m[1], 0);
+				while( $gCodepos % ($count/4) != 0 )
+					AppendCode(0);
+			}
 			// TODO: ORG etc
 			continue;
 		}
@@ -614,7 +622,7 @@ foreach($gRelocations as $reloc)
 $fp = fopen($OUTFILE, "wb");
 foreach($gCode as $dword)
 {
-	printf("%08x ", $dword);
+//	printf("%08x ", $dword);
 	fwrite($fp, pack("V", $dword));
 }
 echo "\n";

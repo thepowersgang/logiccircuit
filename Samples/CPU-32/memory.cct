@@ -46,7 +46,8 @@ $_data_rdy, @_data_word_out = MEMORY_DRAM{32,18} $is_DRAM, @addr[2:19], $_write_
 // ROM area
 //  Reserved range: 0x0000 - 0xFFF
 $is_ROM  = AND (DELAY $enable), (NOT   @addr[31]), (NOT   @addr[30]), (NOT   @addr[29]), (NOT   @addr[28])
-$_data_rdy, @_data_word_out = CPU32ROM_LL $is_ROM, @addr[2:13] ;, $_write_enable, @_data_word_mask, @_data_word_in
+;$_data_rdy, @_data_word_out = FILEROM{32,12,0} $is_ROM, @addr[2:13]
+$_data_rdy, @_data_word_out = CPU32ROM_LL $is_ROM, @addr[2:13]
 
 // 32-bit output
 $fault_ac = AND $size_32, (OR @addr[0], @addr[1])
@@ -71,15 +72,15 @@ $ready = DELAY $_data_rdy
 #testcase 20 "Memory - 32-bit aligned"
 #array out	32
 $rdy, @out, $fault = MEMORY_SPACE 1, 0[0:31], 0, 0xFFFFFFFF[0:31], 0[0:1]
-#testassert $rdy @out[0:31] 0x11131337[0:31]
+#testassert $rdy @out[0:31] 0x8E000003[0:31]
 #testassert $rdy $fault 0
 #testcomplete $rdy
 #endtestcase
 
 #testcase 20 "Memory - 32-bit aligned NZ"
 #array out	32
-$rdy, @out, $fault = MEMORY_SPACE 1, 0x0C[0:31], 0, 0xFFFFFFFF[0:31], 0[0:1]
-#testassert $rdy @out[0:31] 0x8EFFFFFD[0:31]
+$rdy, @out, $fault = MEMORY_SPACE 1, 0x04[0:31], 0, 0xFFFFFFFF[0:31], 0[0:1]
+#testassert $rdy @out[0:31] 0x8EFFFFFF[0:31]
 #testassert $rdy $fault 0
 #testcomplete $rdy
 #endtestcase
