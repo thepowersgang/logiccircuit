@@ -17,7 +17,7 @@ typedef struct
  * Parameters:
  * - 0: Bus Size (Defaults to 1)
  *  - Determines the number of trailing lines that are treated as a bus
- * - 1: Bus Count (Defaults to 1) - UNIMPLEMENTED
+ * - 1: Bus Count (Defaults to 1)
  *  - Determines the number of busses at the end of input
  */
 static tElement *_Create(int NParams, int *Params, int NInputs)
@@ -51,12 +51,14 @@ static tElement *_Create(int NParams, int *Params, int NInputs)
 	t_info *info = Ele->Info; \
 	base = Ele->NInputs - Ele->NOutputs*info->BusCount; \
 	for( i = 0; i < base; i++ ) {\
-		out = out __operation (!!GetLink(Ele->Inputs[i])); \
+		out = out __operation GetLink(Ele->Inputs[i]); \
 	} \
 	for( j = 0; j < Ele->NOutputs; j ++ ) { \
 		 int	outTmp = out; \
+		 int	ofs = base + j; \
 		for(i = 0; i < info->BusCount; i ++) { \
-			outTmp = outTmp __operation (!!GetLink(Ele->Inputs[base+i*Ele->NOutputs+j])); \
+			outTmp = outTmp __operation GetLink(Ele->Inputs[ofs]); \
+			ofs += Ele->NOutputs; \
 		} \
 		if( outTmp == !(__invert) ) \
 			RaiseLink(Ele->Outputs[j]); \

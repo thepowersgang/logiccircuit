@@ -401,20 +401,12 @@ void Sim_FreeMesh(tExecUnit *Unit)
 
 void Sim_RunStep(tExecUnit *Unit)
 {
-	for( tLink *link = Unit->Links; link; link = link->Next )
+	gValue_One.Value = 1;
+	gValue_Zero.Value = 0;
+	for( tLinkValue *val = Unit->Values; val; val = val->Next )
 	{
-		assert(link != link->Next);
-		link->Value->NDrivers = 0;
-		if( link->Name[0] == '1' )
-		{
-			link->Value->Value = 1;
-			link->Value->NDrivers = 1;
-		}
-		else if( link->Name[0] == '0' )
-		{
-			link->Value->Value = 0;
-			link->Value->NDrivers = 0;
-		}
+		assert(val != val->Next);
+		val->NDrivers = 0;
 	}
 	
 	// === Update elements ===
@@ -425,25 +417,15 @@ void Sim_RunStep(tExecUnit *Unit)
 	}
 	
 	// Set values
-	for( tLink *link = Unit->Links; link; link = link->Next )
+	gValue_One.Value = 1;
+	gValue_One.NDrivers = 1;
+	gValue_Zero.Value = 0;
+	gValue_Zero.NDrivers = 0;
+	for( tLinkValue *val = Unit->Values; val; val = val->Next )
 	{
-		assert(link != link->Next);
+		assert(val != val->Next);
 		
-		// Ensure 0 and 1 stay as 0 and 1
-		if( link->Value == &gValue_One )
-		{
-			link->Value->Value = 1;
-			link->Value->NDrivers = 1;
-		}
-		else if( link->Value == &gValue_Zero )
-		{
-			link->Value->Value = 0;
-			link->Value->NDrivers = 0;
-		}
-		else
-		{
-			link->Value->Value = !!link->Value->NDrivers;
-		}
+		val->Value = (val->NDrivers != 0);
 	}
 }
 

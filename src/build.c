@@ -10,6 +10,7 @@
 #include <assert.h>
 
 #define	USE_LINKS	1
+#define SORTED_LINK_LIST	1
 
 // === PROTOTYPES ===
 void	Link_Ref(tLink *Link);
