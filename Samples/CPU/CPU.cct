@@ -63,7 +63,7 @@ $clock = CLOCK{128}
 #array reg_ %+ i %+ _value NUM_GPR_BITS
 #array reg_ %+ i %+ _newvalue NUM_GPR_BITS
 // Actual Register
-$reg_ %+ i %+ _ready, @reg_ %+ i %+ _value = MEMORY_BYTE 1, $reg_ %+ i %+ _write, @reg_ %+ i %+ _newvalue
+$NULL, @reg_ %+ i %+ _value = MEMORY_BYTE 1, $reg_ %+ i %+ _write, @reg_ %+ i %+ _newvalue
 
 $reg_ %+ i %+ _write = AND @reg_select[i], (DELAY $reg_write)	// Get global Write signal
 $reg_ready = DELAY{delayof_MEMORY_WORD} @reg_select[i]	// Set global ready signal
@@ -129,7 +129,7 @@ $reg_pc_invalidate = $increment_pc	// Invalidate PC when increment is called
 // Add 1 to the PC register (if $increment_pc is set)
 // - Assigning to reg_pc_(write|out) causes it to update the register
 //   once done
-$reg_pc_write, @reg_pc_out, $NULL = ADDER_16BIT $increment_pc, @reg_pc_in, (CONST{16,0x0001} 1), 0
+$reg_pc_write, @reg_pc_out, $NULL = ADDER_16BIT $increment_pc, @reg_pc_in, 0x0001[0:15], 0
 $reg_pc_valid = DELAY{6} $reg_pc_write	// TODO: Fine tune this to the write delay of a word register
 $reg_pc_valid = PULSE 1	// Raise at CPU init
 $NULL, $reg_pc_valid  = LATCH 1, $reg_pc_invalidate, $reg_pc_valid
@@ -146,9 +146,10 @@ $addr_clear  = DELAY @stage_state[0]	// Clear the address cache
 // - Memory read will update the stage to #2
 // - ANDing with $reg_pc_valid causes the read to not be attempted until
 //   PC is marked as valid
-@mem_addr = PULSE (AND{NUM_ADDR_BITS} @stage_state[0], $reg_pc_valid, @reg_pc_in)	// Set memory address to PC
-$mem_enable   = PULSE (AND @stage_state[0], $reg_pc_valid)	// Enable memory for read
-$increment_pc = PULSE (AND @stage_state[0], $reg_pc_valid)	// Increment the program counter too
+$_readop_mem_emable = PULSE (AND @stage_state[0], $reg_pc_valid)
+@mem_addr = AND{NUM_ADDR_BITS} $_readop_mem_emable, @reg_pc_in	// Set memory address to PC
+$mem_enable   = DELAY $_readop_mem_emable	// Enable memory for read
+$increment_pc = DELAY $_readop_mem_emable	// Increment the program counter too
 
 // === STAGE1 - Instruction fetched, save in latch ===
 #display @stage_state[1] "Instruction Save" 1
@@ -444,7 +445,7 @@ $next_instruction = PULSE (AND $is_CLC, @stage_state[2])
 
 // --- STC ---
 #display $is_STC "Op - STC" 1
-$flags_C = AND $is_SRC, @stage_state[2]
+$flags_C = AND $is_STC, @stage_state[2]
 $next_instruction = PULSE (AND $is_CLC, @stage_state[2])
 
 // --- LDI ---

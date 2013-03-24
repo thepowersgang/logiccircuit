@@ -9,8 +9,6 @@
 #input $enable, @addr[16], $data_write, @data_input[8]
 #output $ready, @data_output[8]
 
-#array ROM_select	16
-
 ;#display $enable "Memory Addr" @addr
 ;#display $is_ROM "ROM Select " @ROM_select
 ;#display $ready "Memory Out " @data_output
@@ -20,37 +18,38 @@
 ;#display $is_ROM "ROM 0x001?    " @ROM_select[1]
 
 // ROM area
-//  Reserved range: 0xF000 - 0xFFFF
+//  Reserved range: 0x0000 - 0x0FFF
 //  Size: 16 bytes
-$is_ROM = AND (DELAY $enable), (NOT   @addr[15]), (NOT   @addr[14]), (NOT   @addr[13]), (NOT   @addr[12])
+#array ROM_select	16
+$is_ROM = AND $enable, (XNOR{4,2} @addr[15:12],0x0[3:0])
 @ROM_select = DEMUX{4} $is_ROM, (DELAY{2} @addr[0:3])
 
-%macro _ROM_BYTE 2
- %assign i 7
- %rep 8
-  %if %2 & 1 << i
-@data_output[i] = DELAY @ROM_select[%1]
-  %endif
-  %assign i i-1
- %endrep
-%endmacro
-
 // === ROM Contents ===
-_ROM_BYTE 0x00, 0x58	; JMP 0x0000
-_ROM_BYTE 0x01, 0x00	;
-_ROM_BYTE 0x02, 0x00	;
-
-;_ROM_BYTE 0x00, 0x7C	; LDI A, 0x80
-;_ROM_BYTE 0x01, 0x80	;
-;_ROM_BYTE 0x02, 0x11	; MOV r1, A
-;_ROM_BYTE 0x03, 0x7D	; LAI X, 0xF000
-;_ROM_BYTE 0x04, 0x00	;
-;_ROM_BYTE 0x05, 0xF0	;
-;_ROM_BYTE 0x06, 0x50	; JMP .+0xFE
-;_ROM_BYTE 0x07, 0xFE	;
+%assign romofs 0
+%macro _ROM_BYTE 1
+@data_output[0:7] = AND{8} @ROM_select[romofs], %1[0:7]
+%assign romofs romofs+1
+%endmacro
+_ROM_BYTE 0x58 ; JMP 0x00
+_ROM_BYTE 0x00
+_ROM_BYTE 0x00
+_ROM_BYTE 0x7C ; LDI A, 0x80
+_ROM_BYTE 0x80
+_ROM_BYTE 0x11 ; MOV R1, A
+_ROM_BYTE 0x7D ; LAI X, 0xF000
+_ROM_BYTE 0x00
+_ROM_BYTE 0xF0
+_ROM_BYTE 0x50 ; JMP .+0xFE
+_ROM_BYTE 0xFE
 // === / ===
 
 // 1 delay for DEMUX, 1 for data
 $ready = DELAY{2} $is_ROM
 
+// DRAM 0x8000 - 0xFFFF
+$is_DRAM = AND $enable, @addr[15]
+$ready, @data_output = MEMORY_DRAM{8,15} $is_DRAM, @addr[0:14], $data_write, 0xFF[0:7], @data_input
+
 #endunit
+
+; vim: ft=logiccircuit
