@@ -139,8 +139,8 @@ $ready_first, @_ret_low, $carry_mid = ADDER_4BIT_RIPPLE $enable, @val1[0:3], @va
 $NULL, @_ret_hi_0, $carry_0 = ADDER_4BIT_RIPPLE $enable, @val1[4:7], @val2[4:7], 0
 $NULL, @_ret_hi_1, $carry_1 = ADDER_4BIT_RIPPLE $enable, @val1[4:7], @val2[4:7], 1
 @ret[0:3]  = AND{4} (DELAY $ready_first), (DELAY @_ret_low)
-@ret[4:7]  = AND{4} (DELAY $ready_first), (MUX{1,4} $carry_mid, @_ret_hi_0, @_ret_hi_1)
-$carry_out = AND (DELAY $ready_first), (MUX $carry_mid, $carry_0, $carry_1)
+@ret[4:7]  = AND{4} (DELAY $ready_first), (MUX{1,4} 1, $carry_mid, @_ret_hi_0, @_ret_hi_1)
+$carry_out = AND (DELAY $ready_first), (MUX 1, $carry_mid, $carry_0, $carry_1)
 $ready = DELAY{2} $ready_first
 
 #endunit
@@ -158,8 +158,8 @@ $ready_first, @_ret_low, $carry_mid = ADDER_8BIT $enable, @val1[0:7], @val2[0:7]
 $NULL, @_ret_hi_0, $carry_0 = ADDER_8BIT $enable, @val1[8:15], @val2[8:15], 0
 $NULL, @_ret_hi_1, $carry_1 = ADDER_8BIT $enable, @val1[8:15], @val2[8:15], 1
 @ret[0:7]  = AND{8} (DELAY $ready_first), (DELAY @_ret_low)
-@ret[8:15] = AND{8} (DELAY $ready_first), (MUX{1,8} $carry_mid, @_ret_hi_0, @_ret_hi_1)
-$carry_out = AND (DELAY $ready_first), (MUX $carry_mid, $carry_0, $carry_1)
+@ret[8:15] = AND{8} (DELAY $ready_first), (MUX{1,8} 1, $carry_mid, @_ret_hi_0, @_ret_hi_1)
+$carry_out = AND (DELAY $ready_first), (MUX 1, $carry_mid, $carry_0, $carry_1)
 $ready = DELAY{2} $ready_first
 
 #endunit
@@ -178,8 +178,8 @@ $ready_first, @_ret_low, $carry_mid = ADDER_16BIT $enable, @val1[0:bits/2-1], @v
 $NULL, @_ret_hi_0, $carry_0 = ADDER_16BIT $enable, @val1[bits/2:bits-1], @val2[bits/2:bits-1], 0
 $NULL, @_ret_hi_1, $carry_1 = ADDER_16BIT $enable, @val1[bits/2:bits-1], @val2[bits/2:bits-1], 1
 @ret[0:bits/2-1]  = AND{bits/2} (DELAY $ready_first), (DELAY @_ret_low)
-@ret[bits/2:bits-1] = AND{bits/2} (DELAY $ready_first), (MUX{1,bits/2} $carry_mid, @_ret_hi_0, @_ret_hi_1)
-$carry_out = AND (DELAY $ready_first), (MUX $carry_mid, $carry_0, $carry_1)
+@ret[bits/2:bits-1] = AND{bits/2} (DELAY $ready_first), (MUX{1,bits/2} 1, $carry_mid, @_ret_hi_0, @_ret_hi_1)
+$carry_out = AND (DELAY $ready_first), (MUX 1, $carry_mid, $carry_0, $carry_1)
 $ready = DELAY{2} $ready_first
 
 #endunit

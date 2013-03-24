@@ -27,7 +27,9 @@ static tElement *_Create(int NParams, int *Params, int NInputs)
 	if( bits < 1 )	bits = 1;
 	if( busSize < 1 )	busSize = 1;
 	
-	if( NInputs != bits + (1 << bits)*busSize ) {
+	 int	exp_inputs = 1 + bits + (1 << bits)*busSize;
+	if( NInputs != exp_inputs ) {
+		printf("Input count invalid (%i != %i)\n", NInputs, exp_inputs);
 		return NULL;
 	}
 	
@@ -42,19 +44,26 @@ static tElement *_Create(int NParams, int *Params, int NInputs)
 static void _Update(tElement *Ele)
 {
 	t_info	*info = Ele->Info;
-	 int	val = 0;
-	
+	unsigned int	val = 0;
+	const int	first_sel_bit = 1;
+	const int	first_data_bit = first_sel_bit + info->Bits;
+
+	if( !GetLink(Ele->Inputs[0]) )
+		return ;
+
 	// Parse inputs as a binary stream
 	for( int i = 0; i < info->Bits; i ++ )
 	{
-		if( GetLink(Ele->Inputs[i]) )
+		if( GetLink(Ele->Inputs[first_sel_bit+i]) )
 			val |= 1 << i;
 	}
+	
+	const int data_start = first_data_bit + val*Ele->NOutputs;
 	
 	// If ENABLE, drive output
 	for( int i = 0; i < Ele->NOutputs; i ++)
 	{
-		if( GetLink(Ele->Inputs[info->Bits + val*Ele->NOutputs + i]) )
+		if( GetLink(Ele->Inputs[data_start + i]) )
 			RaiseLink(Ele->Outputs[i]);
 	}
 }
