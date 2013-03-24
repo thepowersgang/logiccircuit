@@ -4,3 +4,5 @@
 *.swo
 logic_cct
 src/obj/
+
+callgrind.*
