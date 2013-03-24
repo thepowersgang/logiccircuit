@@ -167,7 +167,8 @@ int main(int argc, char *argv[])
 			 int	steps_elapsed = 0;
 			 int	bFailure = 0;
 
-			if( gsTestName && strcmp(test->Name, gsTestName) != 0 )
+			//if( gsTestName && strcmp(test->Name, gsTestName) != 0 )
+			if( gsTestName && fnmatch(gsTestName, test->Name, 0) != 0 )
 				continue ;
 
 			nTests ++;
