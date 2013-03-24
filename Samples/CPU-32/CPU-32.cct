@@ -115,10 +115,10 @@ next_stage OPRDY, "next_stage (OPRDY)", AND @stage_state[0], $mem_ready
 $increment_pc = PULSE @stage_state[1]	// Increment the program counter too
 @pc_inc_value[0:31] = AND{32} (NOT $alt_pc_inc_value), 4[0:31]
 $_pc_clear, @_pc_new, $NULL = ADDER_32BIT $increment_pc, @pc, @pc_inc_value, 0
-#display $pc_clear "_pc_new = %32x" @_pc_new[0:31]
-$pc_clear = DELAY $_pc_clear
-@pc_new = DELAY{2} @_pc_new
 // Write back
+$pc_clear = DELAY $_pc_clear
+#display $pc_clear "_pc_new = %32x" @_pc_new[0:31]
+@pc_new = DELAY{2} @_pc_new
 ; Don't move to decode until PC is updated
 next_stage PCCLR, "next_stage (PCCLR)", DELAY $_pc_clear
 
@@ -146,6 +146,7 @@ $is_PUSHPOP = AND $decode_enable, (NXOR{8,2} @instr[31:27],@instr[23:21], 0b0110
 $is_LDF     = AND $decode_enable, (NXOR{16,2} @instr[31:16], 0xB800[15:0])
 ; 10111000 00000001 00000000	- MCR
 $is_MCR     = AND $decode_enable, (XNOR{24,2} @instr[31:8], 0xB80100[23:0])
+; 10111000 00000001 00000001	- MRC
 $is_MRC     = AND $decode_enable, (XNOR{24,2} @instr[31:8], 0xB80101[23:0])
 ; 101111mm	- LEA R, op2
 $is_LEA     = AND $decode_enable, (NXOR{6,2} @instr[31:26], 0b101111[5:0])
@@ -153,7 +154,8 @@ $is_LEA     = AND $decode_enable, (NXOR{6,2} @instr[31:26], 0b101111[5:0])
 ;$is_NONWLS  = AND $decode_enable, (NXOR{4,2} @instr[31:28], 0b1100[3:0])
 
 // === Handle Undefined Opcodes ===
-$is_UNDEF = AND (DELAY{2} $decode_enable), (NOR $is_ALU, $is_BRANCH, $is_IBRANCH, $is_LDF, $is_LEA, $is_MRC)
+$is_invl = NOR $is_ALU, $is_BRANCH, $is_IBRANCH, $is_LDF, $is_MRC, $is_MCR, $is_LEA
+$is_UNDEF = AND (DELAY{2} $decode_enable), $is_invl
 #display $is_UNDEF "UNDEFINED INSTRUCTION!" 0
 #breakpoint $is_UNDEF "#UD"
 ; - Set CRs
@@ -234,7 +236,10 @@ next_instruction ALUCOMPLETE, "next_instruction (ALU Complete)", AND $is_ALU, @s
 next_instruction LDF, "next_instruction (LDF)", DELAY{3} $is_LDF
 
 // === MCR ===
-;@reg_addr[0:3] = AND{4} $is_MCR, @instr[0:3]
+$reg_enable = DELAY $is_MCR
+@reg_addr[0:3] = AND{4} $is_MCR, @instr[0:3]
+;$NULL*64,@cr2,@cr3,$NULL*384 = DEMUX{4,32} (AND{4} $reg_ready, $is_MCR, @instr[7:4]), (DELAY @reg_data_in)
+next_instruction MCR, "next_instruction (MCR)", DELAY{2} (AND $reg_ready, $is_MCR)
 
 // === MRC ===
 @reg_addr[0:3] = AND{4} $is_MRC, @instr[0:3]
