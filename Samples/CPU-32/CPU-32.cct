@@ -197,18 +197,16 @@ $decode_complete, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src,\
 #display $decode_complete "@alu_in_dst = %32x" @alu_in_dst[31:0]
 #display $decode_complete "@alu_in_src = %32x" @alu_in_src[31:0]
 
-// === Stage 2.5 ALU Core ===
+// --- Stage 2.5 ALU Core ---
 $alu_data_rdy = AND $is_ALU, $decode_complete
 $alu_done, $alu_nosave, @alu_out, $flags_C_clear, $flags_O_clear, $flags_Z_clear \
 	= CPU32_ALU $alu_data_rdy, @instr[27:29], @alu_in_dst, @alu_in_src,\
 	$flags_C, $flags_O, $flags_Z
-#display $alu_done "next_stage (ALUDONE)" 0
-$next_stage = PULSE $alu_done
-
-// === Stage 3: Save ALU Data ===
+next_stage ALUDONE, "next_stage (ALUDONE)", $alu_done
+// --- Stage 3: Save ALU Data ---
 #display @stage_state[3] "Data save" 1
 $alu_save = AND @stage_state[3], $is_ALU
-// --- Save to memory
+// - Save to memory
 $_alu_save_mem = AND $alu_save, (NOT $alu_nosave), $addr_is_mem
 #display $_alu_save_mem "Memory 0x%32x = 0x%32x" @alu_addr[31:0], @alu_out[31:0]
 @mem_addr     = AND{32} $_alu_save_mem, @alu_addr
@@ -216,7 +214,7 @@ $_alu_save_mem = AND $alu_save, (NOT $alu_nosave), $addr_is_mem
 $mem_write  = DELAY $_alu_save_mem
 $mem_enable = DELAY $_alu_save_mem
 next_stage ALUMEMSAVE, "next_stage (ALUMEMSAVE)", AND $_alu_save_mem, $mem_ready
-// --- Save to register
+// - Save to register
 $_alu_save_reg = AND $alu_save, (NOT $alu_nosave), (NOT $addr_is_mem)
 #display $_alu_save_reg "Register 0x%4x = 0x%32x" @alu_addr[3:0], @alu_out[31:0]
 @reg_addr[3:0] = AND{4} $_alu_save_reg, @alu_addr[3:0]
@@ -224,11 +222,10 @@ $_alu_save_reg = AND $alu_save, (NOT $alu_nosave), (NOT $addr_is_mem)
 $reg_write = DELAY $_alu_save_reg
 $reg_enable = DELAY $_alu_save_reg
 next_stage ALUREGSAVE, "next_stage (ALUREGSAVE)", DELAY{4} $_alu_save_reg
-// --- No writeback
+// - No writeback
 next_stage ALUNOSAVE, "next_stage (ALUNOSAVE)", AND $alu_save, $alu_nosave
 #display $_next_stage_ALUNOSAVE "Not saving 0x%32x" @alu_out[31:0]
-
-// === ALU Done ===
+// --- ALU Done ---
 next_instruction ALUCOMPLETE, "next_instruction (ALU Complete)", AND $is_ALU, @stage_state[4]
 
 // === Load Flags (LDF) ===
@@ -275,19 +272,13 @@ $condition_true = AND @cond[6], (NOR $flags_C, $flags_Z)	; CF=0,ZF=0
 $condition_true = DELAY @cond[7]
 $_jump_cond = XOR $condition_true, $cond_inverse
 
-$_next_stage_JMPDEC = DELAY{4} $is_BRANCH
-#display $_next_stage_JMPDEC "next_stage (JMPDEC)" 0
-$next_stage = PULSE $_next_stage_JMPDEC
-
+next_stage JMPDEC, "next_stage (JMPDEC)", DELAY{4} $is_BRANCH
 next_stage IJMPDEC, "next_stage (IJMPDEC)", AND $is_IBRANCH, $decode_complete
 
 #display @stage_state[3] "%1i(_jump_cond) = %1i(condition_true) ^ %1i(cond_inverse)" $_jump_cond, $condition_true, $cond_inverse
 
 // - Not branching? Next instruction
-$_ni_NOJMP = AND @stage_state[3], $is_BRANCH, (NOT $_jump_cond)
-$_ni_NOJMP = AND @stage_state[3], $is_IBRANCH, (NOT $_jump_cond)
-#display $_ni_NOJMP "Next Instruction (Not Jumping)" 0
-$next_instruction = PULSE $_ni_NOJMP
+next_instruction NOJMP, "next_instruction (Not Jumping)", AND @stage_state[3], (OR $is_IBRANCH, $is_BRANCH), (NOT $_jump_cond)
 
 // - Just branch, next stage
 next_stage JMP,  "next_stage (JMP)",  AND @stage_state[3], $is_BRANCH, $_jump_cond, $cond_jump
@@ -298,9 +289,7 @@ $_do_call = AND @stage_state[3], $is_BRANCH, $_jump_cond, $cond_call
 @reg_data_out[31:0] = AND{32} $_do_call, @pc[31:0]
 $reg_enable = PULSE $_do_call
 $reg_write = PULSE $_do_call
-$_next_stage_BXLRSAVED = AND $_do_call, $reg_ready
-#display $_next_stage_BXLRSAVED "next_stage (BXLRSAVED)" 0
-$next_stage = PULSE $_next_stage_BXLRSAVED
+next_stage BXLRSAVED, "next_stage (BXLRSAVED)", AND $_do_call, $reg_ready
 
 // - Actually do update
 $do_jump = AND $is_BRANCH, @stage_state[4]
