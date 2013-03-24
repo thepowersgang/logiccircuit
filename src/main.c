@@ -63,7 +63,8 @@ int main(int argc, char *argv[])
 	// Add element definitions
 	ADD_ELEDEF( AND); ADD_ELEDEF( OR); ADD_ELEDEF( XOR);
 	ADD_ELEDEF(NAND); ADD_ELEDEF(NOR); ADD_ELEDEF(NXOR);
-	
+	ADD_ELEDEF(XNOR);
+
 	ADD_ELEDEF(NOT);
 	ADD_ELEDEF(COUNTER);
 	ADD_ELEDEF(MUX);

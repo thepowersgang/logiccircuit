@@ -71,6 +71,7 @@ MAKE_ELE_UPDATE(XOR, 0, ^, 0);
 MAKE_ELE_UPDATE(NAND, 1, &&, 1);
 MAKE_ELE_UPDATE(NOR, 0, ||, 1);
 MAKE_ELE_UPDATE(NXOR, 0, ^, 1);
+MAKE_ELE_UPDATE(XNOR, 0, ^, 1);
 
 #define CREATE_ELE(__name) tElementDef gElement_##__name = {\
 	NULL, #__name, 1, -1, _Create, NULL, _Update_##__name \
@@ -82,3 +83,4 @@ CREATE_ELE(XOR);
 CREATE_ELE(NAND);
 CREATE_ELE(NOR);
 CREATE_ELE(NXOR);
+CREATE_ELE(XNOR);
