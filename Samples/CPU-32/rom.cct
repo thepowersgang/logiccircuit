@@ -1,7 +1,6 @@
 
 #defunit CPU32ROM_LL
 #input $enable, @addr[12]
-;, $write, @write_mask[32], @data_in[32]
 #output $ready, @data_out[32]
 
 // Size: 128 bytes (32 words)
@@ -16,7 +15,7 @@ $ready = DELAY{2} $_en
 @data_out[0:31] = AND{32} @ROM_select[0x0002], 0x8EFFFFFF[0:31]	; JMP -1	- PF
 @data_out[0:31] = AND{32} @ROM_select[0x0003], 0x8EFFFFFF[0:31]	; JMP -1	- UD
 @data_out[0:31] = AND{32} @ROM_select[0x0004], 0x02DA0101[0:31]	; MOV R13, 0x101<<10*2
-@data_out[0:31] = AND{32} @ROM_select[0x0005], 0x00000000[0:31]	; NOP
+@data_out[0:31] = AND{32} @ROM_select[0x0005], 0x01012345[0:31]	; MOV R0, 0x12345
 @data_out[0:31] = AND{32} @ROM_select[0x0006], 0x00000000[0:31]	; NOP
 @data_out[0:31] = AND{32} @ROM_select[0x0007], 0x00000000[0:31]	; NOP
 @data_out[0:31] = AND{32} @ROM_select[0x0008], 0x00000000[0:31]	; NOP

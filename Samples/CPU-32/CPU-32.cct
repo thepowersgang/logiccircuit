@@ -17,6 +17,11 @@ $_next_stage_%1 = %3
 #display $_next_stage_%1 %2 0
 $next_stage = PULSE $_next_stage_%1
 %endmacro
+%macro next_instruction	3+
+$_next_instruction_%1 = %3
+#display $_next_instruction_%1 %2 0
+$next_instruction = PULSE $_next_instruction_%1
+%endmacro
 
 #defunit CPU32_CORE
 #input $reset, $mem_ready, @mem_data_in[NUM_GPR_BITS], \
@@ -48,8 +53,10 @@ $flags_O = @flags[1]
 $flags_O_clear = @flags_clear[1]
 $flags_Z = @flags[2]
 $flags_Z_clear = @flags_clear[2]
+$flags_S = @flags[3]
+$flags_S_clear = @flags_clear[3]
 
-
+// === Internal Registers ===
 // --- Program Counter ---
 #array pc	32
 #array pc_new	32
@@ -57,6 +64,16 @@ $flags_Z_clear = @flags_clear[2]
 #display 1 "PC = %32x" @pc[31:0]
 $pc_clear = PULSE $reset
 $NULL, @pc = LATCH{32} 1, $pc_clear, @pc_new
+// --- Control Registers ---
+// > CR0: Exception Return
+#array cr0	32
+#array cr0_new	32
+$NULL, @cr0 = LATCH{32} 1, $cr0_clear, @cr0_new
+// > CR1: Exception Reason
+#array cr1	32
+#array cr1_new	32
+$NULL, @cr1 = LATCH{32} 1, $cr1_clear, @cr1_new
+#display 1 "CR0 = %32x  CR1 = %32x" @cr0[31:0], @cr1[31:0]
 
 // === "Temporary" Latches ===
 // @instr - Temporary "variables" used to hold intermediate values
@@ -85,10 +102,7 @@ $stage_reset = DELAY $reset
 $mem_enable  = PULSE @stage_state[0]	// Enable memory for read
 // - Read complete, save into @instr
 @instr = AND{32} @stage_state[0], $mem_ready, @mem_data_in	// Save the opcode
-//next_stage OPRDY, AND @stage_state[0], $mem_ready
-$_next_stage_OPRDY = AND @stage_state[0], $mem_ready	// Wait for instruction to be fetched
-#display $_next_stage_OPRDY "next_stage (OPRDY)" 0 
-$next_stage = PULSE $_next_stage_OPRDY
+next_stage OPRDY, "next_stage (OPRDY)", AND @stage_state[0], $mem_ready
 
 // =============================
 // === Stage 1: Increment PC ===
@@ -105,9 +119,8 @@ $_pc_clear, @_pc_new, $NULL = ADDER_32BIT $increment_pc, @pc, @pc_inc_value, 0
 $pc_clear = DELAY $_pc_clear
 @pc_new = DELAY{2} @_pc_new
 // Write back
-$_next_stage_PCCLR = DELAY $_pc_clear		; Don't move to decode until PC is updated
-#display $_next_stage_PCCLR "next_stage (PCCLR)" 0 
-$next_stage = PULSE $_next_stage_PCCLR
+; Don't move to decode until PC is updated
+next_stage PCCLR, "next_stage (PCCLR)", DELAY $_pc_clear
 
 // ================================
 // === Stage 2: Opcode Decoding ===
@@ -131,16 +144,28 @@ $is_PUSHPOP = AND $decode_enable, (NXOR{8,2} @instr[31:27],@instr[23:21], 0b0110
 ;$is_BSWAP   = AND $decode_enable, (NXOR{8,2} @instr[31:27],@instr[23:21], 0b01100001[7:0])
 ; 10111000 00000000	- Load Flags
 $is_LDF     = AND $decode_enable, (NXOR{16,2} @instr[31:16], 0xB800[15:0])
+; 10111000 00000001 00000000	- MCR
+$is_MCR     = AND $decode_enable, (XNOR{24,2} @instr[31:8], 0xB80100[23:0])
+$is_MRC     = AND $decode_enable, (XNOR{24,2} @instr[31:8], 0xB80101[23:0])
 ; 101111mm	- LEA R, op2
 $is_LEA     = AND $decode_enable, (NXOR{6,2} @instr[31:26], 0b101111[5:0])
 ; 1100xxxx	- Non-word Load/Store
 ;$is_NONWLS  = AND $decode_enable, (NXOR{4,2} @instr[31:28], 0b1100[3:0])
 
 // === Handle Undefined Opcodes ===
-$is_UNDEF = AND (DELAY{2} $decode_enable), (NOR $is_ALU, $is_BRANCH, $is_IBRANCH, $is_LDF, $is_LEA)
+$is_UNDEF = AND (DELAY{2} $decode_enable), (NOR $is_ALU, $is_BRANCH, $is_IBRANCH, $is_LDF, $is_LEA, $is_MRC)
 #display $is_UNDEF "UNDEFINED INSTRUCTION!" 0
 #breakpoint $is_UNDEF "#UD"
-; $next_instruction = AND @stage_state[1], $is_UNDEF
+; - Set CRs
+$cr0_clear = PULSE $is_UNDEF
+@cr0_new = AND{32} (PULSE $is_UNDEF), @pc
+$cr1_clear = PULSE $is_UNDEF
+@cr1_new = AND{32} (PULSE $is_UNDEF), @instr
+; - Set PC=0x0000000C
+$_undef_pulse = PULSE $is_UNDEF
+$pc_clear = DELAY $_undef_pulse
+@pc_new[0:31] = DELAY (AND{32} $_undef_pulse, 0x8[0:31])
+next_instruction UNDEF, "next_instruction (UNDEF)", DELAY{3} $_undef_pulse
 
 // === Address/Operand Decoding ===
 $no_decode_r = AND $decode_enable, $is_IBRANCH
@@ -190,9 +215,7 @@ $_alu_save_mem = AND $alu_save, (NOT $alu_nosave), $addr_is_mem
 @mem_data_out = AND{32} $_alu_save_mem, @alu_out
 $mem_write  = DELAY $_alu_save_mem
 $mem_enable = DELAY $_alu_save_mem
-$_next_stage_ALUMEMSAVE = AND $_alu_save_mem, $mem_ready
-#display $_next_stage_ALUMEMSAVE "next_stage (ALUMEMSAVE)" 0
-$next_stage = PULSE $_next_stage_ALUMEMSAVE
+next_stage ALUMEMSAVE, "next_stage (ALUMEMSAVE)", AND $_alu_save_mem, $mem_ready
 // --- Save to register
 $_alu_save_reg = AND $alu_save, (NOT $alu_nosave), (NOT $addr_is_mem)
 #display $_alu_save_reg "Register 0x%4x = 0x%32x" @alu_addr[3:0], @alu_out[31:0]
@@ -200,25 +223,28 @@ $_alu_save_reg = AND $alu_save, (NOT $alu_nosave), (NOT $addr_is_mem)
 @reg_data_out = AND{32} $_alu_save_reg, @alu_out
 $reg_write = DELAY $_alu_save_reg
 $reg_enable = DELAY $_alu_save_reg
-$_next_stage_ALUREGSAVE = DELAY{4} $_alu_save_reg
-#display $_next_stage_ALUREGSAVE "next_stage (ALUREGSAVE)" 0
-$next_stage = PULSE $_next_stage_ALUREGSAVE	// wait for update :)
+next_stage ALUREGSAVE, "next_stage (ALUREGSAVE)", DELAY{4} $_alu_save_reg
 // --- No writeback
-$_alu_save_none = AND $alu_save, $alu_nosave
-#display $_alu_save_none "Not saving 0x%32x" @alu_out[31:0]
-#display $_alu_save_none "next_stage (ALUNOSAVE)" 0
-$next_stage = PULSE $_alu_save_none
+next_stage ALUNOSAVE, "next_stage (ALUNOSAVE)", AND $alu_save, $alu_nosave
+#display $_next_stage_ALUNOSAVE "Not saving 0x%32x" @alu_out[31:0]
 
 // === ALU Done ===
-$alu_complete = AND $is_ALU, @stage_state[4]
-#display $alu_complete "ALU Complete" 1
-$next_instruction = PULSE $alu_complete
+next_instruction ALUCOMPLETE, "next_instruction (ALU Complete)", AND $is_ALU, @stage_state[4]
 
 // === Load Flags (LDF) ===
 @flags_clear[0:3] = AND{4} (PULSE $is_LDF), (NOT   @instr[8:11])
 @flags[0:3]       = AND{4} (PULSE $is_LDF), (DELAY @instr[0:3])
+next_instruction LDF, "next_instruction (LDF)", DELAY{3} $is_LDF
 
-$next_instruction = PULSE (DELAY{3} $is_LDF)
+// === MCR ===
+;@reg_addr[0:3] = AND{4} $is_MCR, @instr[0:3]
+
+// === MRC ===
+@reg_addr[0:3] = AND{4} $is_MRC, @instr[0:3]
+@reg_data_out = MUX{4,32} $is_MRC, @instr[4:7], @cr0, @cr1, 0*32, 0*32, 0*128, 0*256
+$reg_enable = PULSE $is_MRC
+$reg_write = PULSE $is_MRC
+next_instruction MRC, "next_instruction (MRC)", DELAY{4} $is_MRC
 
 // === Load Effective Address (LEA) ===
 $_LEA_active = AND $is_LEA, $decode_complete
@@ -226,8 +252,7 @@ $reg_enable = PULSE $_LEA_active
 $reg_write = PULSE $_LEA_active
 @reg_addr[0:3] = AND{4} $_LEA_active, @instr[20:23]
 @reg_data_out[0:31] = AND{32} $_LEA_active, @alu_addr[0:31]
-
-$next_instruction = PULSE (DELAY{3} $_LEA_active)
+next_instruction LEA, "next_instruction (LEA)", DELAY{3} $_LEA_active
 
 // === Conditional Jumps / Calls ===
 #array cond 8
@@ -255,9 +280,6 @@ $_next_stage_JMPDEC = DELAY{4} $is_BRANCH
 $next_stage = PULSE $_next_stage_JMPDEC
 
 next_stage IJMPDEC, "next_stage (IJMPDEC)", AND $is_IBRANCH, $decode_complete
-;$_next_stage_IJMPDEC = AND $is_IBRANCH, $decode_complete
-;#display $_next_stage_IJMPDEC "next_stage (IJMPDEC)" 0
-;$next_stage = PULSE $_next_stage_IJMPDEC
 
 #display @stage_state[3] "%1i(_jump_cond) = %1i(condition_true) ^ %1i(cond_inverse)" $_jump_cond, $condition_true, $cond_inverse
 
@@ -289,13 +311,12 @@ $_jmp_sign_bit = @instr[23]
 //  > Delay is to ensure the alt_pc_inc_value has taken effect (the hard 0x4 is turned off)
 $increment_pc = DELAY (PULSE $do_jump)
 // - Next stage when PC is updated
-$jump_complete = AND $is_BRANCH, @stage_state[5]
-$next_instruction = PULSE $jump_complete
+next_instruction JMP, "next_instruction (Branch Complete)", AND $is_BRANCH, @stage_state[5]
 // -- IJMP - Set PC
 $do_ijump = AND $is_IBRANCH, @stage_state[4]
 $pc_clear = DELAY $do_ijump
 @pc = AND{32} (DELAY{2} $do_ijump), @alu_in_src
-$next_instruction = DELAY{5} $do_ijump
+next_instruction IJMP, "next_instruction (IBranch Complete)", DELAY{5} $do_ijump
 
 #endunit
 
@@ -311,9 +332,11 @@ $next_instruction = DELAY{5} $do_ijump
 $NULL, @flags[0] = LATCH 1, @flags_clear[0], @flags[0]	// 'C' Flag
 $NULL, @flags[1] = LATCH 1, @flags_clear[1], @flags[1]	// 'O' Flag
 $NULL, @flags[2] = LATCH 1, @flags_clear[2], @flags[2]	// 'Z' Flag
+$NULL, @flags[3] = LATCH 1, @flags_clear[3], @flags[3]	// 'S' Flag
 #display 1 "CF" @flags[0]
 #display 1 "OF" @flags[1]
 #display 1 "ZF" @flags[2]
+#display 1 "SF" @flags[3]
 
 // -- GP Registers ---
 #array reg_addr	4
@@ -334,8 +357,9 @@ $mem_ready, @mem_data_in, $fault_ac = MEMORY_SPACE $mem_enable, @mem_addr, $mem_
 #display $mem_ready "MemIn  " @mem_data_in[NUM_GPR_BITS-1:0]
 
 // --- CPU ---
-$rst, $mem_enable, @mem_addr, $mem_write, @mem_data_out, \
+$rst = PULSE 1
+$instr_pulse, $mem_enable, @mem_addr, $mem_write, @mem_data_out, \
 	$reg_enable, @reg_addr, $reg_write, @reg_data_out, @flags_clear \
-	= CPU32_CORE (PULSE 1), $mem_ready, @mem_data_in, $reg_ready, @reg_data_in, @flags
+	= CPU32_CORE $rst, $mem_ready, @mem_data_in, $reg_ready, @reg_data_in, @flags
 
 ; vim: ft=logiccircuit

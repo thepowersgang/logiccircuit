@@ -252,7 +252,7 @@ $mem_ready = DELAY $mem_enable
 #endtestcase
 
 //
-//
+// Test memory acesses with a high address
 //
 #testcase 300 "CPU - Memory Read/Write (0x10100000)"
 __CPU32_TEST_WRAPPER 1
@@ -285,5 +285,33 @@ $mem_ready = PULSE $mem_enable
 
 #endtestcase
 
+//
+// Undefined instruction handling / Move Reg = Ctrl Reg
+//
+#testcase 400 "CPU - #UD+MRC"
+__CPU32_TEST_WRAPPER 1
+#array stage 5
+@stage = SEQUENCER{5} 1, 0, $ins_end
+
+$mem_ready = PULSE $mem_enable
+
+@mem_data_in[0:31] = AND{32} @stage[0], $mem_enable, 0x8E00001F[0:31]	; JMP 0x80
+#testassert @stage[0],$mem_enable @mem_addr[0:31] 0x00000000[0:31]
+@mem_data_in[0:31] = AND{32} @stage[1], $mem_enable, 0xFFFFFFFF[0:31]	; UD_N1
+#testassert @stage[1],$mem_enable @mem_addr[0:31] 0x00000080[0:31]
+@mem_data_in[0:31] = AND{32} @stage[2], $mem_enable, 0xB8010101[0:31]	; MOV R1, CR0
+#testassert @stage[2],$mem_enable @mem_addr[0:31] 0x0000008[0:31]
+#testassert @stage[2],$reg_enable @reg_addr[0:3] 1[0:3]
+#testassert @stage[2],$reg_enable $reg_write 1
+#testassert @stage[2],$reg_enable @reg_data_out[0:31] 0x00000084[0:31]
+@mem_data_in[0:31] = AND{32} @stage[3], $mem_enable, 0xB8010111[0:31]	; MOV R1, CR1
+#testassert @stage[3],$mem_enable @mem_addr[0:31] 0x000000C[0:31]
+#testassert @stage[3],$reg_enable @reg_addr[0:3] 1[0:3]
+#testassert @stage[3],$reg_enable $reg_write 1
+#testassert @stage[3],$reg_enable @reg_data_out[0:31] 0xFFFFFFFF[0:31]
+
+#testcomplete @stage[4]
+
+#endtestcase
 
 ; vim: ft=logiccircuit
