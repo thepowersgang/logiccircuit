@@ -1,4 +1,25 @@
 Introduction
 ------------
 
-This is a basic (and not physically accurate) simulator for logic gates.
+This is a basic (and not physically accurate) simulator for logic gates, written when I was bored during a lecture.
+
+Features:
+- Unit testing support, with timeouts and completion conditions.
+- printf like state display
+- Link usage sanity checks (nodes that are not read/set are noted at runtime)
+- Simluation breakpoints
+- Preprocessing using the `yasm` preprocessor (requires yasm to be installed)
+- Saving/loading of a compiled mesh from disk
+- File-backed "ROM" elements
+
+TODO:
+- stdio/socket based circuit input and output
+- UART element?
+
+
+CPU-32
+------
+
+A "side" project that's become the primary use for this code - a CISC CPU design created for learning purposes.
+
+
