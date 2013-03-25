@@ -357,8 +357,52 @@ $reg_ready = PULSE $reg_enable
 #testassert @stage[2],$ins_end $CF_set  0
 #testassert @stage[2],$ins_end $CF_clrd 1 
 
-#testcomplete @stage[4]
+// TODO: Another test
 
+#testcomplete @stage[4]
+#endtestcase
+
+#testcase 300 "CPU - Stack"
+__CPU32_TEST_WRAPPER 1
+#array stage 4
+@stage = SEQUENCER{4} 1, 0, $ins_end
+#array op_stage 3
+@op_stage = SEQUENCER{3} 1, $ins_end, (PULSE (NOT $mem_enable))
+
+$mem_ready = PULSE $mem_enable
+$reg_ready = PULSE $reg_enable
+
+; PUSH 0xABCDE
+@mem_data_in[0:31] = AND{32} @stage[0],@op_stage[0],$mem_enable, 0xB10ABCDE[0:31]
+#testassert @stage[0],@op_stage[0],$mem_enable @mem_addr[0:31] 0[0:31]
+@reg_data_in[0:31] = AND{32} @stage[0], $reg_enable, 0x10000000[0:31]
+#testassert @stage[0],$reg_write @reg_data_out[0:31] 0x0FFFFFFC[0:31]
+#testassert @stage[0],@op_stage[1],$mem_enable $mem_write 1
+#testassert @stage[0],@op_stage[1],$mem_enable @mem_addr[0:31] 0x10000000[0:31]
+#testassert @stage[0],@op_stage[1],$mem_enable @mem_data_out[0:31] 0x000ABCDE[0:31]
+
+#testassert @stage[1],$mem_enable @mem_addr[0:31] 0x4[0:31]
+
+; POP [PC+4]
+@mem_data_in[0:31] = AND{32} @stage[2],@op_stage[0],$mem_enable, 0xB6100004[0:31]
+#testassert @stage[2],@op_stage[0],$mem_enable @mem_addr[0:31] 0x8[0:31]
+
+@reg_data_in[0:31] = AND{32} @stage[2],$reg_enable, 0x0FFFFFFC[0:31]
+#testassert @stage[2],$reg_enable @reg_addr[0:3] 13[0:3]
+#testassert @stage[2],$reg_write @reg_data_out[0:31] 0x10000000[0:31]
+
+@mem_data_in[0:31] = AND{32} @stage[2],@op_stage[1],$mem_enable, 0xB10ABCDE[0:31]
+#testassert @stage[2],@op_stage[1],$mem_enable @mem_addr[0:31] 0x0FFFFFFC[0:31]
+
+#testassert @stage[2],@op_stage[2],$mem_enable $mem_write 1
+#testassert @stage[2],@op_stage[2],$mem_enable @mem_addr[0:31] 0x10[0:31]
+#testassert @stage[2],@op_stage[2],$mem_enable @mem_data_out[0:31] 0xB10ABCDE[0:31]
+
+#testassert @stage[3] (DELAY @op_stage[0]) 1
+
+#testassert @stage[3],$mem_enable @mem_addr[0:31] 0xC[0:31]
+
+#testcomplete (AND @stage[3], $mem_enable)
 #endtestcase
 
 ; vim: ft=logiccircuit

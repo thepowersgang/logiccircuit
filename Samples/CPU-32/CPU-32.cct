@@ -47,6 +47,8 @@ $next_instruction = PULSE $_next_instruction_%1
 #display 1 "instr = 0x%32x" @instr[31:0]
 #display 1 "NextI  " $next_instruction
 
+#display $reg_write "R%4i = 0x%32x" @reg_addr[3:0],@reg_data_out[31:0]
+
 $flags_C = @flags[0]
 $flags_C_clear = @flags_clear[0]
 $flags_O = @flags[1]
@@ -133,13 +135,15 @@ next_stage PCCLR, "next_stage (PCCLR)", DELAY $_pc_clear
 #display @stage_state[2] "Opcode decode" 1
 $decode_enable = OR @stage_state[2:15]
 ; 0xxxxmmm	- General ALU stuff
-$is_ALU     = AND $decode_enable, (NOT   @instr[31])
+$is_ALU     = AND $decode_enable, (NOT @instr[31])
 ; 100xxxxx	- Conditional branches
 $is_BRANCH  = AND $decode_enable, (NXOR{3,2} @instr[31:29], 0b100[2:0])
 ; 1010xmmm xxxxxxxx	- Indirect Branch
 $is_IBRANCH = AND $decode_enable, (NXOR{4,2} @instr[31:28], 0b1010[3:0])
-; 10110mmm 000xxxxx	- Push/Pop
-$is_PUSHPOP = AND $decode_enable, (NXOR{8,2} @instr[31:27],@instr[23:21], 0b01100000[7:0])
+; 10110mmm 0000xxxx	- Push
+$is_PUSH    = AND $decode_enable, (NXOR{9,2} @instr[31:27],@instr[23:20], 0b101100000[8:0])
+; 10110mmm 0001xxxx	- Pop
+$is_POP     = AND $decode_enable, (NXOR{9,2} @instr[31:27],@instr[23:20], 0b101100001[8:0])
 ; 10110mmm 001xxxxx	- BSWAP[W]
 ;$is_BSWAP   = AND $decode_enable, (NXOR{8,2} @instr[31:27],@instr[23:21], 0b01100001[7:0])
 ; 10111000 00000000	- Load Flags
@@ -156,7 +160,7 @@ $is_LEA     = AND $decode_enable, (NXOR{6,2} @instr[31:26], 0b101111[5:0])
 ;$is_NONWLS  = AND $decode_enable, (NXOR{4,2} @instr[31:28], 0b1100[3:0])
 
 // === Handle Undefined Opcodes ===
-$is_invl = NOR $is_ALU, $is_BRANCH, $is_IBRANCH, $is_LDF, $is_MRC, $is_MCR, $is_SHIFT, $is_LEA
+$is_invl = NOR $is_ALU, $is_BRANCH, $is_IBRANCH, $is_PUSH, $is_POP, $is_LDF, $is_MRC, $is_MCR, $is_SHIFT, $is_LEA
 $is_UNDEF = AND (DELAY{2} $decode_enable), $is_invl
 #display $is_UNDEF "UNDEFINED INSTRUCTION!" 0
 #breakpoint $is_UNDEF "#UD"
@@ -175,20 +179,22 @@ next_instruction UNDEF, "next_instruction (UNDEF)", DELAY{3} $_undef_pulse
 $no_decode_r = AND $decode_enable, $is_IBRANCH
 $no_decode_r = AND $decode_enable, (NXOR{5,2} @instr[31:27], 0b00000[4:0])	// MOV
 $no_read_m   = AND $decode_enable, (NXOR{5,2} @instr[31:27], 0b01000[4:0])	// Reversed MOV
-;$no_decode_r = AND $decode_enable, $is_PUSHPOP
-;$no_read_m   = AND $decode_enable, $is_PUSHPOP, @instr[20]
+$no_decode_r = AND $decode_enable, $is_PUSH
+$no_decode_r = AND $decode_enable, $is_POP
+$no_read_m   = AND $decode_enable, $is_POP
+$switch_operands = AND $decode_enable, $is_POP
 $no_read_m       = AND $decode_enable, $is_LEA
 $no_decode_r     = AND $decode_enable, $is_LEA
 $switch_operands = AND $decode_enable, $is_LEA
 // - Swap ALU operands
 $switch_operands = AND $decode_enable, $is_ALU, @instr[30]
-// - Push/Swap uses swapped operands
-;$switch_operands = AND $decode_enable, $is_PUSHPOP
 
 $decode_start = AND @stage_state[2], $is_ALU
 $decode_start = AND @stage_state[2], $is_IBRANCH
+$decode_start = AND @stage_state[2], $is_PUSH
+$decode_start = AND @stage_state[2], $is_POP
 $decode_start = AND @stage_state[2], $is_LEA
-$decode_clear = PULSE @stage_state[4]
+;$decode_clear = PULSE @stage_state[4]
 $decode_clear = PULSE @stage_state[0]
 
 #display $decode_start "Decode @instr=%32x" @instr
@@ -197,6 +203,7 @@ $decode_complete, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src,\
 	$decode_start, $decode_clear, $switch_operands, (NOT $no_decode_r), (NOT $no_read_m), @instr[0:26], \
 	$reg_ready, @reg_data_in, $mem_ready, @mem_data_in, @pc
 
+#display $decode_enable "$addr_is_mem = %1i" $addr_is_mem
 #display $decode_complete "@alu_addr   = %32x" @alu_addr[31:0]
 #display $decode_complete "@alu_in_dst = %32x" @alu_in_dst[31:0]
 #display $decode_complete "@alu_in_src = %32x" @alu_in_src[31:0]
@@ -232,6 +239,64 @@ next_stage ALUNOSAVE, "next_stage (ALUNOSAVE)", AND $alu_save, $alu_nosave
 #display $_next_stage_ALUNOSAVE "Not saving 0x%32x" @alu_out[31:0]
 // --- ALU Done ---
 next_instruction ALUCOMPLETE, "next_instruction (ALU Complete)", AND $is_ALU, @stage_state[4]
+
+// ((( Stack Adder ))
+#array _sp_addend 32
+$reg_write,@reg_data_out,$NULL = ADDER_32BIT $_sp_add_update, @reg_data_in, @_sp_addend, 0
+// === Push ===
+next_stage PushDataAvail, "next_stage (Push Data Avaliable)", AND $is_PUSH, $decode_complete
+// - Subtract 4 from SP (R13)
+$_push_regen = OR @stage_state[3], @stage_state[4]
+$reg_enable = AND $is_PUSH, $_push_regen
+@reg_addr[0:3] = AND{4} $is_PUSH, $_push_regen, 13[0:3]
+$_push_sp_ready = AND $is_PUSH, @stage_state[3], $reg_ready
+$_sp_add_update = DELAY $_push_sp_ready
+@_sp_addend[0:31] = AND{32} $is_PUSH, 0xFFFFFFFC[0:31]
+next_stage PushSPUpdated, "next_stage (Push SP Updated)", AND $is_PUSH, @stage_state[3], $reg_write
+// - Write data to [SP]
+$_push_save = PULSE (AND $is_PUSH, @stage_state[4])
+$mem_enable = DELAY $_push_save
+$mem_write = DELAY $_push_save
+@mem_addr = AND{32} $_push_save, @reg_data_in
+@mem_data_out = AND{32} $_push_save, @alu_in_src
+// - Data written, instruction complete
+next_instruction Push, "next_instruction (Push)", DELAY{3} $_push_save
+// === Pop ===
+next_stage PopDestAvail, "next_stage (Push Data Avaliable)", AND $is_POP, $decode_complete
+#array _pop_data	32
+@_pop_data = @alu_in_dst	// (ab)use ALU latch
+// - Read SP and get memory
+$_pop_read = AND $is_POP, @stage_state[3]
+$reg_enable = PULSE $_pop_read
+@reg_addr[0:3] = AND{4} $_pop_read, 13[0:3]
+$mem_enable = AND $_pop_read, $reg_ready
+@mem_addr = AND{32} $_pop_read, $reg_ready, @reg_data_in
+@_pop_data = AND{32} $_pop_read, $mem_ready, @mem_data_in
+next_stage PopDataLoaded, "next_stage (Pop Data Loaded)", AND $_pop_read, $mem_ready
+// - Update SP
+$_pop_updatesp = AND $is_POP, @stage_state[4]
+$reg_enable = DELAY $_pop_updatesp
+@reg_addr[0:3] = AND{4} $_pop_updatesp, 13[0:3]
+$_sp_add_update = PULSE (AND $_pop_updatesp, $reg_ready)
+@_sp_addend[0:31] = AND{32} $is_POP, 4[0:31]
+next_stage PopSPUpdated, "next_stage (Pop SP Updated)", AND $is_POP, @stage_state[4], $reg_write
+// - Save data
+$_pop_regsave = AND $is_POP, @stage_state[5], (NOT   $addr_is_mem)
+#display $_pop_regsave "Saving to register %5i" @alu_addr[4:0]
+$reg_enable = DELAY $_pop_regsave
+@reg_addr[0:3] = AND{4} $_pop_regsave, @alu_addr[0:3]
+$reg_write = DELAY $_pop_regsave
+@reg_data_out[0:31] = AND{32} $_pop_regsave, @_pop_data[0:31]
+next_stage PopSavedReg, "next_stage (POP Saved to reg)", AND $_pop_regsave, $reg_ready
+$_pop_memsave = AND $is_POP, @stage_state[5], (DELAY $addr_is_mem)
+#display $_pop_memsave "Saving to mem 0x%32x" @alu_addr[31:0]
+$mem_enable = DELAY $_pop_memsave
+@mem_addr[0:31] = AND{32} $_pop_memsave, @alu_addr[0:31]
+$mem_write = DELAY $_pop_memsave
+@mem_data_out[0:31] = AND{32} $_pop_memsave, @_pop_data[0:31]
+next_stage PopSavedMem, "next_stage (POP Saved to memory)", AND $_pop_memsave, $mem_ready
+// - Instruction complete
+next_instruction Pop, "next_instruction (Pop)", AND $is_POP, @stage_state[6]
 
 // === Load Flags (LDF) ===
 @flags_clear[0:3] = AND{4} (PULSE $is_LDF), (NOT   @instr[8:11])
@@ -341,7 +406,7 @@ $_jump_cond = XOR $condition_true, $cond_inverse
 next_stage JMPDEC, "next_stage (JMPDEC)", DELAY{4} $is_BRANCH
 next_stage IJMPDEC, "next_stage (IJMPDEC)", AND $is_IBRANCH, $decode_complete
 
-#display @stage_state[3] "%1i(_jump_cond) = %1i(condition_true) ^ %1i(cond_inverse)" $_jump_cond, $condition_true, $cond_inverse
+#display @stage_state[3] "%1i(jmpcond) = %1i(condition_true) ^ %1i(cond_inverse)" $_jump_cond, $condition_true, $cond_inverse
 
 // - Not branching? Next instruction
 next_instruction NOJMP, "next_instruction (Not Jumping)", AND @stage_state[3], (OR $is_IBRANCH, $is_BRANCH), (NOT $_jump_cond)
