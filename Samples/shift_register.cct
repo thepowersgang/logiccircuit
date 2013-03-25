@@ -112,7 +112,8 @@ $ready = DELAY{1} $pulse
 #input $pulse, @count[%2], @value[%1]
 #output $ready, @value_out[%1]
 
-#array count_enable %1
+%assign countmax 1<<%2
+#array count_enable countmax
 
 $ready = DELAY{2} $pulse
 @count_enable = DEMUX{%2} $pulse, @count
@@ -121,7 +122,7 @@ $ready = DELAY{2} $pulse
   %assign j 0
   %rep %1
     %assign k ((i+j) % %1)
-    %assign l ((%1 - j) % %1)
+    %assign l ((countmax - j) % countmax)
     @value_out[i] = AND @count_enable[l], (DELAY  @value[k])
   %assign j j+1
   %endrep
@@ -135,6 +136,7 @@ def_shift_left_n 16, 4
 def_shift_left_n 32, 5
 def_rotate_left_n 16, 4
 def_rotate_left_n 32, 5
+def_rotate_left_n 33, 5
 
 #testcase 10 "Shift Left 32 - None"
 #array _out 32

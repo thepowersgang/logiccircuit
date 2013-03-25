@@ -311,6 +311,53 @@ $mem_ready = PULSE $mem_enable
 #testassert @stage[3],$reg_enable @reg_data_out[0:31] 0xFFFFFFFF[0:31]
 
 #testcomplete @stage[4]
+#endtestcase
+
+#testcase 600 "CPU - Shifts"
+__CPU32_TEST_WRAPPER 1
+#array stage 5
+@stage = SEQUENCER{5} 1, 0, $ins_end
+
+$flags_C = @flags[0]
+$flags_C_clear = @flags_clear[0]
+
+$NULL, $CF_set  = LATCH 1, $ins_end, $flags_C
+$NULL, $CF_clrd = LATCH 1, $ins_end, $flags_C_clear
+
+$mem_ready = PULSE $mem_enable
+$reg_ready = PULSE $reg_enable
+
+// Shift Left 16
+@mem_data_in[0:31] = AND{32} @stage[0], $mem_enable, 0xB802FEB0[0:31]
+#testassert @stage[0],$mem_enable @mem_addr[0:31] 0x00000000[0:31]
+@reg_data_in[0:31] = AND{32} @stage[0], $reg_enable, 0x12345678[0:31]
+#testassert @stage[0],$reg_enable @reg_addr[1:3] 0xE[1:3]
+#testassert @stage[0],$reg_write @reg_data_out[0:31] 0x00001234[0:31]
+#testassert @stage[0],$reg_write @reg_addr[0:3] 0xF[0:3]
+#testassert @stage[0],$ins_end $CF_set  0
+#testassert @stage[0],$ins_end $CF_clrd 0
+
+// Rotate Left 16
+@mem_data_in[0:31] = AND{32} @stage[1], $mem_enable, 0xB803FEB0[0:31]
+#testassert @stage[1],$mem_enable @mem_addr[0:31] 0x00000004[0:31]
+@reg_data_in[0:31] = AND{32} @stage[1], $reg_enable, 0x12345678[0:31]
+#testassert @stage[1],$reg_enable @reg_addr[1:3] 0xE[1:3]
+#testassert @stage[1],$reg_write @reg_data_out[0:31] 0x56781234[0:31]
+#testassert @stage[1],$reg_write @reg_addr[0:3] 0xF[0:3]
+#testassert @stage[1],$ins_end $CF_set  0
+#testassert @stage[1],$ins_end $CF_clrd 0
+
+// Rotate via Carry Left 16
+@mem_data_in[0:31] = AND{32} @stage[2], $mem_enable, 0xB803FEF0[0:31]
+#testassert @stage[2],$mem_enable @mem_addr[0:31] 0x00000008[0:31]
+@reg_data_in[0:31] = AND{32} @stage[2], $reg_enable, 0x12345678[0:31]
+#testassert @stage[2],$reg_enable @reg_addr[1:3] 0xE[1:3]
+#testassert @stage[2],$reg_write @reg_data_out[0:31] 0x5678091A[0:31]
+#testassert @stage[2],$reg_write @reg_addr[0:3] 0xF[0:3]
+#testassert @stage[2],$ins_end $CF_set  0
+#testassert @stage[2],$ins_end $CF_clrd 1 
+
+#testcomplete @stage[4]
 
 #endtestcase
 

@@ -148,13 +148,15 @@ $is_LDF     = AND $decode_enable, (NXOR{16,2} @instr[31:16], 0xB800[15:0])
 $is_MCR     = AND $decode_enable, (XNOR{24,2} @instr[31:8], 0xB80100[23:0])
 ; 10111000 00000001 00000001	- MRC
 $is_MRC     = AND $decode_enable, (XNOR{24,2} @instr[31:8], 0xB80101[23:0])
+; 10111000 0000001x	- Shift / Rotate
+$is_SHIFT   = AND $decode_enable, (XNOR{15,2} @instr[31:17], 0xB802[15:1])
 ; 101111mm	- LEA R, op2
 $is_LEA     = AND $decode_enable, (NXOR{6,2} @instr[31:26], 0b101111[5:0])
 ; 1100xxxx	- Non-word Load/Store
 ;$is_NONWLS  = AND $decode_enable, (NXOR{4,2} @instr[31:28], 0b1100[3:0])
 
 // === Handle Undefined Opcodes ===
-$is_invl = NOR $is_ALU, $is_BRANCH, $is_IBRANCH, $is_LDF, $is_MRC, $is_MCR, $is_LEA
+$is_invl = NOR $is_ALU, $is_BRANCH, $is_IBRANCH, $is_LDF, $is_MRC, $is_MCR, $is_SHIFT, $is_LEA
 $is_UNDEF = AND (DELAY{2} $decode_enable), $is_invl
 #display $is_UNDEF "UNDEFINED INSTRUCTION!" 0
 #breakpoint $is_UNDEF "#UD"
@@ -198,6 +200,7 @@ $decode_complete, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src,\
 #display $decode_complete "@alu_addr   = %32x" @alu_addr[31:0]
 #display $decode_complete "@alu_in_dst = %32x" @alu_in_dst[31:0]
 #display $decode_complete "@alu_in_src = %32x" @alu_in_src[31:0]
+//next_stage DecodeComplete, "next_stage (Decode Complete)", $decode_complete
 
 // --- Stage 2.5 ALU Core ---
 $alu_data_rdy = AND $is_ALU, $decode_complete
@@ -247,6 +250,64 @@ next_instruction MCR, "next_instruction (MCR)", DELAY{2} (AND $reg_ready, $is_MC
 $reg_enable = PULSE $is_MRC
 $reg_write = PULSE $is_MRC
 next_instruction MRC, "next_instruction (MRC)", DELAY{4} $is_MRC
+
+// === Shift / Rotate ===
+#array _shift_count 5
+#array _shift_value 33
+#array _shift_value_nc 32
+#array _shift_out 33
+#array _shift_out_nc 32
+// Use ALU latches for temp storage
+// - This is a little evil, as these latches are in CPU32_ADDRESS_DECODE
+@_shift_count[0:4] = @alu_in_src[0:4]
+#display $is_SHIFT "_shift_count = %5x" @_shift_count[4:0]
+@_shift_value[0:31] = @alu_in_dst[0:31]
+@_shift_value[32] = @alu_in_src[16]
+@_shift_value_nc[0:31] = @alu_addr[0:31]
+// Prepare arguments
+// - Count imm5
+@_shift_count[0:4] = AND{5} $is_SHIFT, (DELAY @instr[5]), @instr[0:4]
+next_stage ShiftImm5, "next_stage (Shift Imm5)", AND $is_SHIFT, @stage_state[2], (DELAY @instr[5])
+// - Count r
+$_shift_readRv = AND $is_SHIFT, @stage_state[2], (NOT @instr[5])
+$reg_enable = AND $_shift_readRv
+@reg_addr[0:3] = AND{4} $_shift_readRv, @instr[0:3]
+@_shift_count[0:4] = AND{5} $_shift_readRv, $reg_ready, @reg_data_in[0:4]
+next_stage ShiftRv, "next_stage (Shift Rv)", AND $_shift_readRv, $reg_ready
+// - Value
+$_shift_value_reading = AND $is_SHIFT, @stage_state[3]
+$reg_enable = PULSE $_shift_value_reading
+@reg_addr[0:3] = AND{4} $_shift_value_reading, @instr[8:11]
+@_shift_value[0:32] = AND{33} $_shift_value_reading,$reg_ready,(NOT   @instr[7]), $flags_C,@reg_data_in[0:31]
+@_shift_value[0:32] = AND{33} $_shift_value_reading,$reg_ready,(DELAY @instr[7]), @reg_data_in[31:0],$flags_C
+@_shift_value_nc[0:31] = AND{32} $_shift_value_reading,$reg_ready,(NOT   @instr[7]), @reg_data_in[0:31]
+@_shift_value_nc[0:31] = AND{32} $_shift_value_reading,$reg_ready,(DELAY @instr[7]), @reg_data_in[31:0]
+next_stage ShiftVal, "next_stage (Shift Value)", AND $_shift_value_reading, $reg_ready
+// Clear CF if it is used
+$flags_C_clear = PULSE (AND $is_SHIFT, @stage_state[4], (DELAY @instr[6]))
+$_shl_enable = AND $is_SHIFT, @stage_state[4], (NOT   @instr[16])
+$_rol_enable = AND $is_SHIFT, @stage_state[4], (DELAY @instr[16]), (NOT   @instr[6])
+$_rcl_enable = AND $is_SHIFT, @stage_state[4], (DELAY @instr[16]), (DELAY @instr[6])
+// Perform shift
+#display $_shl_enable "SHL: _shift_value = %33x" @_shift_value
+#display $_rcl_enable "RCL: _shift_value = %33x" @_shift_value
+#display $_rol_enable "ROL: _shift_value = %32x" @_shift_value_nc
+$_shift_done, @_shift_out = SHIFT_LEFT_N_32 $_shl_enable, @_shift_count, @_shift_value
+$_shift_done, @_shift_out = ROTATE_LEFT_N_33 $_rcl_enable, @_shift_count, @_shift_value
+$_shift_done, @_shift_out_nc = ROTATE_LEFT_N_32 $_rol_enable, @_shift_count, @_shift_value_nc
+next_stage ShiftDone, "next_stage (Shift Done)", $_shift_done
+#display $_shift_done "_shift_out = %33x" @_shift_out
+// Write back shifted value
+$_shift_writeback = AND $is_SHIFT, @stage_state[5]
+$reg_write = PULSE $_shift_writeback
+@reg_addr[0:3] = AND{4} $_shift_writeback, @instr[12:15]
+$reg_enable = PULSE $_shift_writeback
+$flags_C,@reg_data_out[0:31] = AND{33} $_shift_writeback, (NOT   @instr[7]), @_shift_out[0:32]
+@reg_data_out[31:0],$flags_C = AND{33} $_shift_writeback, (DELAY @instr[7]), @_shift_out[0:32]
+@reg_data_out[0:31] = AND{32} $_shift_writeback, (NOT   @instr[16]), @_shift_out_nc[0:31]
+@reg_data_out[31:0] = AND{32} $_shift_writeback, (DELAY @instr[16]), @_shift_out_nc[0:31]
+// Operation complete
+next_instruction Shift, "next_instruction (Shift)", DELAY{5} $_shift_writeback
 
 // === Load Effective Address (LEA) ===
 $_LEA_active = AND $is_LEA, $decode_complete
