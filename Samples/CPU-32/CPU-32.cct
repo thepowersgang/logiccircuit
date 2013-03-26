@@ -304,6 +304,10 @@ next_stage PopSavedMem, "next_stage (POP Saved to memory)", AND $_pop_memsave, $
 // - Instruction complete
 next_instruction Pop, "next_instruction (Pop)", AND $is_POP, @stage_state[6]
 
+// === BSWAP(W) ===
+// TODO: Impliment BSWAP(W)
+// TODO: a) Is this needed, b) Should it be reg-reg instead of reg-mem?
+
 // === Load Flags (LDF) ===
 @flags_clear[0:3] = AND{4} (PULSE $is_LDF), (NOT   @instr[8:11])
 @flags[0:3]       = AND{4} (PULSE $is_LDF), (DELAY @instr[0:3])
@@ -387,6 +391,14 @@ $reg_write = PULSE $_LEA_active
 @reg_addr[0:3] = AND{4} $_LEA_active, @instr[20:23]
 @reg_data_out[0:31] = AND{32} $_LEA_active, @alu_addr[0:31]
 next_instruction LEA, "next_instruction (LEA)", DELAY{3} $_LEA_active
+
+// === Non-word Load/Store ===
+;@_nwls_basereg = @instr[16:19]
+;@_nwls_datareg = @instr[20:23]
+;$_nwls_offset_sign = @instr[15]
+;@_nwls_offset = @instr[0:15],$_nwls_offset_sign*16
+// - Get Address
+// TODO: 
 
 // === Conditional Jumps / Calls ===
 #array cond 8
