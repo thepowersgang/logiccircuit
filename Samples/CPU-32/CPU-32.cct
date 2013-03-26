@@ -208,6 +208,7 @@ $decode_complete, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src,\
 #display $decode_complete "@alu_in_dst = %32x" @alu_in_dst[31:0]
 #display $decode_complete "@alu_in_src = %32x" @alu_in_src[31:0]
 //next_stage DecodeComplete, "next_stage (Decode Complete)", $decode_complete
+//next_stage DecodeSkipped, "next_stage (Decode Skipped)", AND (DELAY{3} $decode_enable), (NOT $decode_start)
 
 // --- Stage 2.5 ALU Core ---
 $alu_data_rdy = AND $is_ALU, $decode_complete
@@ -224,7 +225,7 @@ $_alu_save_mem = AND $alu_save, (NOT $alu_nosave), $addr_is_mem
 @mem_addr     = AND{32} $_alu_save_mem, @alu_addr
 @mem_data_out = AND{32} $_alu_save_mem, @alu_out
 $mem_write  = DELAY $_alu_save_mem
-$mem_enable = DELAY $_alu_save_mem
+$mem_enable = PULSE $_alu_save_mem
 next_stage ALUMEMSAVE, "next_stage (ALUMEMSAVE)", AND $_alu_save_mem, $mem_ready
 // - Save to register
 $_alu_save_reg = AND $alu_save, (NOT $alu_nosave), (NOT $addr_is_mem)
@@ -232,7 +233,7 @@ $_alu_save_reg = AND $alu_save, (NOT $alu_nosave), (NOT $addr_is_mem)
 @reg_addr[3:0] = AND{4} $_alu_save_reg, @alu_addr[3:0]
 @reg_data_out = AND{32} $_alu_save_reg, @alu_out
 $reg_write = DELAY $_alu_save_reg
-$reg_enable = DELAY $_alu_save_reg
+$reg_enable = PULSE $_alu_save_reg
 next_stage ALUREGSAVE, "next_stage (ALUREGSAVE)", DELAY{4} $_alu_save_reg
 // - No writeback
 next_stage ALUNOSAVE, "next_stage (ALUNOSAVE)", AND $alu_save, $alu_nosave
@@ -281,6 +282,10 @@ $_sp_add_update = PULSE (AND $_pop_updatesp, $reg_ready)
 @_sp_addend[0:31] = AND{32} $is_POP, 4[0:31]
 next_stage PopSPUpdated, "next_stage (Pop SP Updated)", AND $is_POP, @stage_state[4], $reg_write
 // - Save data
+$_pop_save = AND $is_POP, @stage_state[5]
+$alu_save = DELAY $_pop_save
+@alu_out = AND{32} $_pop_save, @_pop_data
+%if 0
 $_pop_regsave = AND $is_POP, @stage_state[5], (NOT   $addr_is_mem)
 #display $_pop_regsave "Saving to register %5i" @alu_addr[4:0]
 $reg_enable = DELAY $_pop_regsave
@@ -295,6 +300,7 @@ $mem_enable = DELAY $_pop_memsave
 $mem_write = DELAY $_pop_memsave
 @mem_data_out[0:31] = AND{32} $_pop_memsave, @_pop_data[0:31]
 next_stage PopSavedMem, "next_stage (POP Saved to memory)", AND $_pop_memsave, $mem_ready
+%endif
 // - Instruction complete
 next_instruction Pop, "next_instruction (Pop)", AND $is_POP, @stage_state[6]
 

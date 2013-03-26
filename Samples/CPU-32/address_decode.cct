@@ -48,7 +48,6 @@ $pulse = PULSE $_enable
 
 #display $_enable "$switch = %1i, $read_r = %1i, $read_m" $switch, $read_r, $read_m
 #display $rdy_clear "$rdy_clear = %1i" $rdy_clear
-;#display $rdy "$rdy = %1i" $rdy
 
 $NULL, $_enable = LATCH 1, $rdy_clear, (DELAY $trigger)
 $NULL, @dest_addr = LATCH{32} 1, $_pulse, @dest_addr
