@@ -47,16 +47,15 @@ static tElement *_Create(int NParams, int *Params, int NInputs)
 
 #define MAKE_ELE_UPDATE(__name, __init, __operation, __invert) static void _Update_##__name(tElement *Ele) { \
 	 int	out = __init; \
-	 int	i, j, base; \
 	t_info *info = Ele->Info; \
-	base = Ele->NInputs - Ele->NOutputs*info->BusCount; \
-	for( i = 0; i < base; i++ ) {\
+	const int	base = Ele->NInputs - Ele->NOutputs*info->BusCount; \
+	for( int i = base; i-- ; ) {\
 		out = out __operation GetLink(Ele->Inputs[i]); \
 	} \
-	for( j = 0; j < Ele->NOutputs; j ++ ) { \
+	for( int j = Ele->NOutputs; j --;  ) { \
 		 int	outTmp = out; \
 		 int	ofs = base + j; \
-		for(i = 0; i < info->BusCount; i ++) { \
+		for( int i = info->BusCount; i --; ) { \
 			outTmp = outTmp __operation GetLink(Ele->Inputs[ofs]); \
 			ofs += Ele->NOutputs; \
 		} \
@@ -64,6 +63,27 @@ static tElement *_Create(int NParams, int *Params, int NInputs)
 			RaiseLink(Ele->Outputs[j]); \
 	} \
 }
+
+#if 0
+static void _Update_AND(tElement *Ele) {
+	 int	out = 1;
+	t_info *info = Ele->Info;
+	const int	base = Ele->NInputs - Ele->NOutputs*info->BusCount;
+	for( int i = 0; i < base; i++ ) {
+		out = out && GetLink(Ele->Inputs[i]);
+	}
+	for( int j = 0; j < Ele->NOutputs; j ++ ) {
+		 int	outTmp = out;
+		 int	ofs = base + j;
+		for( int i = 0; i < info->BusCount; i ++) {
+			outTmp = outTmp && GetLink(Ele->Inputs[ofs]);
+			ofs += Ele->NOutputs;
+		}
+		if( outTmp == !0 )
+			RaiseLink(Ele->Outputs[j]);
+	}
+}
+#endif
 
 MAKE_ELE_UPDATE(AND, 1, &&, 0);
 MAKE_ELE_UPDATE(OR,  0, ||, 0);
