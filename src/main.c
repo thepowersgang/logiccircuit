@@ -43,6 +43,7 @@ void	ResolveEleLinks(tElement *First);
 // === GLOBALS ===
  int	gbRunSimulation = 1;
  int	giSimulationSteps = 0;
+ int	gbHideDebug = 0;
  int	gbStepping = 1;
  int	gbPrintLinks = 0;
  int	gbPrintStats = 0;
@@ -104,6 +105,9 @@ int main(int argc, char *argv[])
 			else if( strcmp(argv[i], "-count") == 0 ) {
 				if(i + 1 == argc)	return -1;
 				giSimulationSteps = atoi(argv[++i]);
+			}
+			else if( strcmp(argv[i], "-nodbg") == 0 ) {
+				gbHideDebug = 1;
 			}
 			else if( strcmp(argv[i], "-readbin") == 0 ) {
 				if(i + 1 == argc)	return -1;
@@ -276,9 +280,11 @@ int main(int argc, char *argv[])
 			printf("\x1B[2J");
 			printf("\x1B[H");
 		}
-		printf("---- %6i ----\n", timestamp);
-		
-		Sim_ShowDisplayItems(compiled_root->DisplayItems);
+		if( !gbHideDebug )
+		{
+			printf("---- %6i ----\n", timestamp);
+			Sim_ShowDisplayItems(compiled_root->DisplayItems);
+		}
 	
 		// Check breakpoints
 		breakPointFired = Sim_CheckBreakpoints(compiled_root);
