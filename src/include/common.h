@@ -96,7 +96,8 @@ struct sGroupDef
 {
 	tGroupDef	*Next;
 	 int	Size;	//!< Size of the group
-	char	Name[];	//!< Name
+	tLink	**Links;	//!< Links for this group
+	char	*Name;	//!< Name
 };
 
 /**

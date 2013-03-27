@@ -14,6 +14,7 @@
 
 // === PROTOTYPES ===
 void	Link_Ref(tLink *Link);
+tLink	*CreateNamedLink(const char *Name);
 
 
 // === GLOBALS ===
@@ -307,17 +308,19 @@ tDisplayItem *Build_AddDisplayItem(const char *Name, const tList *Condition, con
 void Build_CreateGroup(const char *Name, int Size)
 {
 	tGroupDef	**listhead;
-	tGroupDef	*ret, *def, *prev = NULL;
+	tGroupDef	*ret, *prev = NULL;
 
-	ret = malloc( sizeof(tGroupDef) + 1 + strlen(Name) + 1 );
+	ret = malloc( sizeof(tGroupDef) + Size*sizeof(tLink*) + (1 + strlen(Name)) + 1 );
 	ret->Size = Size;
+	ret->Links = (void*)(ret + 1);
+	ret->Name = (void*)(ret->Links + Size);
 	ret->Name[0] = '@';
 	strcpy(&ret->Name[1], Name);
 	
 	listhead = &Build_int_GetCurExecUnit()->Groups;
 	
 	//printf("ret->Name = '%s', def = %p\n", ret->Name, def);
-	for( def = *listhead; def; prev = def, def = def->Next )
+	for( tGroupDef *def = *listhead; def; prev = def, def = def->Next )
 	{
 		if(strcmp(ret->Name, def->Name) == 0) {
 			fprintf(stderr, "ERROR: Redefinition of %s\n", ret->Name);
@@ -341,6 +344,16 @@ void Build_CreateGroup(const char *Name, int Size)
 		ret->Next = *listhead;
 		*listhead = ret;
 	}
+
+	// Create link set
+	size_t digits = snprintf(NULL, 0, "%i", Size-1);
+	size_t len = strlen(Name)+1+digits+1;
+	for( int i = 0; i < Size; i ++ )
+	{
+		char	newname[len + 1];
+		snprintf(newname, len+1, "%s[%*i]", Name, (int)digits, i);
+		ret->Links[i] = CreateNamedLink(newname);
+	}
 }
 
 /**
@@ -354,7 +367,6 @@ tGroupDef *GetGroup(const char *Name)
 	
 	for( ; def; def = def->Next )
 	{
-		//printf("strcmp(%s, %s)\n", Name, def->Name);
 		if(strcmp(Name, def->Name) == 0)	return def;
 		//if(strcmp(Name, def->Name) < 0)	return NULL;
 	}
@@ -658,7 +670,6 @@ void List_AppendLine(tList *Dest, const char *Name)
  */
 int List_AppendGroupItem(tList *Dest, const char *Name, int Index)
 {
-	 int	len, i, digits;
 	tGroupDef	*grp = GetGroup(Name);
 	
 	//printf("AppendGroupItem: (%p, %s, %i)\n", Dest, Name, Index);
@@ -673,21 +684,11 @@ int List_AppendGroupItem(tList *Dest, const char *Name, int Index)
 		return 2;
 	}
 	
-	digits = 0;
-	for( i = grp->Size-1; i; i /= 10 )	digits ++;
-	if( digits == 0 )	digits = 1;
+	Dest->NItems ++;
+	Dest->Items = realloc( Dest->Items, Dest->NItems * sizeof(tLink*) );
+	Dest->Items[Dest->NItems-1] = grp->Links[Index];
+	Link_Ref(grp->Links[Index]);
 	
-	// Get string length
-	len = snprintf(NULL, 0, "%s[%*i]", Name, digits, Index);
-	
-	{
-		char	newname[len + 1];
-		snprintf(newname, len+1, "%s[%*i]", Name, digits, Index);
-		
-		Dest->NItems ++;
-		Dest->Items = realloc( Dest->Items, Dest->NItems * sizeof(tLink*) );
-		Dest->Items[Dest->NItems-1] = CreateNamedLink(newname);
-	}
 	return 0;
 }
 
@@ -697,8 +698,7 @@ int List_AppendGroupItem(tList *Dest, const char *Name, int Index)
 int List_AppendGroup(tList *Dest, const char *Name)
 {
 	tGroupDef	*grp = GetGroup(Name);
-	 int	i, ofs, len;
-	 int	digits = 0;
+	 int	ofs;
 	
 	//printf("AppendGroup: (%p, %s)\n", Dest, Name);
 	if(!grp) {
@@ -707,21 +707,14 @@ int List_AppendGroup(tList *Dest, const char *Name)
 		return 1;
 	}
 	
-	for( i = grp->Size-1; i; i /= 10 )	digits ++;
-	if( digits == 0 )	digits = 1;	
-	
-	len = snprintf(NULL, 0, "%s[%*i]", Name, digits, grp->Size-1);
-
 	ofs = Dest->NItems;
 	Dest->NItems += grp->Size;
 	Dest->Items = realloc( Dest->Items, Dest->NItems * sizeof(tLink*) );
 	
-	for( i = 0; i < grp->Size; i ++ )
+	for( int i = 0; i < grp->Size; i ++ )
 	{
-		char	newname[len + 1];
-		snprintf(newname, len+1, "%s[%*i]", Name, digits, i);
-		
-		Dest->Items[ofs+i] = CreateNamedLink(newname);
+		Dest->Items[ofs+i] = grp->Links[i];
+		Link_Ref(grp->Links[i]);
 	}
 	
 	return 0;
