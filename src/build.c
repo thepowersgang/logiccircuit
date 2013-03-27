@@ -424,9 +424,13 @@ tLink *CreateAnonLink(void)
 	ret->Value->FirstLink = ret;
 	ret->ReferenceCount = 1;
 
-	first = &Build_int_GetCurExecUnit()->Links;
+	tExecUnit *unit = Build_int_GetCurExecUnit();
+	first = &unit->Links;
 	ret->Next = *first;
 	*first = ret;
+	if( !unit->LastAnonLink )
+		unit->LastAnonLink = ret;
+		
 	
 	return ret;
 }
@@ -442,7 +446,7 @@ tLink *CreateNamedLink(const char *Name)
 
 	first = &unit->Links;
 	
-	for(ret = *first; ret; prev = ret, ret = ret->Next )
+	for(ret = (unit->LastAnonLink ? unit->LastAnonLink : *first); ret; prev = ret, ret = ret->Next )
 	{
 		if(strcmp(Name, ret->Name) == 0)	return ret;
 		#if SORTED_LINK_LIST
