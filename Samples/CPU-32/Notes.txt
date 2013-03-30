@@ -17,8 +17,12 @@ Control Registers
 CR0	- Exception source instruction
 CR1	- Exception reason
 CR2	- MMU Base
-CR3	- Control Flags
-CR4-15	- Unimpl
+CR3	- System Control Flags
+CR4	- Avail 1
+CR5	- Avail 2
+CR6	- Interrupt Saved SP
+CR7	- Interrupt Saved Flags
+CR8-15	- Undef
 
 Exception Vectors:
 0x00	- Reset
@@ -26,20 +30,23 @@ Exception Vectors:
 0x04	- External IRQ
  > CR0 = Next Instruction
 0x08	- Undefined Instruction
- > CR0 = Faulting instr + 4
+ > CR0 = Faulting PC + 4
  > CR1 = Instruction word
 0x0C	- Memory Abort (MMU Fault)
- > CR0 = Faulting instr + 4
+ > CR0 = Faulting PC + 4
  > CR1 = Page of fault, reason in low bits
 0x10	- Unaligned Access
- > CR0 = Faulting instr + 4
+ > CR0 = Faulting PC + 4
  > CR1 = Faulting address
 0x14	- Software Interrupt
  > CR0 = Next Instruction
  > CR1 = SWI Instruction
+0x18	- General Protection Fault
+ > CR0 = Next Instruction
+ > CR1 = Offending instruction
+0x1C	- RESERVED
 
 TODO:
-- Shifts
 - MMU / Permission levels
 - CPUID?
 
@@ -94,7 +101,9 @@ ooooo111 RRRRxxxx iiiisssv vvvvvvvv	- R = R <op> [PC + Ri << s + imm9s]
 10111000 00000000 mmmmmmmm vvvvvvvv	- LDF m, v	- Load (Set) Flags (Mask, Value)
     1000 00000001 00000000 ccccrrrr	- MOV CRc, Rr	- Move to control register
     1000 00000001 00000001 ccccrrrr	- MOV Rr, CRc	- Move from control register
-    1000 00000001 0000001x	- ?
+    1000 00000001 00000010 00000000	- IRET	- PC=CR0,SP=CR6,Flags=CR7
+    1000 00000001 00000010 xxxxxxxx	- ?
+    1000 00000001 00000011	- ?
     1000 00000001 000001xx	- ?
     1000 00000001 00001xxx	- ?
     1000 00000001 0001xxxx	- ?
@@ -142,3 +151,13 @@ ooooo111 RRRRxxxx iiiisssv vvvvvvvv	- R = R <op> [PC + Ri << s + imm9s]
 1101 CF=1|ZF=1	BE	Below-Equal (Unsigned Less-than)
 1110 -  	--	Always
 1111 -  	--	Never
+
+
+===
+MMU Notes
+===
+
+- x86-style layout (10+10+12)
+ > Would I want to extend to 64-bit paddr?
+- Support ASIDs?
+

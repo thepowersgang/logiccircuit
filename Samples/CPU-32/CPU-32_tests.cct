@@ -290,15 +290,18 @@ $mem_ready = PULSE $mem_enable
 //
 #testcase 400 "CPU - #UD+MRC"
 __CPU32_TEST_WRAPPER 1
-#array stage 5
-@stage = SEQUENCER{5} 1, 0, $ins_end
+#array stage 6
+@stage = SEQUENCER{6} 1, 0, $ins_end
 
 $mem_ready = PULSE $mem_enable
+$reg_ready = PULSE $reg_enable
 
 @mem_data_in[0:31] = AND{32} @stage[0], $mem_enable, 0x8E00001F[0:31]	; JMP 0x80
 #testassert @stage[0],$mem_enable @mem_addr[0:31] 0x00000000[0:31]
 @mem_data_in[0:31] = AND{32} @stage[1], $mem_enable, 0xFFFFFFFF[0:31]	; UD_N1
 #testassert @stage[1],$mem_enable @mem_addr[0:31] 0x00000080[0:31]
+@reg_data_in[0:31] = AND{32} @stage[1], $reg_enable, 0x12345678[0:31]
+#testassert @stage[1],$reg_enable @reg_addr[0:3] 13[0:3]
 @mem_data_in[0:31] = AND{32} @stage[2], $mem_enable, 0xB8010101[0:31]	; MOV R1, CR0
 #testassert @stage[2],$mem_enable @mem_addr[0:31] 0x0000008[0:31]
 #testassert @stage[2],$reg_enable @reg_addr[0:3] 1[0:3]
@@ -309,8 +312,14 @@ $mem_ready = PULSE $mem_enable
 #testassert @stage[3],$reg_enable @reg_addr[0:3] 1[0:3]
 #testassert @stage[3],$reg_enable $reg_write 1
 #testassert @stage[3],$reg_enable @reg_data_out[0:31] 0xFFFFFFFF[0:31]
+@mem_data_in[0:31] = AND{32} @stage[4], $mem_enable, 0xB8010162[0:31]	; MOV R2, CR6
+#testassert @stage[4],$mem_enable @mem_addr[0:31] 0x0000010[0:31]
+#testassert @stage[4],$reg_enable @reg_addr[0:3] 2[0:3]
+#testassert @stage[4],$reg_enable $reg_write 1
+#testassert @stage[4],$reg_enable @reg_data_out[0:31] 0x12345678[0:31]
+// TODO: Test CR7=Flags
 
-#testcomplete @stage[4]
+#testcomplete @stage[5]
 #endtestcase
 
 #testcase 600 "CPU - Shifts"

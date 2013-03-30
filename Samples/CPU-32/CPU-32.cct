@@ -37,9 +37,6 @@ $next_instruction = PULSE $_next_instruction_%1
 #array instr	32
 
 #breakpoint $ins_complete "Next Instruction"
-;#breakpoint $next_stage "Next Stage"
-;#breakpoint $reg_pc_write "PC Write"
-;#breakpoint $stage_reset "Stage Reset"
 
 #display 1 "Stage %4x" @stage_num[3:0], @stage_state
 #display 1 "Reset  " $stage_reset
@@ -67,14 +64,26 @@ $flags_S_clear = @flags_clear[3]
 $pc_clear = PULSE $reset
 $NULL, @pc = LATCH{32} 1, $pc_clear, @pc_new
 // --- Control Registers ---
+%macro deflreg 1
+#array %1	32
+#array %1 %+ _new	32
+$NULL, @ %+ %1 = LATCH{32} 1, $%1 %+ _clear, @%1 %+ _new
+%endmacro
 // > CR0: Exception Return
-#array cr0	32
-#array cr0_new	32
-$NULL, @cr0 = LATCH{32} 1, $cr0_clear, @cr0_new
+deflreg cr0
 // > CR1: Exception Reason
-#array cr1	32
-#array cr1_new	32
-$NULL, @cr1 = LATCH{32} 1, $cr1_clear, @cr1_new
+deflreg cr1
+// > CR2: MMU Base address + flags
+deflreg cr2
+// > CR3: System control flags
+deflreg cr3
+// > CR4 / CR5: Avaliable for OS use
+deflreg cr4
+deflreg cr5
+// > CR6: Pre-Exception R13
+deflreg cr6
+// > CR7: Pre-Exception FLAGS
+deflreg cr7
 #display 1 "CR0 = %32x  CR1 = %32x" @cr0[31:0], @cr1[31:0]
 
 // === "Temporary" Latches ===
@@ -100,7 +109,7 @@ $stage_reset = DELAY $reset
 // =============================
 #display @stage_state[0] "Opcode fetch" 1
 // - Request memory
-@mem_addr    = AND{NUM_ADDR_BITS} @stage_state[0], @pc	// Set memory address to PC
+@mem_addr[2:31] = AND{30} @stage_state[0], @pc[2:31]	// Set memory address to PC (ignore bottom two bits)
 $mem_enable  = PULSE @stage_state[0]	// Enable memory for read
 // - Read complete, save into @instr
 @instr = AND{32} @stage_state[0], $mem_ready, @mem_data_in	// Save the opcode
@@ -159,21 +168,36 @@ $is_LEA     = AND $decode_enable, (NXOR{6,2} @instr[31:26], 0b101111[5:0])
 ; 1100xxxx	- Non-word Load/Store
 ;$is_NONWLS  = AND $decode_enable, (NXOR{4,2} @instr[31:28], 0b1100[3:0])
 
+#array interrupt_num	4
 // === Handle Undefined Opcodes ===
 $is_invl = NOR $is_ALU, $is_BRANCH, $is_IBRANCH, $is_PUSH, $is_POP, $is_LDF, $is_MRC, $is_MCR, $is_SHIFT, $is_LEA
 $is_UNDEF = AND (DELAY{2} $decode_enable), $is_invl
 #display $is_UNDEF "UNDEFINED INSTRUCTION!" 0
 #breakpoint $is_UNDEF "#UD"
 ; - Set CRs
-$cr0_clear = PULSE $is_UNDEF
-@cr0_new = AND{32} (PULSE $is_UNDEF), @pc
 $cr1_clear = PULSE $is_UNDEF
 @cr1_new = AND{32} (PULSE $is_UNDEF), @instr
-; - Set PC=0x0000000C
-$_undef_pulse = PULSE $is_UNDEF
-$pc_clear = DELAY $_undef_pulse
-@pc_new[0:31] = DELAY (AND{32} $_undef_pulse, 0x8[0:31])
-next_instruction UNDEF, "next_instruction (UNDEF)", DELAY{3} $_undef_pulse
+; - Trip interrupt circuitry (Interrupt 2 - #UD)
+$is_interrupt = DELAY{3} $is_UNDEF
+@interrupt_num[0:3] = AND{4} $is_UNDEF, 2[0:3]	; 0x00000008 / 4
+
+// --- Interrupt / Exception Handling ---
+// - Set CR0=PC
+$_intr_pulse = PULSE $is_interrupt
+$cr0_clear = DELAY $_intr_pulse
+@cr0_new = AND{32} (PULSE $_intr_pulse), @pc
+// - Set CR6=SP
+$cr6_clear = DELAY $_intr_pulse
+$reg_enable = DELAY $_intr_pulse
+@reg_addr[0:3] = AND{4} $_intr_pulse, 13[0:3]
+@cr6_new[0:31] = AND{32} $is_interrupt, $reg_ready, @reg_data_in[0:31]
+// - Set CR7=flags
+$cr7_clear = DELAY $_intr_pulse
+@cr7_new[0:31] = AND{32} (PULSE $_intr_pulse), @flags[0:3],0*28
+// - Set PC=handler
+$pc_clear = DELAY{2} $_intr_pulse
+@pc_new[0:31] = DELAY{2} (AND{32} $_intr_pulse, 0,0,@interrupt_num[0:3],0*26)
+next_instruction Intr, "next_instruction (Intr)", DELAY{3} $_intr_pulse
 
 // === Address/Operand Decoding ===
 $no_decode_r = AND $decode_enable, $is_IBRANCH
@@ -313,17 +337,30 @@ next_instruction Pop, "next_instruction (Pop)", AND $is_POP, @stage_state[6]
 @flags[0:3]       = AND{4} (PULSE $is_LDF), (DELAY @instr[0:3])
 next_instruction LDF, "next_instruction (LDF)", DELAY{3} $is_LDF
 
+#array _cr_wr_sel	16
+#array cr_data_set 32
+@_cr_wr_sel = DEMUX{4} $cr_sel_write, @instr[4:7]
+$cr0_clear = PULSE @_cr_wr_sel[0] \\ @cr0_new = AND{32} @_cr_wr_sel[0], @cr_data_set
+$NULL = DELAY @_cr_wr_sel[1]	// CR1: Read-only
+$cr2_clear = PULSE @_cr_wr_sel[2] \\ @cr2_new = AND{32} @_cr_wr_sel[2], @cr_data_set
+$cr3_clear = PULSE @_cr_wr_sel[3] \\ @cr3_new = AND{32} @_cr_wr_sel[3], @cr_data_set
+$cr4_clear = PULSE @_cr_wr_sel[4] \\ @cr4_new = AND{32} @_cr_wr_sel[4], @cr_data_set
+$cr5_clear = PULSE @_cr_wr_sel[5] \\ @cr5_new = AND{32} @_cr_wr_sel[5], @cr_data_set
+$cr6_clear = PULSE @_cr_wr_sel[6] \\ @cr6_new = AND{32} @_cr_wr_sel[6], @cr_data_set
+$cr7_clear = PULSE @_cr_wr_sel[7] \\ @cr7_new = AND{32} @_cr_wr_sel[7], @cr_data_set
+$NULL = OR @_cr_wr_sel[8:15]
 // === MCR ===
 $reg_enable = DELAY $is_MCR
 @reg_addr[0:3] = AND{4} $is_MCR, @instr[0:3]
-;$NULL*64,@cr2,@cr3,$NULL*384 = DEMUX{4,32} (AND{4} $reg_ready, $is_MCR, @instr[7:4]), (DELAY @reg_data_in)
+$cr_sel_write = AND $reg_ready, $is_MCR
+@cr_data_set = DELAY{2} @reg_data_in
 next_instruction MCR, "next_instruction (MCR)", DELAY{2} (AND $reg_ready, $is_MCR)
 
 // === MRC ===
-@reg_addr[0:3] = AND{4} $is_MRC, @instr[0:3]
-@reg_data_out = MUX{4,32} $is_MRC, @instr[4:7], @cr0, @cr1, 0*32, 0*32, 0*128, 0*256
 $reg_enable = PULSE $is_MRC
+@reg_addr[0:3] = AND{4} $is_MRC, @instr[0:3]
 $reg_write = PULSE $is_MRC
+@reg_data_out = MUX{4,32} $is_MRC, @instr[4:7], @cr0,@cr1, @cr2,@cr3, @cr4,@cr5, @cr6,@cr7, 0*256
 next_instruction MRC, "next_instruction (MRC)", DELAY{4} $is_MRC
 
 // === Shift / Rotate ===
