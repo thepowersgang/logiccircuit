@@ -114,6 +114,15 @@ int GetToken(tParser *Parser)
 		ret = TOK_NEWLINE;
 		break;
 	
+	case '\\':
+		if( *Parser->CurPos == '\\' ) {
+			Parser->CurPos ++;
+			ret = TOK_NEWLINE;
+			break;
+		}
+		ret = TOK_NULL;
+		break;
+	
 	// Meta-Statement (Definition, Etc)
 	case '#':
 		// Read identifier
