@@ -236,7 +236,8 @@ $decode_complete, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src,\
 
 // --- Stage 2.5 ALU Core ---
 $alu_data_rdy = AND $is_ALU, $decode_complete
-$alu_done, $alu_nosave, @alu_out, $flags_C_clear, $flags_O_clear, $flags_Z_clear \
+$alu_done, $alu_nosave, @alu_out, $flags_C_clear, $flags_O_clear, $flags_Z_clear, \
+	$flags_Z, $flags_O, $flags_Z \
 	= CPU32_ALU $alu_data_rdy, @instr[27:29], @alu_in_dst, @alu_in_src,\
 	$flags_C, $flags_O, $flags_Z
 next_stage ALUDONE, "next_stage (ALUDONE)", $alu_done
