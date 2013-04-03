@@ -61,10 +61,13 @@ $done    = DELAY{3} $add_done
 // --- ADD ---
 #display $is_ADD "ADD 0x%32x + 0x%32x + %i" @alu_in_dst[31:0], @alu_in_src[31:0], $flags_C
 $flags_C_clear = PULSE (DELAY $is_ADD)
+$flags_O_clear = PULSE (DELAY $is_ADD)
 $alu_adder_pulse = DELAY $is_ADD
 @alu_adder_op2   = AND{32} $is_ADD, @alu_in_src
 $alu_adder_CF    = AND $is_ADD, $flags_C
 $flags_C_set = AND $is_ADD, $add_done, $add_C_out
+$flags_O_set = AND $is_ADD, (NOT   @alu_in_dst[31]), (NOT   @alu_in_src[31]), (DELAY @alu_out[31])	// 00,1
+$flags_O_set = AND $is_ADD, (DELAY @alu_in_dst[31]), (DELAY @alu_in_src[31]), (NOT   @alu_out[31])	// 11,0
 // --- SUB ---
 #display $is_SUB "SUB 0x%32x - 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
 $flags_C_clear = PULSE (DELAY{2} $is_SUB)
@@ -149,7 +152,7 @@ _fixture 3, 0x12300565, 0x00E4C000, 0,0,0
 #testcase 40 "ALU: ADD - NC in, NC out"
 _fixture 4, 0x12300565, 0x00E4C000, 0,0,0
 #testassert $done @flags_set[0:2]   0b000[0:2]
-#testassert $done @flags_clear[0:2] 0b101[0:2]	; ZOC
+#testassert $done @flags_clear[0:2] 0b111[0:2]	; ZOC
 #testassert $done $nowrite 0
 #testassert $done @out[31:0]	0x1314C565[31:0]
 #testcomplete $done
@@ -158,7 +161,7 @@ _fixture 4, 0x12300565, 0x00E4C000, 0,0,0
 #testcase 40 "ALU: ADD - NC in, C out"
 _fixture 4, 0x12300565, 0xF0E4C000, 0,0,0
 #testassert $done @flags_set[0:2]   0b001[0:2]	; ZOC
-#testassert $done @flags_clear[0:2] 0b101[0:2]	; ZOC
+#testassert $done @flags_clear[0:2] 0b111[0:2]	; ZOC
 #testassert $done $nowrite 0
 #testassert $done @out[31:0]	0x0314C565[31:0]
 #testcomplete $done
@@ -167,7 +170,7 @@ _fixture 4, 0x12300565, 0xF0E4C000, 0,0,0
 #testcase 40 "ALU: ADD - C in, NC out"
 _fixture 4, 0x12300565, 0x00E4C000, 1,0,0	; COZ
 #testassert $done @flags_set[0:2]   0b000[0:2]	; ZOC
-#testassert $done @flags_clear[0:2] 0b101[0:2]	; ZOC
+#testassert $done @flags_clear[0:2] 0b111[0:2]	; ZOC
 #testassert $done $nowrite 0
 #testassert $done @out[31:0]	0x1314C566[31:0]
 #testcomplete $done
@@ -176,7 +179,7 @@ _fixture 4, 0x12300565, 0x00E4C000, 1,0,0	; COZ
 #testcase 40 "ALU: ADD - C in, C out"
 _fixture 4, 0x12300565, 0xF0E4C000, 1,0,0
 #testassert $done @flags_set[0:2]   0b001[0:2]	; ZOC
-#testassert $done @flags_clear[0:2] 0b101[0:2]	; ZOC
+#testassert $done @flags_clear[0:2] 0b111[0:2]	; ZOC
 #testassert $done $nowrite 0
 #testassert $done @out[31:0]	0x0314C566[31:0]
 #testcomplete $done
