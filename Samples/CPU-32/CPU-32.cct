@@ -241,7 +241,7 @@ $alu_done, $alu_nosave, @alu_out, $flags_C_clear, $flags_O_clear, $flags_Z_clear
 	$flags_C, $flags_O, $flags_Z
 next_stage ALUDONE, "next_stage (ALUDONE)", $alu_done
 // --- Stage 3: Save ALU Data ---
-#display @stage_state[3] "Data save" 1
+#display $is_ALU,@stage_state[3] "Data save" 1
 $alu_save = AND @stage_state[3], $is_ALU
 // - Save to memory
 $_alu_save_mem = AND $alu_save, (NOT $alu_nosave), $addr_is_mem
@@ -372,10 +372,16 @@ next_instruction MRC, "next_instruction (MRC)", DELAY{4} $is_MRC
 // Use ALU latches for temp storage
 // - This is a little evil, as these latches are in CPU32_ADDRESS_DECODE
 @_shift_count[0:4] = @alu_in_src[0:4]
-#display $is_SHIFT "_shift_count = %5x" @_shift_count[4:0]
+#display $is_SHIFT "_shift_count = 0x%5x" @_shift_count[4:0]
 @_shift_value[0:31] = @alu_in_dst[0:31]
 @_shift_value[32] = @alu_in_src[16]
 @_shift_value_nc[0:31] = @alu_addr[0:31]
+$_shift_dir_left  = NOT   @instr[7]
+$_shift_dir_right = DELAY @instr[7]
+$_shift_no_cf  = NOT   @instr[6]
+$_shift_use_cf = DELAY @instr[6]
+$_shift_is_shift  = NOT   @instr[16]
+$_shift_is_rotate = DELAY @instr[16]
 // Prepare arguments
 // - Count imm5
 @_shift_count[0:4] = AND{5} $is_SHIFT, (DELAY @instr[5]), @instr[0:4]
@@ -390,34 +396,43 @@ next_stage ShiftRv, "next_stage (Shift Rv)", AND $_shift_readRv, $reg_ready
 $_shift_value_reading = AND $is_SHIFT, @stage_state[3]
 $reg_enable = PULSE $_shift_value_reading
 @reg_addr[0:3] = AND{4} $_shift_value_reading, @instr[8:11]
-@_shift_value[0:32] = AND{33} $_shift_value_reading,$reg_ready,(NOT   @instr[7]), $flags_C,@reg_data_in[0:31]
-@_shift_value[0:32] = AND{33} $_shift_value_reading,$reg_ready,(DELAY @instr[7]), @reg_data_in[31:0],$flags_C
-@_shift_value_nc[0:31] = AND{32} $_shift_value_reading,$reg_ready,(NOT   @instr[7]), @reg_data_in[0:31]
-@_shift_value_nc[0:31] = AND{32} $_shift_value_reading,$reg_ready,(DELAY @instr[7]), @reg_data_in[31:0]
+#display $_shift_value_reading,$reg_ready "Shift reg in: %32x" @reg_data_in[31:0]
+@_shift_value[0:32] = AND{33} $_shift_value_reading,$reg_ready,$_shift_dir_left,  $flags_C,@reg_data_in[0:31]
+@_shift_value[0:32] = AND{33} $_shift_value_reading,$reg_ready,$_shift_dir_right, @reg_data_in[31:0],$flags_C
+@_shift_value_nc[0:31] = AND{32} $_shift_value_reading,$reg_ready,$_shift_dir_left,  @reg_data_in[0:31]
+@_shift_value_nc[0:31] = AND{32} $_shift_value_reading,$reg_ready,$_shift_dir_right, @reg_data_in[31:0]
 next_stage ShiftVal, "next_stage (Shift Value)", AND $_shift_value_reading, $reg_ready
 // Clear CF if it is used
-$flags_C_clear = PULSE (AND $is_SHIFT, @stage_state[4], (DELAY @instr[6]))
-$_shl_enable = AND $is_SHIFT, @stage_state[4], (NOT   @instr[16])
-$_rol_enable = AND $is_SHIFT, @stage_state[4], (DELAY @instr[16]), (NOT   @instr[6])
-$_rcl_enable = AND $is_SHIFT, @stage_state[4], (DELAY @instr[16]), (DELAY @instr[6])
+$flags_C_clear = PULSE (AND $is_SHIFT, @stage_state[4], $_shift_use_cf)
+$_shl_enable = AND $is_SHIFT, @stage_state[4], $_shift_is_shift
+;$_shl_enable = AND $is_SHIFT, @stage_state[4], (NOT   @instr[16]), $_shift_no_cf
+;$_scl_enable = AND $is_SHIFT, @stage_state[4], (NOT   @instr[16]), $_shift_use_cf
+$_rol_enable = AND $is_SHIFT, @stage_state[4], $_shift_is_rotate, $_shift_no_cf
+$_rcl_enable = AND $is_SHIFT, @stage_state[4], $_shift_is_rotate, $_shift_use_cf
 // Perform shift
-#display $_shl_enable "SHL: _shift_value = %33x" @_shift_value
-#display $_rcl_enable "RCL: _shift_value = %33x" @_shift_value
-#display $_rol_enable "ROL: _shift_value = %32x" @_shift_value_nc
-$_shift_done, @_shift_out = SHIFT_LEFT_N_32 $_shl_enable, @_shift_count, @_shift_value
-$_shift_done, @_shift_out = ROTATE_LEFT_N_33 $_rcl_enable, @_shift_count, @_shift_value
+#display 1 "SHL: _shift_value = %33x" @_shift_value
+#display $_shl_enable "SHL: _shift_value = %33x" @_shift_value[32:0]
+;#display $_scl_enable "SCL: _shift_value = %33x" @_shift_value
+;#display $_shl_enable "SHL: _shift_value = %32x" @_shift_value_nc
+#display $_rcl_enable "RCL: _shift_value = %33x" @_shift_value[32:0]
+#display $_rol_enable "ROL: _shift_value = %32x" @_shift_value_nc[31:0]
+$_shift_done, @_shift_out    = SHIFT_LEFT_N_32  $_shl_enable, @_shift_count, @_shift_value
+$_shift_done, @_shift_out    = ROTATE_LEFT_N_33 $_rcl_enable, @_shift_count, @_shift_value
 $_shift_done, @_shift_out_nc = ROTATE_LEFT_N_32 $_rol_enable, @_shift_count, @_shift_value_nc
 next_stage ShiftDone, "next_stage (Shift Done)", $_shift_done
-#display $_shift_done "_shift_out = %33x" @_shift_out
+#display $_shift_done,$_shift_dir_left  "_shift_out CL = %32x,C=%1b" @_shift_out[32:1],@_shift_out[0]
+#display $_shift_done,$_shift_dir_right "_shift_out CR = %32x,C=%1b" @_shift_out[0:31],@_shift_out[32]
+#display $_shift_done,$_shift_dir_left  "_shift_out -L = %32x" @_shift_out_nc[31:0]
+#display $_shift_done,$_shift_dir_right "_shift_out -R = %32x" @_shift_out_nc[0:31]
 // Write back shifted value
 $_shift_writeback = AND $is_SHIFT, @stage_state[5]
 $reg_write = PULSE $_shift_writeback
 @reg_addr[0:3] = AND{4} $_shift_writeback, @instr[12:15]
 $reg_enable = PULSE $_shift_writeback
-$flags_C,@reg_data_out[0:31] = AND{33} $_shift_writeback, (NOT   @instr[7]), @_shift_out[0:32]
-@reg_data_out[31:0],$flags_C = AND{33} $_shift_writeback, (DELAY @instr[7]), @_shift_out[0:32]
-@reg_data_out[0:31] = AND{32} $_shift_writeback, (NOT   @instr[16]), @_shift_out_nc[0:31]
-@reg_data_out[31:0] = AND{32} $_shift_writeback, (DELAY @instr[16]), @_shift_out_nc[0:31]
+$flags_C,@reg_data_out[0:31] = AND{33} $_shift_writeback,$_shift_dir_left,  @_shift_out[0:32]
+@reg_data_out[31:0],$flags_C = AND{33} $_shift_writeback,$_shift_dir_right, @_shift_out[0:32]
+@reg_data_out[0:31]          = AND{32} $_shift_writeback,$_shift_dir_left,  @_shift_out_nc[0:31]
+@reg_data_out[31:0]          = AND{32} $_shift_writeback,$_shift_dir_right, @_shift_out_nc[0:31]
 // Operation complete
 next_instruction Shift, "next_instruction (Shift)", DELAY{5} $_shift_writeback
 
@@ -430,12 +445,48 @@ $reg_write = PULSE $_LEA_active
 next_instruction LEA, "next_instruction (LEA)", DELAY{3} $_LEA_active
 
 // === Non-word Load/Store ===
-;@_nwls_basereg = @instr[16:19]
-;@_nwls_datareg = @instr[20:23]
-;$_nwls_offset_sign = @instr[15]
-;@_nwls_offset = @instr[0:15],$_nwls_offset_sign*16
+#array _nwls_basereg	4
+#array _nwls_datareg	4
+#array _nwls_offset	32
+@_nwls_basereg = @instr[16:19]
+@_nwls_datareg = @instr[20:23]
+$_nwls_offset_sign = @instr[15]
+@_nwls_offset[0:15] = @instr[0:15] \\ @_nwls_offset[16:31] = $_nwls_offset_sign*16
+$_nwls_byteop = AND $is_NONWLS, @instr[27]
+$_nwls_byteop = AND $is_NONWLS, (XNOR @instr[27:25], 0b011[2:0])
+$_nwls_hwordop = AND $is_NONWLS, (XNOR @instr[27:26], 0b00[1:0])
+$_nwls_hwordop = AND $is_NONWLS, (XNOR @instr[27:25], 0b010[2:0])
 // - Get Address
-// TODO: 
+#array _nwls_baseaddr	32
+#array _nwls_addr	32
+@_nwls_addr = @alu_addr	// (ab)use ALU address latch
+$_nwls_getaddr = AND $is_NONWLS, @stage_state[2]
+$reg_enable = DELAY $_nwls_getaddr
+@reg_addr = AND{4} $_nwls_getaddr, @_nwls_basereg
+$_nwls_startadd = AND $_nwls_getaddr, $reg_ready
+@_nwls_baseaddr = AND{32} $_nwls_getaddr, $reg_ready, @reg_data_out
+$_nwls_add_complete, @_nwls_addr, $NULL = ADDER_32BIT $_nwls_startadd, @_nwls_baseaddr, @_nwls_offset, 0
+next_stage NWLSGetAddr, "next_stage (NWLS Get Address)", DELAY $_nwls_add_complete
+// - GP load section
+#array _nwls_rdbyte 4
+#array _nwls_rdword 2
+#array _nwls_data 32
+@_nwls_data = @alu_in_dst	// (ab)use ALU destination latch
+$mem_enable = DELAY $_nwls_doread
+;@mem_size = AND{2} $_nwls_doread, $_nwls_byteop, 0b00[0:1]
+@mem_addr = AND{32} $_nwls_doread, @_nwls_baseaddr
+@_nwls_rdword = DEMUX{1} $_nwls_hwordop, @_nwls_baseaddr[1]
+@_nwls_rdbyte = DEMUX{2} $_nwls_byteop, @_nwls_baseaddr[0], @_nwls_baseaddr[1]
+@_nwls_data[0:7] = AND{8} @_nwls_rdbyte[0], $mem_ready, @mem_data_in[ 0: 7]
+@_nwls_data[0:7] = AND{8} @_nwls_rdbyte[1], $mem_ready, @mem_data_in[ 8:15]
+@_nwls_data[0:7] = AND{8} @_nwls_rdbyte[2], $mem_ready, @mem_data_in[16:23]
+@_nwls_data[0:7] = AND{8} @_nwls_rdbyte[3], $mem_ready, @mem_data_in[24:31]
+@_nwls_data[0:15] = AND{16} @_nwls_rdword[0], $mem_ready, @mem_data_in[ 0:15]
+@_nwls_data[0:15] = AND{16} @_nwls_rdword[1], $mem_ready, @mem_data_in[0:15]
+$_nwls_datardy = AND (OR $_nwls_hwordop, $_nwls_byteop), $mem_ready
+// - Handle Zero/Sign extend load
+// - Handle non-extended load
+// - Handle stores
 
 // === Conditional Jumps / Calls ===
 #array cond 8
@@ -461,7 +512,8 @@ $_jump_cond = XOR $condition_true, $cond_inverse
 next_stage JMPDEC, "next_stage (JMPDEC)", DELAY{4} $is_BRANCH
 next_stage IJMPDEC, "next_stage (IJMPDEC)", AND $is_IBRANCH, $decode_complete
 
-#display @stage_state[3] "%1i(jmpcond) = %1i(condition_true) ^ %1i(cond_inverse)" $_jump_cond, $condition_true, $cond_inverse
+#display $is_BRANCH,@stage_state[3] "%1i(jmpcond) = %1i(condition_true) ^ %1i(cond_inverse)" $_jump_cond, $condition_true, $cond_inverse
+#display $is_IBRANCH,@stage_state[3] "%1i(jmpcond) = %1i(condition_true) ^ %1i(cond_inverse)" $_jump_cond, $condition_true, $cond_inverse
 
 // - Not branching? Next instruction
 next_instruction NOJMP, "next_instruction (Not Jumping)", AND @stage_state[3], (OR $is_IBRANCH, $is_BRANCH), (NOT $_jump_cond)
@@ -526,7 +578,7 @@ $reg_ready, @reg_data_in = REGISTER_BANK_16_32 $reg_enable, @reg_addr, $reg_writ
 #array mem_addr	32
 #array mem_data_in	32
 #array mem_data_out	32
-$mem_ready, @mem_data_in, $fault_ac = MEMORY_SPACE $mem_enable, @mem_addr, $mem_write, @mem_data_out, 0,0
+$mem_ready, @mem_data_in, $NULL = MEMORY_SPACE $mem_enable, @mem_addr, $mem_write, @mem_data_out, 0,0
 #display $mem_enable "MemAddr" @mem_addr[NUM_ADDR_BITS-1:0]
 #display $mem_write "MemOut " @mem_data_out[31:0]
 #display $mem_ready "MemIn  " @mem_data_in[NUM_GPR_BITS-1:0]
