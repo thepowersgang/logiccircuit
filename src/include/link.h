@@ -29,6 +29,19 @@ struct sLinkValue
 	void	*Info;
 };
 
+#if 0
+#include "element.h"
+
+static inline int GetLink(tElement *Ele, int InputNum)
+{
+	return !!Ele->Inputs[InputNum]->Value->Value;
+}
+
+static inline void RaiseLink(tElement *Ele, int OutputNum)
+{
+	Ele->Outputs[OutputNum]->Value->NDrivers ++;
+}
+#else
 static inline int GetLink(tLink *Link)
 {
 	return !!Link->Value->Value;
@@ -38,5 +51,6 @@ static inline void RaiseLink(tLink *Link)
 {
 	Link->Value->NDrivers ++;
 }
+#endif
 
 #endif

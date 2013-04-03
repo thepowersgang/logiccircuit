@@ -155,6 +155,11 @@ void Sim_UsageCheck(tExecUnit *Root)
 		link->Link = NULL;
 	}
 	
+	for(int i = 0; i < Root->Inputs.NItems; i ++) {
+		if( ((struct sUsage*)Root->Inputs.Items[i]->Value->Info)->nSet != 1 )
+			fprintf(stderr, "notice: Input link %s:'%s' set\n", Root->Name, Root->Inputs.Items[i]->Name);
+	}
+	
 	free(usage);
 }
 
@@ -436,17 +441,17 @@ void Sim_ShowDisplayItems(tDisplayItem *First)
 	for( tDisplayItem *dispItem = First; dispItem; dispItem = dispItem->Next )
 	{
 		assert(dispItem != dispItem->Next);
-		// Check condition (if one condition line is high, the item is displayed)
+		// Check condition (if one condition line is low, the item is hidden)
 		for( i = 0; i < dispItem->Condition.NItems; i ++ )
 		{
 //			printf("%s(%p %i)\n", dispItem->Condition.Items[i]->Name,
 //				dispItem->Condition.Items[i]->Value,
 //				dispItem->Condition.Items[i]->Value->Value);
-			if( GetLink(dispItem->Condition.Items[i]) ) {
+			if( !GetLink(dispItem->Condition.Items[i]) ) {
 				break;
 			}
 		}
-		if( i == dispItem->Condition.NItems )	continue;
+		if( i != dispItem->Condition.NItems )	continue;
 
 		if( !bHasDisplayed ) {
 			printf("-----\n");

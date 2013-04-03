@@ -484,8 +484,16 @@ int ParseLine(tParser *Parser)
 		else if( strcmp(Parser->TokenStr, "#display") == 0 ) {
 			tList	cond = {0}, values = {0};
 			char	*title;
-			// Condition - Single value (well, should be :)
-			ParseValue(Parser, &cond);
+			// Condition - Set of values (all must be met)
+			do {
+				if( ParseValue(Parser, &cond) ) {
+					SyntaxError(Parser,
+						"Unexpected %s, expected %s",
+						GetTokenStr(TOK_T_VALUE), GetTokenStr(Parser->Token));
+				}
+				GetToken(Parser);
+			} while(Parser->Token == TOK_COMMA);
+			PutBack(Parser);
 			// Display Title - String
 			SyntaxAssert(Parser, GetToken(Parser), TOK_STRING);
 			title = strdup(Parser->TokenStr);
