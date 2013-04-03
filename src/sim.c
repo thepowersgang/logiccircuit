@@ -162,6 +162,53 @@ void Sim_UsageCheck(tExecUnit *Root)
 	
 	free(usage);
 }
+	
+void Sim_DuplicateCheck(tExecUnit *Root)
+{	
+	// TODO: Move this to another function, as it's expensive as hell
+	// Check for unessesarily duplicated elements (two elements that do the same thing on the same inputs)
+	 int	nEles = 0;
+	for(tElement *ele = Root->Elements; ele; ele = ele->Next)
+		nEles++;
+	char *visited_eles = calloc(1, nEles);
+	int idx = 0;
+	for(tElement *ele = Root->Elements; ele; ele = ele->Next, idx ++)
+	{
+		if( visited_eles[idx] )
+			continue ;
+		
+		 int	nDup = 0;
+		 int	idx2 = idx+1;
+		
+		for( tElement *ele2 = ele->Next; ele2; ele2 = ele2->Next, idx2 ++ )
+		{
+			if( ele->Type != ele2->Type )
+				continue ;
+			if( ele->NInputs != ele2->NInputs )
+				continue ;
+			if( memcmp(ele->Inputs, ele2->Inputs, ele->NInputs*sizeof(tLink*)) != 0 )
+				continue ;
+			nDup ++;
+			visited_eles[idx2] = 1;
+		}
+		
+		if( nDup > 0 )
+		{
+			fprintf(stderr, "%s: Element %s ", Root->Name, ele->Type->Name);
+			for( int i = 0; i < ele->NInputs; i ++ ) {
+				if( ele->Inputs[i]->Name[0] )
+					fprintf(stderr, "%s", ele->Inputs[i]->Name);
+				else
+					fprintf(stderr, "%p", ele->Inputs[i]);
+				if( i < ele->NInputs-1 )
+					fprintf(stderr, ", ");
+			}
+			fprintf(stderr, "\n");
+			fprintf(stderr, " is duplicated %i times\n", nDup);
+		}
+	}
+	free(visited_eles);
+}
 
 void Sim_CreateMesh_IMerge(tList *Left, tList *Right)
 {
