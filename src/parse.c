@@ -595,7 +595,9 @@ int ParseLine(tParser *Parser)
 			} while(Parser->Token == TOK_COMMA);
 			PutBack(Parser);	// Put back non-comma token
 	
-			Test_AddAssertion(&cond, &have, &expected);
+			if( Test_AddAssertion(&cond, &have, &expected) ) {
+				SyntaxError(Parser, "Error in #testassert");
+			}
 			List_Free(&cond);
 			List_Free(&have);
 			List_Free(&expected);
@@ -606,7 +608,7 @@ int ParseLine(tParser *Parser)
 			
 			// Sanity check please
 			if( !Test_IsInTest() )
-				SyntaxError(Parser, "#testassert outside of a test");
+				SyntaxError(Parser, "#testcomplete outside of a test");
 			
 			// Condition (single value)
 			ParseValue(Parser, &cond);
