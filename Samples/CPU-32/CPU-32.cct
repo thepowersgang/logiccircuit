@@ -154,7 +154,7 @@ $is_PUSH    = AND $decode_enable, (NXOR{9,2} @instr[31:27],@instr[23:20], 0b1011
 ; 10110mmm 0001xxxx	- Pop
 $is_POP     = AND $decode_enable, (NXOR{9,2} @instr[31:27],@instr[23:20], 0b101100001[8:0])
 ; 10110mmm 001xxxxx	- BSWAP[W]
-;$is_BSWAP   = AND $decode_enable, (NXOR{8,2} @instr[31:27],@instr[23:21], 0b01100001[7:0])
+;$is_BSWAP   = AND $decode_enable, (NXOR{8,2} @instr[31:27],@instr[23:21], 0b10110001[7:0])
 ; 10111000 00000000	- Load Flags
 $is_LDF     = AND $decode_enable, (NXOR{16,2} @instr[31:16], 0xB800[15:0])
 ; 10111000 00000001 00000000	- MCR
@@ -166,11 +166,12 @@ $is_SHIFT   = AND $decode_enable, (XNOR{15,2} @instr[31:17], 0xB802[15:1])
 ; 101111mm	- LEA R, op2
 $is_LEA     = AND $decode_enable, (NXOR{6,2} @instr[31:26], 0b101111[5:0])
 ; 1100xxxx	- Non-word Load/Store
-;$is_NONWLS  = AND $decode_enable, (NXOR{4,2} @instr[31:28], 0b1100[3:0])
+$is_NONWLS  = AND $decode_enable, (NXOR{4,2} @instr[31:28], 0b1100[3:0])
 
 #array interrupt_num	4
 // === Handle Undefined Opcodes ===
-$is_invl = NOR $is_ALU, $is_BRANCH, $is_IBRANCH, $is_PUSH, $is_POP, $is_LDF, $is_MRC, $is_MCR, $is_SHIFT, $is_LEA
+$is_invl = NOR $is_ALU, $is_BRANCH, $is_IBRANCH, $is_PUSH, $is_POP, $is_LDF, $is_MRC, $is_MCR,\
+	$is_SHIFT, $is_LEA, $is_NONWLS
 $is_UNDEF = AND (DELAY{2} $decode_enable), $is_invl
 #display $is_UNDEF "UNDEFINED INSTRUCTION!" 0
 #breakpoint $is_UNDEF "#UD"
@@ -286,7 +287,7 @@ $mem_write = DELAY $_push_save
 @mem_addr = AND{32} $_push_save, @reg_data_in
 @mem_data_out = AND{32} $_push_save, @alu_in_src
 // - Data written, instruction complete
-next_instruction Push, "next_instruction (Push)", DELAY{3} $_push_save
+next_instruction Push, "next_instruction (Push)", DELAY{4} $_push_save
 // === Pop ===
 next_stage PopDestAvail, "next_stage (Push Data Avaliable)", AND $is_POP, $decode_complete
 #array _pop_data	32
@@ -310,6 +311,7 @@ next_stage PopSPUpdated, "next_stage (Pop SP Updated)", AND $is_POP, @stage_stat
 $_pop_save = AND $is_POP, @stage_state[5]
 $alu_save = DELAY $_pop_save
 @alu_out = AND{32} $_pop_save, @_pop_data
+// > disabled to use ALU save ccts
 %if 0
 $_pop_regsave = AND $is_POP, @stage_state[5], (NOT   $addr_is_mem)
 #display $_pop_regsave "Saving to register %5i" @alu_addr[4:0]
@@ -411,7 +413,6 @@ $_shl_enable = AND $is_SHIFT, @stage_state[4], $_shift_is_shift
 $_rol_enable = AND $is_SHIFT, @stage_state[4], $_shift_is_rotate, $_shift_no_cf
 $_rcl_enable = AND $is_SHIFT, @stage_state[4], $_shift_is_rotate, $_shift_use_cf
 // Perform shift
-#display 1 "SHL: _shift_value = %33x" @_shift_value
 #display $_shl_enable "SHL: _shift_value = %33x" @_shift_value[32:0]
 ;#display $_scl_enable "SCL: _shift_value = %33x" @_shift_value
 ;#display $_shl_enable "SHL: _shift_value = %32x" @_shift_value_nc
@@ -453,41 +454,70 @@ next_instruction LEA, "next_instruction (LEA)", DELAY{3} $_LEA_active
 @_nwls_datareg = @instr[20:23]
 $_nwls_offset_sign = @instr[15]
 @_nwls_offset[0:15] = @instr[0:15] \\ @_nwls_offset[16:31] = $_nwls_offset_sign*16
+$_nwls_LDRHx = AND (XNOR{3,2} @instr[27:25], 0b010[2:0])
+$_nwls_LDRBx = AND (XNOR{3,2} @instr[27:25], 0b011[2:0])
 $_nwls_byteop = AND $is_NONWLS, @instr[27]
-$_nwls_byteop = AND $is_NONWLS, (XNOR @instr[27:25], 0b011[2:0])
-$_nwls_hwordop = AND $is_NONWLS, (XNOR @instr[27:26], 0b00[1:0])
-$_nwls_hwordop = AND $is_NONWLS, (XNOR @instr[27:25], 0b010[2:0])
-// - Get Address
+$_nwls_byteop = AND $is_NONWLS, $_nwls_LDRBx
+$_nwls_hwordop = AND $is_NONWLS, (XNOR{2,2} @instr[27:26], 0b00[1:0])
+$_nwls_hwordop = AND $is_NONWLS, $_nwls_LDRHx
+// - Get Address (Stage 2)
 #array _nwls_baseaddr	32
 #array _nwls_addr	32
-@_nwls_addr = @alu_addr	// (ab)use ALU address latch
+@_nwls_addr = @alu_in_src	// (ab)use ALU source latch
 $_nwls_getaddr = AND $is_NONWLS, @stage_state[2]
 $reg_enable = DELAY $_nwls_getaddr
 @reg_addr = AND{4} $_nwls_getaddr, @_nwls_basereg
 $_nwls_startadd = AND $_nwls_getaddr, $reg_ready
-@_nwls_baseaddr = AND{32} $_nwls_getaddr, $reg_ready, @reg_data_out
+@_nwls_baseaddr = AND{32} $_nwls_getaddr, $reg_ready, @reg_data_in
+#display $_nwls_startadd "NWLS Base Address = 0x%32x" @_nwls_baseaddr[31:0]
+#display $_nwls_startadd "NWLS Offset = 0x%32x" @_nwls_offset[31:0]
 $_nwls_add_complete, @_nwls_addr, $NULL = ADDER_32BIT $_nwls_startadd, @_nwls_baseaddr, @_nwls_offset, 0
-next_stage NWLSGetAddr, "next_stage (NWLS Get Address)", DELAY $_nwls_add_complete
-// - GP load section
+#display $_nwls_add_complete "NWLS Address = 0x%32x" @_nwls_addr[31:0]
+next_stage NWLSGetAddr, "next_stage (NWLS Get Address)", PULSE $_nwls_add_complete
+// - GP load section (Stage 3/4)
 #array _nwls_rdbyte 4
 #array _nwls_rdword 2
 #array _nwls_data 32
 @_nwls_data = @alu_in_dst	// (ab)use ALU destination latch
 $mem_enable = DELAY $_nwls_doread
 ;@mem_size = AND{2} $_nwls_doread, $_nwls_byteop, 0b00[0:1]
-@mem_addr = AND{32} $_nwls_doread, @_nwls_baseaddr
-@_nwls_rdword = DEMUX{1} $_nwls_hwordop, @_nwls_baseaddr[1]
-@_nwls_rdbyte = DEMUX{2} $_nwls_byteop, @_nwls_baseaddr[0], @_nwls_baseaddr[1]
-@_nwls_data[0:7] = AND{8} @_nwls_rdbyte[0], $mem_ready, @mem_data_in[ 0: 7]
-@_nwls_data[0:7] = AND{8} @_nwls_rdbyte[1], $mem_ready, @mem_data_in[ 8:15]
-@_nwls_data[0:7] = AND{8} @_nwls_rdbyte[2], $mem_ready, @mem_data_in[16:23]
-@_nwls_data[0:7] = AND{8} @_nwls_rdbyte[3], $mem_ready, @mem_data_in[24:31]
-@_nwls_data[0:15] = AND{16} @_nwls_rdword[0], $mem_ready, @mem_data_in[ 0:15]
-@_nwls_data[0:15] = AND{16} @_nwls_rdword[1], $mem_ready, @mem_data_in[0:15]
-$_nwls_datardy = AND (OR $_nwls_hwordop, $_nwls_byteop), $mem_ready
+@mem_addr = AND{32} $_nwls_doread, @_nwls_addr
+#display $_nwls_doread "RDWord: %2b, RDByte: %4b" @_nwls_rdword, @_nwls_rdbyte
+@_nwls_rdword = DEMUX{1} $_nwls_hwordop, @_nwls_addr[1]
+@_nwls_rdbyte = DEMUX{2} $_nwls_byteop, @_nwls_addr[0:1]
+@_nwls_data[0:7] = AND{8} $_nwls_doread, @_nwls_rdbyte[0], $mem_ready, @mem_data_in[ 0: 7]
+@_nwls_data[0:7] = AND{8} $_nwls_doread, @_nwls_rdbyte[1], $mem_ready, @mem_data_in[ 8:15]
+@_nwls_data[0:7] = AND{8} $_nwls_doread, @_nwls_rdbyte[2], $mem_ready, @mem_data_in[16:23]
+@_nwls_data[0:7] = AND{8} $_nwls_doread, @_nwls_rdbyte[3], $mem_ready, @mem_data_in[24:31]
+@_nwls_data[0:15] = AND{16} $_nwls_doread, @_nwls_rdword[0], $mem_ready, @mem_data_in[ 0:15]
+@_nwls_data[0:15] = AND{16} $_nwls_doread, @_nwls_rdword[1], $mem_ready, @mem_data_in[16:31]
+$_nwls_datardy = AND (OR @stage_state[3],@stage_state[4]), (OR $_nwls_hwordop, $_nwls_byteop), $mem_ready
+#display $_nwls_datardy "NWLS Data = %16x" @_nwls_data[15:0]
+next_stage NWLSMemReady, "next_stage (NWLS Memory Ready)", $_nwls_datardy
 // - Handle Zero/Sign extend load
+//  > Half-word
+$_nwls_doread = AND $is_NONWLS, $_nwls_LDRHx, @stage_state[3]
+$_nwls_ldrhx_save = AND $is_NONWLS, $_nwls_LDRHx, @stage_state[4]
+$_nwls_ldrhx_sgn = AND @instr[24], @_nwls_data[15]
+$reg_enable = PULSE $_nwls_ldrhx_save
+@reg_addr = AND{4} $_nwls_ldrhx_save, @_nwls_datareg
+$reg_write = PULSE $_nwls_ldrhx_save
+@reg_data_out = AND{32} $_nwls_ldrhx_save, @_nwls_data[0:15], $_nwls_ldrhx_sgn*16
+next_instruction LDRHx, "next_instruction (NWLS Half Extended)", DELAY{4} $_nwls_ldrhx_save
+//  > Byte
+$_nwls_doread = AND $is_NONWLS, $_nwls_LDRBx, @stage_state[3]
+$_nwls_ldrbx_save = AND $is_NONWLS, $_nwls_LDRBx, @stage_state[4]
+$_nwls_ldrbx_sgn = AND @instr[24], @_nwls_data[7]
+$reg_enable = PULSE $_nwls_ldrbx_save
+@reg_addr = AND{4} $_nwls_ldrbx_save, @_nwls_datareg
+$reg_write = PULSE $_nwls_ldrbx_save
+@reg_data_out = AND{32} $_nwls_ldrbx_save, @_nwls_data[0:7], $_nwls_ldrbx_sgn*24
+next_instruction LDRBx, "next_instruction (NWLS Byte Extended)", DELAY{4} $_nwls_ldrbx_save
 // - Handle non-extended load
+//  NOTE: Harder than it sounds, due to Read-Modify-Write of register
 // - Handle stores
+//  > Half-word
+//  > Byte
 
 // === Conditional Jumps / Calls ===
 #array cond 8

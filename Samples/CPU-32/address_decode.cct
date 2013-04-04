@@ -41,6 +41,7 @@ $_pulse = PULSE $trigger
 $op_clear = PULSE $trigger
 $rdy_clear = PULSE $trigger
 $rdy_clear = PULSE $in_rdy_clear
+$op_clear  = PULSE $in_rdy_clear
 $rdy_clear = DELAY (PULSE $in_rdy_clear)
 $int_addr_clear = PULSE $trigger
 
@@ -50,7 +51,7 @@ $pulse = PULSE $_enable
 #display $rdy_clear "$rdy_clear = %1i" $rdy_clear
 
 $NULL, $_enable = LATCH 1, $rdy_clear, (DELAY $trigger)
-$NULL, @dest_addr = LATCH{32} 1, $_pulse, @dest_addr
+$NULL, @dest_addr = LATCH{32} 1, $rdy_clear, @dest_addr
 $NULL, @op_1 = LATCH{32} 1, $op_clear, @op_1
 $NULL, @op_2 = LATCH{32} 1, $op_clear, @op_2
 $NULL, $rdy = LATCH{1} 1, (HOLD{3} $rdy_clear), $rdy_set

@@ -122,12 +122,12 @@ ooooo111 RRRRxxxx iiiisssv vvvvvvvv	- R = R <op> [PC + Ri << s + imm9s]
     11mm	- LEA R, op2	- Load Effective Address (NOTE: Modes 0-3 are not memory, so are reused)
 
 == Non-word Loads/Stores
-110000o0 RRRRrrrr ssssssss ssssssss	- STRW R.o, [r + imm16s]	- Store 16 bits from register
-    00o1 RRRRrrrr ssssssss ssssssss	- LDRW R.o, [r + imm16s]	- Load 16 bits to register
-    0100 RRRRrrrr ssssssss ssssssss	- LDRWS R, [r + imm16s] 	- Load 16-bits sign extended
-    0101 RRRRrrrr ssssssss ssssssss	- LDRWZ R, [r + imm16s] 	- Load 16-bits zero extended
-    0110 RRRRrrrr ssssssss ssssssss	- LDRBS R, [r + imm16s] 	- Load 8-bits sign extended
-    0111 RRRRrrrr ssssssss ssssssss	- LDRBZ R, [r + imm16s] 	- Load 8-bits zero extended
+110000o0 RRRRrrrr ssssssss ssssssss	- STRH R.o, [r + imm16s]	- Store 16 bits from register
+    00o1 RRRRrrrr ssssssss ssssssss	- LDRH R.o, [r + imm16s]	- Load 16 bits to register
+    0100 RRRRrrrr ssssssss ssssssss	- LDRHZ R, [r + imm16s] 	- Load 16-bits zero extended
+    0101 RRRRrrrr ssssssss ssssssss	- LDRHS R, [r + imm16s] 	- Load 16-bits sign extended
+    0110 RRRRrrrr ssssssss ssssssss	- LDRBZ R, [r + imm16s] 	- Load 8-bits zero extended
+    0111 RRRRrrrr ssssssss ssssssss	- LDRBS R, [r + imm16s] 	- Load 8-bits sign extended
     1oo0 RRRRrrrr ssssssss ssssssss	- STRB R.o, [r + imm16s]	- Store 8 bits from register
     1oo1 RRRRrrrr ssssssss ssssssss	- LDRB R.o, [r + imm16s]	- Load 8 bits to register
 
