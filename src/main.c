@@ -11,6 +11,7 @@
 #include <compiled.h>
 #include <assert.h>
 #include <filerom.h>
+#include <fnmatch.h>
 
 #define PRINT_ELEMENTS	0
 
