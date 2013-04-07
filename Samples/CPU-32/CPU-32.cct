@@ -27,7 +27,7 @@ $next_instruction = PULSE $_next_instruction_%1
 #input $reset, $mem_ready, @mem_data_in[NUM_GPR_BITS], \
 	$reg_ready, @reg_data_in[NUM_GPR_BITS], \
 	@flags[NUM_FLAGS]
-#output $ins_complete, $mem_enable, @mem_addr[NUM_ADDR_BITS], $mem_write, @mem_data_out[NUM_GPR_BITS], \
+#output $ins_complete, $mem_enable,@mem_addr[NUM_ADDR_BITS],@mem_size[2], $mem_write,@mem_data_out[NUM_GPR_BITS], \
 	$reg_enable, @reg_addr[4], $reg_write, @reg_data_out[NUM_GPR_BITS], \
 	@flags_clear[NUM_FLAGS]
 
@@ -473,7 +473,7 @@ $_nwls_hwordop = AND $is_NONWLS, $_nwls_LDRHx
 #array _nwls_addr	32
 @_nwls_addr = @alu_in_src	// (ab)use ALU source latch
 $_nwls_getaddr = AND $is_NONWLS, @stage_state[2]
-$reg_enable = DELAY $_nwls_getaddr
+$reg_enable = PULSE $_nwls_getaddr
 @reg_addr = AND{4} $_nwls_getaddr, @_nwls_basereg
 $_nwls_startadd = AND $_nwls_getaddr, $reg_ready
 @_nwls_baseaddr = AND{32} $_nwls_getaddr, $reg_ready, @reg_data_in
@@ -492,12 +492,12 @@ $mem_enable = DELAY $_nwls_doread
 #display $_nwls_doread "RDWord: %2b, RDByte: %4b" @_nwls_rdword, @_nwls_rdbyte
 @_nwls_rdword = DEMUX{1} $_nwls_hwordop, @_nwls_addr[1]
 @_nwls_rdbyte = DEMUX{2} $_nwls_byteop, @_nwls_addr[0:1]
-;@mem_size = AND{2} $_nwls_doread, $_nwls_byteop, 0b10[0:1]
+@mem_size = AND{2} $_nwls_doread, $_nwls_byteop, 0b10[0:1]
 @_nwls_data[0:7] = AND{8} $_nwls_doread, @_nwls_rdbyte[0], $mem_ready, @mem_data_in[ 0: 7]
 @_nwls_data[0:7] = AND{8} $_nwls_doread, @_nwls_rdbyte[1], $mem_ready, @mem_data_in[ 8:15]
 @_nwls_data[0:7] = AND{8} $_nwls_doread, @_nwls_rdbyte[2], $mem_ready, @mem_data_in[16:23]
 @_nwls_data[0:7] = AND{8} $_nwls_doread, @_nwls_rdbyte[3], $mem_ready, @mem_data_in[24:31]
-;@mem_size = AND{2} $_nwls_doread, $_nwls_hwordop, 0b01[0:1]
+@mem_size = AND{2} $_nwls_doread, $_nwls_hwordop, 0b01[0:1]
 @_nwls_data[0:15] = AND{16} $_nwls_doread, @_nwls_rdword[0], $mem_ready, @mem_data_in[ 0:15]
 @_nwls_data[0:15] = AND{16} $_nwls_doread, @_nwls_rdword[1], $mem_ready, @mem_data_in[16:31]
 $_nwls_datardy = AND (OR @stage_state[3],@stage_state[4]), (OR $_nwls_hwordop, $_nwls_byteop), $mem_ready
@@ -562,9 +562,9 @@ $_nwls_strh_load = AND $_nwls_STRH, @stage_state[3]
 @_nwls_data[0:15] = AND{16} $_nwls_strh_load,$reg_ready,@_nwls_regofs[1], @reg_data_in[16:31]
 next_stage STRH, "next_stage (NWLS Halfword Ready)", AND $_nwls_strh_load,$reg_ready
 $_nwls_strh_write = AND $_nwls_STRH, @stage_state[4]
-;@mem_size = AND{2} $_nwls_strh_write, 0b01[0:1]
+@mem_size = AND{2} $_nwls_strh_write, 0b01[0:1]
 @mem_data_out = AND{32} $_nwls_strh_write, @_nwls_data[0:15],@_nwls_data[0:15]
-next_instruction STRW, "next_instruction (STRW)", AND $_nwls_strw_load,$mem_ready
+next_instruction STRW, "next_instruction (STRW)", AND $_nwls_strh_write,$mem_ready
 //  > Byte
 $_nwls_strb_load = AND $_nwls_STRB, @stage_state[3]
 @_nwls_data[0:7] = AND{8} $_nwls_strb_load,$reg_ready,@_nwls_regofs[0], @reg_data_in[0:7]
@@ -573,9 +573,9 @@ $_nwls_strb_load = AND $_nwls_STRB, @stage_state[3]
 @_nwls_data[0:7] = AND{8} $_nwls_strb_load,$reg_ready,@_nwls_regofs[3], @reg_data_in[24:31]
 next_stage STRB, "next_stage (NWLS Byte Ready)", AND $_nwls_strb_load,$reg_ready
 $_nwls_strb_write = AND $_nwls_STRB, @stage_state[4]
-;@mem_size = AND{2} $_nwls_strb_write, 0b10[0:1]
+@mem_size = AND{2} $_nwls_strb_write, 0b10[0:1]
 @mem_data_out = AND{32} $_nwls_strb_write, @_nwls_data[0:7],@_nwls_data[0:7],@_nwls_data[0:7],@_nwls_data[0:7]
-next_instruction STRB, "next_instruction (STRB)", AND $_nwls_strb_load,$mem_ready
+next_instruction STRB, "next_instruction (STRB)", AND $_nwls_strb_write,$mem_ready
 
 // === Conditional Jumps / Calls ===
 #array cond 8
@@ -665,16 +665,17 @@ $reg_ready, @reg_data_in = REGISTER_BANK_16_32 $reg_enable, @reg_addr, $reg_writ
 
 // --- Memory ---
 #array mem_addr	32
+#array mem_size	2
 #array mem_data_in	32
 #array mem_data_out	32
-$mem_ready, @mem_data_in, $NULL = MEMORY_SPACE $mem_enable, @mem_addr, $mem_write, @mem_data_out, 0,0
+$mem_ready, @mem_data_in, $NULL = MEMORY_SPACE $mem_enable, @mem_addr, $mem_write, @mem_data_out, @mem_size
 #display $mem_enable "MemAddr" @mem_addr[NUM_ADDR_BITS-1:0]
 #display $mem_write "MemOut " @mem_data_out[31:0]
 #display $mem_ready "MemIn  " @mem_data_in[NUM_GPR_BITS-1:0]
 
 // --- CPU ---
 $rst = PULSE 1
-$instr_pulse, $mem_enable, @mem_addr, $mem_write, @mem_data_out, \
+$instr_pulse, $mem_enable, @mem_addr, @mem_size, $mem_write, @mem_data_out, \
 	$reg_enable, @reg_addr, $reg_write, @reg_data_out, @flags_clear \
 	= CPU32_CORE $rst, $mem_ready, @mem_data_in, $reg_ready, @reg_data_in, @flags
 

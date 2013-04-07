@@ -16,7 +16,7 @@
 #array mem_size	2
 
 %if %1 == 1
-$ins_end, $mem_enable, @mem_addr, $mem_write, @mem_data_out, \
+$ins_end, $mem_enable, @mem_addr, @mem_size, $mem_write, @mem_data_out, \
 	$reg_enable, @reg_addr, $reg_write, @reg_data_out, @flags_clear \
 	= CPU32_CORE (PULSE 1), $mem_ready, @mem_data_in, $reg_ready, @reg_data_in, @flags
 %endif
@@ -43,18 +43,20 @@ $ins_end, $mem_enable, @mem_addr, $mem_write, @mem_data_out, \
 
 %macro __memrd16 4
 %assign bitofs ((%3 / 2) % 2)*16
+%assign bitofs_rev 31-bitofs
 #testassert @stage[%1],@op_stage[%2],$mem_enable @mem_addr[0:31] %3[0:31]
-@mem_data_in[0:31] = AND{32} @stage[%1],@op_stage[%2],$mem_enable,0*bitofs,%4[0:bitofs-1]
+@mem_data_in[0:31] = AND{32} @stage[%1],@op_stage[%2],$mem_enable,0*bitofs,%4[0:bitofs_rev]
 #testassert @stage[%1],@op_stage[%2],$mem_enable $mem_write 0
-#testassert @stage[%1],@op_stage[%2],$mem_enable @mem_size 0b10[0:1]
+#testassert @stage[%1],@op_stage[%2],$mem_enable @mem_size 0b01[0:1]
 %endmacro
 
 %macro __memrd8 4
 %assign bitofs (%3 % 4)*8
+%assign bitofs_rev 31-bitofs
 #testassert @stage[%1],@op_stage[%2],$mem_enable @mem_addr[0:31] %3[0:31]
-@mem_data_in[0:31] = AND{32} @stage[%1],@op_stage[%2],$mem_enable,0*bitofs,%4[0:bitofs-1]
+@mem_data_in[0:31] = AND{32} @stage[%1],@op_stage[%2],$mem_enable,0*bitofs,%4[0:bitofs_rev]
 #testassert @stage[%1],@op_stage[%2],$mem_enable $mem_write 0
-#testassert @stage[%1],@op_stage[%2],$mem_enable @mem_size 0b01[0:1]
+#testassert @stage[%1],@op_stage[%2],$mem_enable @mem_size 0b10[0:1]
 %endmacro
 
 %macro __memwr 4
@@ -62,6 +64,24 @@ $ins_end, $mem_enable, @mem_addr, $mem_write, @mem_data_out, \
 #testassert @stage[%1],@op_stage[%2],$mem_enable @mem_data_out[0:31] %4[0:31]
 #testassert @stage[%1],@op_stage[%2],$mem_enable $mem_write 1
 #testassert @stage[%1],@op_stage[%2],$mem_enable @mem_size 0b00[0:1]
+%endmacro
+
+%macro __memwr16 4
+%assign bitofs ((%3 / 2) % 2)*16
+%assign bitofs_end bitofs+15
+#testassert @stage[%1],@op_stage[%2],$mem_enable @mem_addr[0:31] %3[0:31]
+#testassert @stage[%1],@op_stage[%2],$mem_enable @mem_data_out[bitofs:bitofs_end] %4[0:15]
+#testassert @stage[%1],@op_stage[%2],$mem_enable $mem_write 1
+#testassert @stage[%1],@op_stage[%2],$mem_enable @mem_size 0b01[0:1]
+%endmacro
+
+%macro __memwr8 4
+%assign bitofs (%3 % 4)*8
+%assign bitofs_end bitofs+7
+#testassert @stage[%1],@op_stage[%2],$mem_enable @mem_addr[0:31] %3[0:31]
+#testassert @stage[%1],@op_stage[%2],$mem_enable @mem_data_out[bitofs:bitofs_end] %4[0:7]
+#testassert @stage[%1],@op_stage[%2],$mem_enable $mem_write 1
+#testassert @stage[%1],@op_stage[%2],$mem_enable @mem_size 0b10[0:1]
 %endmacro
 
 
@@ -408,9 +428,9 @@ __memwr 2,2, 0x00000010, 0xB10ABCDE	; Write back
 #testcomplete (AND @stage[3], $mem_enable)
 #endtestcase
 
-#testcase 500 "CPU - NWLS"
+#testcase 800 "CPU - NWLS"
 __CPU32_TEST_WRAPPER 1
-__stage 6, 3
+__stage 10, 3
 
 $mem_ready = PULSE $mem_enable
 // Because lazy
@@ -424,21 +444,39 @@ __memrd 1,0, 0x00000080, 0x01F10000	; MOV R15, 0x10000
 #testassert @stage[1],$ins_end @op_stage[1] 1	; Ensure only one memory access
 
 __memrd 2,0, 0x00000084, 0xC5CF0002	; LDRHS R12, [R15 + 2]
-__memrd 2,1, 0x00010002, 0xFEED0123	; 0x10000 = 0xFEED0123
+__memrd16 2,1, 0x00010002, 0xFEED	; 0x10002 = 0xFEED
 #testassert @stage[2],$reg_write @reg_data_out[0:31] 0xFFFFFEED[0:31]
 #testassert @stage[2],$ins_end @op_stage[2] 1	; Ensure two mem accesses
 
 __memrd 3,0, 0x00000088, 0xC7CFFFFF	; LDRBS R12, [R15 - 1]
-__memrd 3,1, 0x0000FFFF, 0xFEED0123	; 0xFFFC = 0xFEED0123
+__memrd8 3,1, 0x0000FFFF, 0xFE  	; 0xFFFF = 0xFE
 #testassert @stage[3],$reg_write @reg_data_out[0:31] 0xFFFFFFFE[0:31]
 #testassert @stage[3],$ins_end @op_stage[2] 1	; Ensure two mem accesses
 
 __memrd 4,0, 0x0000008C, 0xC6CFFFFE	; LDRBZ R12, [R15 - 2]
-__memrd 4,1, 0x0000FFFE, 0xFEED0123	; 0xFFFC = 0xFEED0123
+__memrd8 4,1, 0x0000FFFE, 0xED  	; 0xFFFE = 0xED
 #testassert @stage[4],$reg_write @reg_data_out[0:31] 0x000000ED[0:31]
 #testassert @stage[4],$ins_end @op_stage[2] 1	; Ensure two mem accesses
 
-#testcomplete @stage[5]
+__memrd 5,0, 0x00000090, 0xCFCF0001	; LDRB R12.3, [R15 + 1]
+__memrd8 5,1, 0x00010001, 0x82  	; 0x10001 = 0x82
+#testassert @stage[5],$reg_write @reg_data_out[0:31] 0x820000ED[0:31]
+#testassert @stage[5],$ins_end @op_stage[2] 1	; Ensure two mem accesses
+
+__memrd 6,0, 0x00000094, 0xC1CF0004	; LDRH R12.0, [R15 + 4]
+__memrd16 6,1, 0x00010004, 0x1234	; 0x10004 = 0x1234
+#testassert @stage[6],$reg_write @reg_data_out[0:31] 0x82001234[0:31]
+#testassert @stage[6],$ins_end @op_stage[2] 1	; Ensure two mem accesses
+
+__memrd 7,0, 0x00000098, 0xC2CF0008	; STRH R12.1, [R15 + 8]
+__memwr16 7,1, 0x00010008, 0x8200	; 0x10008 := 0x8200
+#testassert @stage[7],$ins_end @op_stage[2] 1	; Ensure two mem accesses
+
+__memrd 8,0, 0x0000009C, 0xCACF0009	; STRB R12.1, [R15 + 9]
+__memwr8 8,1, 0x00010009, 0x12	; 0x10009 := 0x12
+#testassert @stage[8],$ins_end @op_stage[2] 1	; Ensure two mem accesses
+
+#testcomplete @stage[9]
 
 #endtestcase
 
