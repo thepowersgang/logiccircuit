@@ -450,16 +450,21 @@ next_instruction LEA, "next_instruction (LEA)", DELAY{3} $_LEA_active
 #array _nwls_basereg	4
 #array _nwls_datareg	4
 #array _nwls_offset	32
+#array _nwls_regofs	4
 @_nwls_basereg = @instr[16:19]
 @_nwls_datareg = @instr[20:23]
 $_nwls_offset_sign = @instr[15]
 @_nwls_offset[0:15] = @instr[0:15] \\ @_nwls_offset[16:31] = $_nwls_offset_sign*16
 $_nwls_LDRHx = AND (XNOR{3,2} @instr[27:25], 0b010[2:0])
 $_nwls_LDRBx = AND (XNOR{3,2} @instr[27:25], 0b011[2:0])
+$_nwls_LDRH = AND (XNOR{3,2} @instr[27:26],@instr[24], 0b001[2:0])
+$_nwls_LDRB = AND (XNOR{2,2} @instr[27],@instr[24], 0b11[1:0])
+$_nwls_LDRHB = OR $_nwls_LDRH, $_nwls_LDRB
 $_nwls_byteop = AND $is_NONWLS, @instr[27]
 $_nwls_byteop = AND $is_NONWLS, $_nwls_LDRBx
 $_nwls_hwordop = AND $is_NONWLS, (XNOR{2,2} @instr[27:26], 0b00[1:0])
 $_nwls_hwordop = AND $is_NONWLS, $_nwls_LDRHx
+@_nwls_regofs = DEMUX{2} $is_NONWLS, @instr[25:26]
 // - Get Address (Stage 2)
 #array _nwls_baseaddr	32
 #array _nwls_addr	32
@@ -514,10 +519,40 @@ $reg_write = PULSE $_nwls_ldrbx_save
 @reg_data_out = AND{32} $_nwls_ldrbx_save, @_nwls_data[0:7], $_nwls_ldrbx_sgn*24
 next_instruction LDRBx, "next_instruction (NWLS Byte Extended)", DELAY{4} $_nwls_ldrbx_save
 // - Handle non-extended load
-//  NOTE: Harder than it sounds, due to Read-Modify-Write of register
+#array _nwls_regval	32
+$NULL, @_nwls_regval = LATCH{32} 1, @stage_state[0], @_nwls_regval
+$_nwls_doread = AND $is_NONWLS, $_nwls_LDRHB, @stage_state[3]
+// next_stage NWLSMemReady
+$_nwls_regread = AND $is_NONWLS, $_nwls_LDRHB, @stage_state[4]
+$reg_enable = PULSE $_nwls_regread
+@reg_addr = AND{4} $_nwls_regread, @_nwls_datareg
+@_nwls_regval = AND{32} $_nwls_regread,$reg_ready, @reg_data_in
+next_stage NWLSRegRead, "next_stage (NWLS Register Read)", AND $_nwls_regread,$reg_ready
+$_nwls_ldrhb_save = AND $is_NONWLS, $_nwls_LDRHB, @stage_state[5]
+$reg_enable = PULSE $_nwls_ldrhb_save
+@reg_addr = AND{4} $_nwls_ldrhb_save, @_nwls_datareg
+$reg_write = PULSE $_nwls_ldrhb_save
+//  > Half-word
+$_nwls_ldrh_save = AND $is_NONWLS, $_nwls_LDRH, @stage_state[5]
+@reg_data_out = AND{32} $_nwls_ldrh_save,@_nwls_regofs[0], @_nwls_data[0:15],@_nwls_regval[16:31]
+@reg_data_out = AND{32} $_nwls_ldrh_save,@_nwls_regofs[1], @_nwls_regval[0:15],@_nwls_data[0:15]
+next_instruction LDRH, "next_instruction (LDRH)", AND $_nwls_ldrh_save,$reg_ready
+//  > Byte
+$_nwls_ldrb_save = AND $is_NONWLS, $_nwls_LDRB, @stage_state[5]
+@reg_data_out = AND{32} $_nwls_ldrb_save,@_nwls_regofs[0], @_nwls_data[0:7],@_nwls_regval[8:31]
+@reg_data_out = AND{32} $_nwls_ldrb_save,@_nwls_regofs[1], @_nwls_regval[0:7],@_nwls_data[0:7],@_nwls_regval[16:31]
+@reg_data_out = AND{32} $_nwls_ldrb_save,@_nwls_regofs[2], @_nwls_regval[0:15],@_nwls_data[0:7],@_nwls_regval[24:31]
+@reg_data_out = AND{32} $_nwls_ldrb_save,@_nwls_regofs[3], @_nwls_regval[0:23],@_nwls_data[0:7]
+next_instruction LDRB, "next_instruction (LDRB)", AND $_nwls_ldrb_save,$reg_ready
 // - Handle stores
 //  > Half-word
+@_nwls_data[0:15] = AND{16} $_nwls_strw_load,$reg_ready,@_nwls_regofs[0], @reg_data_in[0:15]
+@_nwls_data[0:15] = AND{16} $_nwls_strw_load,$reg_ready,@_nwls_regofs[1], @reg_data_in[16:31]
 //  > Byte
+@_nwls_data[0:7] = AND{8} $_nwls_strb_load,$reg_ready,@_nwls_regofs[0], @reg_data_in[0:7]
+@_nwls_data[0:7] = AND{8} $_nwls_strb_load,$reg_ready,@_nwls_regofs[1], @reg_data_in[8:15]
+@_nwls_data[0:7] = AND{8} $_nwls_strb_load,$reg_ready,@_nwls_regofs[2], @reg_data_in[16:23]
+@_nwls_data[0:7] = AND{8} $_nwls_strb_load,$reg_ready,@_nwls_regofs[3], @reg_data_in[24:31]
 
 // === Conditional Jumps / Calls ===
 #array cond 8
