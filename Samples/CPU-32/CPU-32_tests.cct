@@ -13,6 +13,7 @@
 #array mem_addr	NUM_ADDR_BITS
 #array mem_data_in	NUM_GPR_BITS
 #array mem_data_out	NUM_GPR_BITS
+#array mem_size	2
 
 %if %1 == 1
 $ins_end, $mem_enable, @mem_addr, $mem_write, @mem_data_out, \
@@ -24,9 +25,12 @@ $ins_end, $mem_enable, @mem_addr, $mem_write, @mem_data_out, \
 %macro __stage 2
 #array stage %1
 @stage = SEQUENCER{%1} 1, 0, $ins_end
-%if %2 > 0
+%if %2 > 1
 #array op_stage %2
 @op_stage = SEQUENCER{%2} 1, $ins_end, (PULSE $mem_enable)
+%else
+#array op_stage 1
+@op_stage[0] = DELAY 1
 %endif
 %endmacro
 
@@ -34,12 +38,30 @@ $ins_end, $mem_enable, @mem_addr, $mem_write, @mem_data_out, \
 #testassert @stage[%1],@op_stage[%2],$mem_enable @mem_addr[0:31] %3[0:31]
 @mem_data_in[0:31] = AND{32} @stage[%1],@op_stage[%2],$mem_enable,%4[0:31]
 #testassert @stage[%1],@op_stage[%2],$mem_enable $mem_write 0
+#testassert @stage[%1],@op_stage[%2],$mem_enable @mem_size 0b00[0:1]
+%endmacro
+
+%macro __memrd16 4
+%assign bitofs ((%3 / 2) % 2)*16
+#testassert @stage[%1],@op_stage[%2],$mem_enable @mem_addr[0:31] %3[0:31]
+@mem_data_in[0:31] = AND{32} @stage[%1],@op_stage[%2],$mem_enable,0*bitofs,%4[0:bitofs-1]
+#testassert @stage[%1],@op_stage[%2],$mem_enable $mem_write 0
+#testassert @stage[%1],@op_stage[%2],$mem_enable @mem_size 0b10[0:1]
+%endmacro
+
+%macro __memrd8 4
+%assign bitofs (%3 % 4)*8
+#testassert @stage[%1],@op_stage[%2],$mem_enable @mem_addr[0:31] %3[0:31]
+@mem_data_in[0:31] = AND{32} @stage[%1],@op_stage[%2],$mem_enable,0*bitofs,%4[0:bitofs-1]
+#testassert @stage[%1],@op_stage[%2],$mem_enable $mem_write 0
+#testassert @stage[%1],@op_stage[%2],$mem_enable @mem_size 0b01[0:1]
 %endmacro
 
 %macro __memwr 4
 #testassert @stage[%1],@op_stage[%2],$mem_enable @mem_addr[0:31] %3[0:31]
 #testassert @stage[%1],@op_stage[%2],$mem_enable @mem_data_out[0:31] %4[0:31]
 #testassert @stage[%1],@op_stage[%2],$mem_enable $mem_write 1
+#testassert @stage[%1],@op_stage[%2],$mem_enable @mem_size 0b00[0:1]
 %endmacro
 
 
@@ -68,50 +90,33 @@ $mem_ready = DELAY $mem_enable
 __CPU32_TEST_WRAPPER 1
 
 __stage 3,0
+$mem_ready = DELAY $mem_enable
 
 // - #1: R0=0x43211234, Mem=0
+__memrd 0,0, 0x00000000, 0x00000000
 #testassert @stage[0],$reg_enable  @reg_addr[3:0]  0[3:0]
 $reg_ready = AND $reg_enable, @stage[0]
 @reg_data_in[31:0] = AND{32} $reg_enable, @stage[0], 0x43211234[31:0]
 #testassert @stage[0],$reg_write  @reg_data_out[31:0]  0x43211234[31:0]
-#testassert @stage[0],$mem_enable  @mem_addr[31:0]  0x00000000[31:0]
-$mem_ready = AND @stage[0], $mem_enable
-@mem_data_in[0:31] = AND{32} @stage[0], $mem_enable, 0x00000000[0:31]
 // - #2: R15=0xF00DCAFE, Mem=4
+__memrd 1,0, 0x00000004, 0x00FF0000
 #testassert @stage[1],$reg_enable  @reg_addr[3:0]  15[3:0]
 $reg_ready = AND @stage[1], $reg_enable
 @reg_data_in[31:0] = AND{32} $reg_enable, @stage[1], 0xF00DCAFE[31:0]
 #testassert @stage[1],$reg_write  @reg_data_out[31:0]  0xF00DCAFE[31:0]
-#testassert @stage[1],$mem_enable @mem_addr[31:0] 0x00000004[31:0]
-$mem_ready = AND @stage[1], $mem_enable
-@mem_data_in[0:31] = AND{32} @stage[1], $mem_enable, 0x00FF0000[0:31]
 // - Flags should not be changed
 #testassert 1 @flags[2:0]	0[2:0]
 
 #testcomplete @stage[2]
 #endtestcase
 
-#testcase 300 "CPU - JMP.Z Y"
-__CPU32_TEST_WRAPPER 1
-__stage 3,0
-$mem_ready = DELAY $mem_enable
-#testassert 1 $reg_enable 0
-
-@mem_data_in[0:31] = AND{32} $mem_enable, 0x80000001[0:31]
-@flags[2] = DELAY @stage[0]
-
-#testassert @stage[1],$mem_enable @mem_addr[0:31] 8[0:31]
-#testcomplete @stage[2]
-
-#endtestcase
-
-#testcase 1000 "CPU - Big PCs"
+#testcase 1000 "CPU - Multiple Instructions"
 __CPU32_TEST_WRAPPER 1
 __stage 12,0
 $mem_ready = DELAY $mem_enable
 #testassert 1 $reg_enable 0
 
-// 0x4F = JMP never
+// Jump never
 @mem_data_in[0:31] = AND{32} $mem_enable, 0x8F000000[0:31]
 
 #testassert @stage[0],$mem_enable	@mem_addr[0:31]	0x00[0:31]
@@ -137,60 +142,51 @@ $mem_ready = DELAY $mem_enable
 #testassert 1 $reg_enable 0
 
 // - #1: JMP.N .+16*4 (never)
-#testassert @stage[0], $mem_enable @mem_addr[0:31] 0[0:31]
-@mem_data_in[0:31] = AND{32} @stage[0], $mem_enable, 0x8F000010[0:31]
-
+__memrd 0,0, 0x00000000, 0x8F000010
 // - #2: JMP.A .+1*4 (always)
-#testassert @stage[1], $mem_enable @mem_addr[0:31] 4[0:31]
-@mem_data_in[0:31] = AND{32} @stage[1], $mem_enable, 0x8E000001[0:31]
-
+__memrd 1,0, 0x00000004, 0x8E000001
 // - #3: JMP.Z .+1*4 (zero, fail)
-#testassert @stage[2], $mem_enable @mem_addr[0:31] 12[0:31]
-@mem_data_in[0:31] = AND{32} @stage[2], $mem_enable, 0x80000001[0:31]
-
+__memrd 2,0, 0x0000000C, 0x80000001
 // - #3: JMP.Z .+1*4 (zero, succeed)
-#testassert @stage[3], $mem_enable @mem_addr[0:31] 16[0:31]
-@mem_data_in[0:31] = AND{32} @stage[3], $mem_enable, 0x80000001[0:31]
+__memrd 3,0, 0x00000010, 0x80000001
 @flags[2] = DELAY @stage[3]
-
 // - #4: JMP.A .-4
-#testassert @stage[4], $mem_enable @mem_addr[0:31] 24[0:31]
-@mem_data_in[0:31] = AND{32} @stage[4], $mem_enable, 0x8EFFFFFF[0:31]
-
+__memrd 4,0, 0x00000018, 0x8EFFFFFF
 // - Dummy instruction to test the final address
-#testassert @stage[5], $mem_enable @mem_addr[0:31] 24[0:31]
-@mem_data_in[0:31] = AND{32} @stage[5], $mem_enable, 0x8EFFFFFF[0:31]
+__memrd 5,0, 0x00000018, 0x8EFFFFFF
 
 #testcomplete @stage[6]
-
 #endtestcase
 
-#testcase 300 "CPU - 32-Bit ADD (MOVI,MOVI,ADD)"
+#testcase 300 "CPU - 32-Bit chained ADD (MOVI,ADDI,ADDI)"
 __CPU32_TEST_WRAPPER 1
 __stage 4, 0
 
 $mem_ready = DELAY $mem_enable
 $reg_ready, @reg_data_in = REGISTER_BANK_16_32 $reg_enable, @reg_addr, $reg_write, @reg_data_out
 
+$NULL, $reg_write_latched = LATCH 1, $ins_end, $reg_write
+//#testassert (DELAY $reg_write_latched) (PULSE $reg_write) 0	// Only one reg write per operation
+
 // - MOV R0, 0x12345
-#testassert @stage[0], $mem_enable  @mem_addr[0:31] 0[0:31]
-@mem_data_in[0:31] = AND{32} @stage[0], $mem_enable, 0x01012345[0:31]
-#testassert @stage[0], $reg_enable  $reg_write 1
-#testassert @stage[0], $reg_enable  @reg_addr[0:3] 0[0:3]
-#testassert @stage[0], $reg_enable  @reg_data_out[0:31] 0x12345[0:31]
+__memrd 0,0, 0x00,0x01012345
+#testassert @stage[0],$reg_enable  $reg_write 1
+#testassert @stage[0],$reg_enable  @reg_addr[0:3] 0[0:3]
+#testassert @stage[0],$reg_enable  @reg_data_out[0:31] 0x12345[0:31]
+#testassert @stage[0],$ins_end $reg_write_latched 1
 
-// - MOV R1, 0xFEDCB
-#testassert @stage[1], $mem_enable  @mem_addr[0:31] 4[0:31]
-@mem_data_in[0:31] = AND{32} @stage[1], $mem_enable, 0x011FEDCB[0:31]
-#testassert @stage[1], $reg_enable  $reg_write 1
-#testassert @stage[1], $reg_enable  @reg_addr[0:3] 1[0:3]
-#testassert @stage[1], $reg_enable  @reg_data_out[0:31] 0xFEDCB[0:31]
+// - ADD R0, 0xFEDCB
+__memrd 1,0, 0x04,0x210FEDCB
+#testassert @stage[1],$reg_enable @reg_addr[0:3] 0[0:3]
+#testassert @stage[1],$reg_write  @reg_data_out[0:31] 0x00111110[0:31]
+#testassert @stage[1],$ins_end $reg_write_latched 1
 
-// - ADD R0, R1
-#testassert @stage[2], $mem_enable  @mem_addr[0:31] 8[0:31]
-@mem_data_in[0:31] = AND{32} @stage[2], $mem_enable, 0x20010000[0:31]
+// - ADD R0, 0xFFF0<<16
+__memrd 2,0, 0x08,0x2208FFF0
 #testassert @stage[2],$reg_write @reg_addr[0:3] 0[0:3]
-#testassert @stage[2],$reg_write @reg_data_out[0:31] 0x111110[0:31]
+#testassert @stage[2],$reg_write @reg_data_out[0:31] 0x00011110[0:31]
+#testassert @stage[2],$ins_end $reg_write_latched 1
+// TODO: Check that the carry bit was set correctly
 
 #testcomplete @stage[3]
 
@@ -206,19 +202,16 @@ $reg_ready = DELAY $reg_enable
 #testassert $reg_enable @reg_addr[0:3] 11[0:3]
 
 // No jump to 0x50
+__memrd 0,0, 0x00,0xA0FB0000
 @reg_data_in[0:31] = AND{32} @stage[0], $reg_enable, 0x50[0:31]
-#testassert $mem_enable,@stage[0] @mem_addr[31:0] 0[31:0]
-@mem_data_in[0:31] = AND{32} @stage[0], $mem_enable, 0xA0FB0000[0:31]
 
 // Jump to 0x60
+__memrd 1,0, 0x04,0xA0EB0000
 @reg_data_in[0:31] = AND{32} @stage[1], $reg_enable, 0x60[0:31]
-#testassert $mem_enable,@stage[1] @mem_addr[31:0] 4[31:0]
-@mem_data_in[0:31] = AND{32} @stage[1], $mem_enable, 0xA0EB0000[0:31]
 
 // No jump to -1
 @reg_data_in[0:31] = AND{32} @stage[0], $reg_enable, 1*32
-#testassert $mem_enable,@stage[2] @mem_addr[31:0] 0x60[31:0]
-@mem_data_in[0:31] = AND{32} @stage[2], $mem_enable, 0xA0FB0000[0:31]
+__memrd 2,0, 0x60,0xA0FB0000
 
 #testcomplete @stage[3]
 #endtestcase

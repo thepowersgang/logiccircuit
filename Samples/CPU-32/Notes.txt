@@ -153,6 +153,12 @@ ooooo111 RRRRxxxx iiiisssv vvvvvvvv	- R = R <op> [PC + Ri << s + imm9s]
 
 
 ===
+Memory Interface
+===
+- Address is internally latched
+- Size encoded as (0: 32-bit, 1: 16-bit, 2: 8-bit, 3: undef)
+
+===
 MMU Notes
 ===
 
