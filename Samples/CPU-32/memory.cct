@@ -49,21 +49,12 @@ $is_ROM  = AND (DELAY $enable), (NOT   @addr[31]), (NOT   @addr[30]), (NOT   @ad
 ;$_data_rdy, @_data_word_out = FILEROM{32,12,0} $is_ROM, @addr[2:13]
 $_data_rdy, @_data_word_out = CPU32ROM_LL $is_ROM, @addr[2:13]
 
-// 32-bit output
+// Alignment Checks
 $fault_ac = AND $size_32, (OR @addr[0], @addr[1])
-@data_output = AND{32} $size_32, $_data_rdy, @_data_word_out
-
-// 16-bit output
 $fault_ac = AND $size_16, @addr[0]
-@data_output[0:15] = AND{16} $size_16, $_data_rdy, (NOT   @addr[1]), @_data_word_out[ 0:15]
-@data_output[0:15] = AND{16} $size_16, $_data_rdy, (DELAY @addr[1]), @_data_word_out[16:31]
 
-// 8-bit output
-@data_output[0:7] = AND{8} $size_8, $_data_rdy, (NOT   @addr[1]), (NOT   @addr[0]), @_data_word_out[ 0: 7]
-@data_output[0:7] = AND{8} $size_8, $_data_rdy, (NOT   @addr[1]), (DELAY @addr[0]), @_data_word_out[ 8:15]
-@data_output[0:7] = AND{8} $size_8, $_data_rdy, (DELAY @addr[1]), (NOT   @addr[0]), @_data_word_out[16:23]
-@data_output[0:7] = AND{8} $size_8, $_data_rdy, (DELAY @addr[1]), (DELAY @addr[0]), @_data_word_out[24:31]
-
+// Data output
+@data_output = AND{32} $_data_rdy, @_data_word_out
 $ready = DELAY $_data_rdy
 
 #endunit

@@ -6,6 +6,7 @@
 // --- Boilerplate for tests ---
 %macro __CPU32_TEST_WRAPPER 1
 #array flags	NUM_FLAGS
+#array flags_set	NUM_FLAGS
 #array flags_clear	NUM_FLAGS
 #array reg_addr	4
 #array reg_data_in	NUM_GPR_BITS
@@ -17,7 +18,7 @@
 
 %if %1 == 1
 $ins_end, $mem_enable, @mem_addr, @mem_size, $mem_write, @mem_data_out, \
-	$reg_enable, @reg_addr, $reg_write, @reg_data_out, @flags_clear \
+	$reg_enable, @reg_addr, $reg_write, @reg_data_out, @flags_clear,@flags_set \
 	= CPU32_CORE (PULSE 1), $mem_ready, @mem_data_in, $reg_ready, @reg_data_in, @flags
 %endif
 %endmacro
