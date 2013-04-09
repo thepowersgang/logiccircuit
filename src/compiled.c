@@ -14,57 +14,97 @@
 
 extern tElementDef	*gpElementDefs;
 
-void WriteCompiledVersion(const char *Path, int bBinary)
+void _Write8(FILE *fp, uint8_t val) {
+	fputc(val, fp);
+}
+void _Write16(FILE *fp, uint16_t val) {
+	fputc(val & 0xFF, fp);
+	fputc(val >> 8, fp);
+}
+void _Write32(FILE *fp, uint32_t val) {
+	_Write16(fp, val & 0xFFFF);
+	_Write16(fp, val >> 16);
+}
+
+void WriteCompiledVersion(const char *Path, int bBinary, tExecUnit *Unit)
 {
 	 int	n_links = 0;
+	 int	n_values = 0;
 	 int	n_eletypes = 0;
 	 int	n_elements = 0;
 	FILE	*fp;
-	tLink	*link;
-	tElement	*ele;
-	 int	i;
 	
-	for( link = gRootUnit.Links; link; link = link->Next ) {
-		link->Link = (void*)(intptr_t)n_links;	// Save
-		n_links ++;
+	for( tLinkValue *val = Unit->Values; val; val = val->Next )
+	{
+		val->Info = (void*)(intptr_t)n_values;
+		n_values ++;
+		for( tLink *link = val->FirstLink; link; link = link->ValueNext )
+		{
+			link->Link = (void*)(intptr_t)n_links;	// Save
+			n_links ++;
+		}
 	}
-	for( ele = gRootUnit.Elements; ele; ele = ele->Next )
+	for( tElement *ele = gRootUnit.Elements; ele; ele = ele->Next )
 		n_elements ++;
 	for( tElementDef *ed = gpElementDefs; ed; ed = ed->Next )
 		n_eletypes ++;
-
-	void _Write8(FILE *fp, uint8_t val) {
-		fputc(val, fp);
-	}
-	void _Write16(FILE *fp, uint16_t val) {
-		fputc(val & 0xFF, fp);
-		fputc(val >> 8, fp);
-	}
-	void _Write32(FILE *fp, uint32_t val) {
-		_Write16(fp, val & 0xFFFF);
-		_Write16(fp, val >> 16);
-	}
 	
 	fp = fopen(Path, "wb");
 	
 	if( bBinary ) {
+		_Write16(fp, n_values);
 		_Write16(fp, n_links);
-		_Write8(fp, n_eletypes);
 		_Write16(fp, n_elements);
-
+		
+		_Write8(fp, n_eletypes);
 		// Element type names
 		for( tElementDef *ed = gpElementDefs; ed; ed = ed->Next ) {
 			_Write8(fp, strlen(ed->Name));
 			fwrite(ed->Name, 1, strlen(ed->Name), fp);
 		}
+
+		for( tLinkValue *val = Unit->Values; val; val = val->Next )
+		{
+			 int	nValLinks = 0;
+			for( tLink *link = val->FirstLink; link; link = link->ValueNext ) {
+				nValLinks ++;
+			}
+			_Write8(fp, nValLinks);
+			for( tLink *link = val->FirstLink; link; link = link->ValueNext )
+			{
+				size_t len = strlen(link->Name);
+				_Write8(fp, len);
+				fwrite(link->Name, 1, len, fp);
+			}
+		}	
 	}
 	else {
-		fprintf(fp, "%x %x\n", n_links, n_elements);
+		fprintf(fp, "%x %x %x\n", n_values, n_links, n_elements);
+		for( tLinkValue *val = Unit->Values; val; val = val->Next )
+		{
+			 int	nValLinks = 0, nLinks = 0;
+			for( tLink *link = val->FirstLink; link; link = link->ValueNext ) {
+				nLinks ++;
+				if( !link->Name[0] )	continue;
+				nValLinks ++;
+			}
+			// If there's a named link, we have to link the anon to the named links
+			if( nValLinks )
+			{
+				fprintf(fp, "%x #%p", nLinks, val);
+				for( tLink *link = val->FirstLink; link; link = link->ValueNext )
+				{
+					if( !link->Name[0] )	continue;
+					fprintf(fp, " %s", link->Name);
+				}
+				fprintf(fp, "\n");
+			}
+		}
 		// NOTE: No need for n_eletypes, no strings
 	}
 	
 	// Element info
-	for( ele = gRootUnit.Elements; ele; ele = ele->Next )
+	for( tElement *ele = Unit->Elements; ele; ele = ele->Next )
 	{
 		if( bBinary ) {
 			 int	typeid = 0;
@@ -74,24 +114,31 @@ void WriteCompiledVersion(const char *Path, int bBinary)
 			_Write8(fp, ele->NParams);
 			_Write16(fp, ele->NInputs);
 			_Write16(fp, ele->NOutputs);
-			for( i = 0; i < ele->NParams; i ++ )
+			for( int i = 0; i < ele->NParams; i ++ )
 				_Write32(fp, ele->Params[i]);
-			for( i = 0; i < ele->NInputs; i ++ )
+			for( int i = 0; i < ele->NInputs; i ++ )
 				_Write16(fp, (intptr_t)ele->Inputs[i]->Link);
-			for( i = 0; i < ele->NOutputs; i ++ )
+			for( int i = 0; i < ele->NOutputs; i ++ )
 				_Write16(fp, (intptr_t)ele->Outputs[i]->Link);
 		}
 		else {
+			void _putlink_ascii(FILE *fp, tLink *Link)
+			{
+				if( Link->Name[0] )
+					fprintf(fp, " %s", Link->Name);
+				else
+					fprintf(fp, " #%p", Link->Value);
+			}
 			fprintf(fp,
 				"%s %2x %2x %2x",
 				ele->Type->Name, ele->NParams, ele->NInputs, ele->NOutputs
 				);
-			for( i = 0; i < ele->NParams; i ++ )
+			for( int i = 0; i < ele->NParams; i ++ )
 				fprintf(fp, " %x", ele->Params[i]);
-			for( i = 0; i < ele->NInputs; i ++ )
-				fprintf(fp, " %x", (int)(intptr_t)ele->Inputs[i]->Link);
-			for( i = 0; i < ele->NOutputs; i ++ )
-				fprintf(fp, " %x", (int)(intptr_t)ele->Outputs[i]->Link);
+			for( int i = 0; i < ele->NInputs; i ++ )
+				_putlink_ascii(fp, ele->Inputs[i]);
+			for( int i = 0; i < ele->NOutputs; i ++ )
+				_putlink_ascii(fp, ele->Outputs[i]);
 			fprintf(fp, "\n");
 		}
 	}
@@ -99,7 +146,7 @@ void WriteCompiledVersion(const char *Path, int bBinary)
 	fclose(fp);
 }
 
-void ReadCompiledVersion(const char *Path, int bBinary)
+tExecUnit *ReadCompiledVersion(const char *Path, int bBinary)
 {
 	int n_links, n_elements;
 	char	**elenames = NULL;
@@ -274,4 +321,5 @@ _common:
 		free(elenames);
 	}
 	fclose(fp);
+	return NULL;
 }

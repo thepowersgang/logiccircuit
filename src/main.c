@@ -35,7 +35,6 @@ extern int ParseFile(const char *Filename);
 void	ReadCommand(int MaxCmd, char *Command, int MaxArg, char *Argument);
 void	SigINT_Handler(int Signum);
 void	CompressLinks(tTestCase *Root);
-void	WriteCompiledVersion(const char *Path, int bBinary);
 void	DumpList(const tList *List, int bShowNames);
 void	CompileStatistics(tExecUnit *Unit);
 void	ResolveLinks(tLink *First);
@@ -155,12 +154,6 @@ int main(int argc, char *argv[])
 //	for( tTestCase *test = gpTests; test; test = test->Next )
 //		Sim_UsageCheck(&test->Internals);
 
-	// TODO: Support saving tree to a file
-	if( 1 ) {
-		WriteCompiledVersion("cct.binary", 1);
-		WriteCompiledVersion("cct.ascii", 0);
-	}
-
 	// Test case code	
 	if( gbRunTests )
 	{
@@ -217,6 +210,12 @@ int main(int argc, char *argv[])
 
 	printf("Compiling root...\n");
 	tExecUnit *compiled_root = Sim_CreateMesh(NULL, NULL);
+
+	// TODO: Support saving tree to a file
+	if( 1 ) {
+		WriteCompiledVersion("cct.binary", 1, compiled_root);
+		WriteCompiledVersion("cct.ascii", 0, compiled_root);
+	}
 
 	// Print links
 	if( gbPrintLinks )
