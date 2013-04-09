@@ -9,11 +9,10 @@
 %include "../adder.cct"
 
 #defunit CPU32_ALU
-#input $enable, @op[3], @alu_in_dst[32], @alu_in_src[32],\
-	$flags_C, $flags_O, $flags_Z
+#input $enable, @op[3], @alu_in_dst[32], @alu_in_src[32], $flags_C
 #output $_done, $alu_nosave, @_alu_out[32],\
-	$flags_C_clear, $flags_O_clear, $flags_Z_clear, \
-	$flags_C_set, $flags_O_set, $flags_Z_set
+	$flags_C_clear, $flags_O_clear, $flags_Z_clear, $flags_S_clear, \
+	$flags_C_set, $flags_O_set, $flags_Z_set, $flags_S_set
 #array alu_out	32
 
 // --- ALU Operations ---
@@ -21,6 +20,8 @@ $is_MOV, $is_AND, $is_OR, $is_XOR, $is_ADD, $is_SUB, $is_CMP, $is_TST = DEMUX{3}
 
 $flags_Z_clear = PULSE $enable
 $flags_Z_set   = AND (DELAY $done), (NOR @alu_out)
+$flags_S_clear = PULSE $enable
+$flags_S_Set   = AND $done, @alu_out[31]
 $_done = DELAY{2} $done
 @_alu_out = DELAY{2} @alu_out
 
@@ -104,13 +105,13 @@ $done       = PULSE $is_TST
 
 %macro _fixture 6
 #array out 32
-#array flags_clear 3
-#array flags_set   3
-$NULL, @flags_clear = LATCH{3} 1, 0, @flags_clear
-$NULL, @flags_set = LATCH{3} 1, 0, @flags_set
+#array flags_clear 4
+#array flags_set   4
+$NULL, @flags_clear = LATCH{4} 1, 0, @flags_clear
+$NULL, @flags_set = LATCH{4} 1, 0, @flags_set
 
 $done, $nowrite, @out, @flags_clear, @flags_set \
-	= CPU32_ALU 1, %1[0:2], %2[0:31], %3[0:31], %4, %5, %6
+	= CPU32_ALU 1, %1[0:2], %2[0:31], %3[0:31], %4
 %endmacro
 
 #testcase 10 "ALU: MOV"
