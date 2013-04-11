@@ -149,8 +149,10 @@ int main(int argc, char *argv[])
 
 	// Check for links that aren't set/read
 	Sim_UsageCheck(&gRootUnit);
-	for( tUnitTemplate *tpl = gpUnits; tpl; tpl = tpl->Next )
-		Sim_UsageCheck(&tpl->Internals); 
+	for( tUnitTemplate *tpl = gpUnits; tpl; tpl = tpl->Next ) {
+		Sim_UsageCheck(&tpl->Internals);
+//		Sim_DuplicateCheck(&tpl->Internals);
+	}
 //	for( tTestCase *test = gpTests; test; test = test->Next )
 //		Sim_UsageCheck(&test->Internals);
 

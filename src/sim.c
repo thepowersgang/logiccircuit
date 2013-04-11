@@ -88,6 +88,15 @@ void Sim_UsageCheck(tExecUnit *Root)
 		listiter(disp->Condition, nRead);
 		listiter(disp->Values, nRead);
 	}
+	// Mark #testassert items
+	for(tAssertion *a = Root->Assertions; a; a = a->Next)
+	{
+		listiter(a->Condition, nRead);
+		listiter(a->Expected, nRead);
+		listiter(a->Values, nRead);
+	}
+//	((struct sUsage*)Root->CompletionCondition->Value->Info)->++;
+//	listiter(Root->CompletionCond, nRead);
 	
 	// Iterate over elements
 	for( tElement *ele = *elements; ele; ele = ele->Next )
@@ -176,6 +185,11 @@ void Sim_DuplicateCheck(tExecUnit *Root)
 	{
 		if( visited_eles[idx] )
 			continue ;
+
+		// Only flag anon targets
+		// - TODO: Flag single-write links too
+		if( ele->Outputs[0]->Name[0] )
+			continue ;
 		
 		 int	nDup = 0;
 		 int	idx2 = idx+1;
@@ -191,7 +205,7 @@ void Sim_DuplicateCheck(tExecUnit *Root)
 			nDup ++;
 			visited_eles[idx2] = 1;
 		}
-		
+
 		if( nDup > 0 )
 		{
 			fprintf(stderr, "%s: Element %s ", Root->Name, ele->Type->Name);
@@ -536,11 +550,14 @@ void DumpList(const tList *List, int bShowNames)
 {
 	if( bShowNames ) {
 		for( int i = 0; i < List->NItems; i ++ )
-			printf( "%s(%i) ", List->Items[i]->Name, List->Items[i]->Value->Value);
+			//printf( "%s(%i) ", List->Items[i]->Name, List->Items[i]->Value->Value);
+			printf( "%s ", List->Items[i]->Name);
 	}
 	else {
+		printf("%s(", List->Items[0]->Name);
 		for( int i = 0; i < List->NItems; i ++ )
 			printf( "%i", List->Items[i]->Value->Value);
+		printf(")");
 	}
 }
 
