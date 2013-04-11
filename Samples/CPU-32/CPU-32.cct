@@ -21,14 +21,14 @@
 // - Pulse the $next_stage line and display a message
 %macro next_stage	3+
 $_next_stage_%1 = %3
-#display $_next_stage_%1 %2 0
+#display (PULSE $_next_stage_%1) %2 0
 $next_stage = PULSE $_next_stage_%1
 %endmacro
 // next_instruction
 // - Pulse the $next_instruction line and display a message
 %macro next_instruction	3+
 $_next_instruction_%1 = %3
-#display $_next_instruction_%1 %2 0
+#display (PULSE $_next_instruction_%1) %2 0
 $next_instruction = PULSE $_next_instruction_%1
 %endmacro
 
@@ -42,14 +42,22 @@ $next_instruction = PULSE $_next_instruction_%1
 	$reg_enable, @reg_addr[4], $reg_write, @reg_data_out[NUM_GPR_BITS], \
 	@flags_clear[NUM_FLAGS], @flags_set[NUM_FLAGS]
 
-#array stage_num	4
-#array stage_state	16
+//#array stage_num	4
+%define NUM_STAGES	7
+#array stage_state	NUM_STAGES
 
 #array instr	32
 
 #breakpoint $ins_complete "Next Instruction"
 
-#display 1 "Stage %4x" @stage_num[3:0], @stage_state
+#display $mem_enable            "MEM ACCESS 0x%32x" @mem_addr[31:0]
+#display $mem_enable,$mem_write "MEM WRITE  = 0x%32x" @mem_data_out[31:0]
+#display $mem_ready             "MEM READ   : 0x%32x" @mem_data_in[31:0]
+#display $reg_enable            "REG ACCESS 0x%4x" @reg_addr[3:0]
+#display $reg_enable,$reg_write "REG WRITE  = 0x%32x" @reg_data_out[31:0]
+#display $reg_ready             "REG READ   : 0x%32x" @reg_data_in[31:0]
+
+#display 1 "Stage  " @stage_state
 #display 1 "Reset  " $stage_reset
 #display 1 "NextS  " $next_stage
 #display 1 "instr = 0x%32x" @instr[31:0]
@@ -109,13 +117,10 @@ $NULL, @instr = LATCH{32} 1, $instr_clear, @instr
 $instr_clear = PULSE @stage_state[0]	// Clear the instruction register
 
 // === Timing control (stages) ===
-// 4-bit counter reset by $stage_reset, incremented by $next_stage
-// Attached to a 4-bit de-muxer controlling the state of stages
-@stage_num = COUNTER{4} $stage_reset, $next_stage
-@stage_state = DEMUX{4} 1, @stage_num
+@stage_state = SEQUENCER{NUM_STAGES} 1, $stage_reset, $next_stage
 
 // === Next instruction ===
-$ins_complete = DELAY{2} (PULSE $next_instruction)
+$ins_complete = PULSE $next_instruction
 $stage_reset = PULSE $next_instruction
 $stage_reset = DELAY $reset
 
@@ -157,7 +162,7 @@ next_stage PCCLR, "next_stage (PCCLR)", DELAY $_pc_clear
 #array alu_out  	NUM_GPR_BITS
 
 #display @stage_state[2] "Opcode decode" 1
-$decode_enable = OR @stage_state[2:15]
+$decode_enable = NOR @stage_state[0:1]
 ; 0xxxxmmm	- General ALU stuff
 $is_ALU     = AND $decode_enable, (NOT @instr[31])
 ; 100xxxxx	- Conditional branches
@@ -237,11 +242,14 @@ $decode_start = AND @stage_state[2], $is_LEA
 ;$decode_clear = PULSE @stage_state[4]
 $decode_clear = PULSE @stage_state[0]
 
-#display $decode_start "Decode @instr=%32x" @instr
+#display $decode_start "Decode @instr=%27x" @instr[26:0]
 $decode_complete, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src,\
 	$reg_enable, @reg_addr, $mem_enable, @mem_addr = CPU32_ADDRESS_DECODE \
 	$decode_start, $decode_clear, $switch_operands, (NOT $no_decode_r), (NOT $no_read_m), @instr[0:26], \
 	$reg_ready, @reg_data_in, $mem_ready, @mem_data_in, @pc
+
+next_stage DecodeCompleteAddr, "next_stage (Decode Complete-Addr)", AND @stage_state[2], $decode_complete
+next_stage DecodeCompleteDir, "next_stage (Decode Complete-Dir)", AND (DELAY{6} @stage_state[2]), @stage_state[2], (NOT $decode_start)
 
 #display $decode_enable "$addr_is_mem = %1i" $addr_is_mem
 #display $decode_complete "@alu_addr   = %32x" @alu_addr[31:0]
@@ -251,15 +259,15 @@ $decode_complete, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src,\
 //next_stage DecodeSkipped, "next_stage (Decode Skipped)", AND (DELAY{3} $decode_enable), (NOT $decode_start)
 
 // --- Stage 2.5 ALU Core ---
-$alu_data_rdy = AND $is_ALU, $decode_complete
+$alu_data_rdy = AND $is_ALU, (OR @stage_state[3:4])
 $alu_done, $alu_nosave, @alu_out, \
 	$flags_C_clear, $flags_O_clear, $flags_Z_clear, $flags_S_clear, \
 	$flags_C_set, $flags_O_set, $flags_Z_set, $flags_S_set \
 	= CPU32_ALU $alu_data_rdy, @instr[27:29], @alu_in_dst, @alu_in_src, $flags_C
-next_stage ALUDONE, "next_stage (ALUDONE)", $alu_done
+next_stage ALUDONE, "next_stage (ALUDONE)", AND @stage_state[3], $alu_done
 // --- Stage 3: Save ALU Data ---
-#display $is_ALU,@stage_state[3] "Data save" 1
-$alu_save = AND @stage_state[3], $is_ALU
+#display $is_ALU,@stage_state[4] "ALU Data save" 1
+$alu_save = AND @stage_state[4], $is_ALU
 // - Save to memory
 $_alu_save_mem = AND $alu_save, (NOT $alu_nosave), $addr_is_mem
 #display $_alu_save_mem "Memory 0x%32x = 0x%32x" @alu_addr[31:0], @alu_out[31:0]
@@ -280,48 +288,54 @@ next_stage ALUREGSAVE, "next_stage (ALUREGSAVE)", DELAY{4} $_alu_save_reg
 next_stage ALUNOSAVE, "next_stage (ALUNOSAVE)", AND $alu_save, $alu_nosave
 #display $_next_stage_ALUNOSAVE "Not saving 0x%32x" @alu_out[31:0]
 // --- ALU Done ---
-next_instruction ALUCOMPLETE, "next_instruction (ALU Complete)", AND $is_ALU, @stage_state[4]
+next_instruction ALUCOMPLETE, "next_instruction (ALU Complete)", AND $is_ALU, @stage_state[5]
 
 // ((( Stack Adder ))
+$is_PUSHPOP = OR $is_PUSH, $is_POP
 #array _sp_addend 32
-$reg_write,@reg_data_out,$NULL = ADDER_32BIT $_sp_add_update, @reg_data_in, @_sp_addend, 0
-// === Push ===
-next_stage PushDataAvail, "next_stage (Push Data Avaliable)", AND $is_PUSH, $decode_complete
+#array _sp 32
+#array _sp_new 32
+$NULL, @_sp = LATCH{32} 1, @stage_state[0], @_sp
+$NULL, @_sp_new = LATCH{32} 1, @stage_state[0], @_sp_new
+#display $is_PUSHPOP "PUSHPOP Old SP = 0x%32x" @_sp[31:0]
+$_sp_new_rdy,@_sp_new,$NULL = ADDER_32BIT $_sp_add_update, @_sp, @_sp_addend, 0
+#display $is_PUSHPOP "PUSHPOP New SP = 0x%32x" @_sp_new[31:0]
+
+// === Push/Pop ===
 // - Subtract 4 from SP (R13)
-$_push_regen = OR @stage_state[3], @stage_state[4]
-$reg_enable = AND $is_PUSH, $_push_regen
-@reg_addr[0:3] = AND{4} $is_PUSH, $_push_regen, 13[0:3]
-$_push_sp_ready = AND $is_PUSH, @stage_state[3], $reg_ready
+$_pushpop_readsp = AND $is_PUSHPOP, @stage_state[3]
+$reg_enable = PULSE $_pushpop_readsp
+@reg_addr[0:3] = AND{4} $_pushpop_readsp, 13[0:3]
+$_push_sp_ready = AND $_pushpop_readsp, $reg_ready
+@_sp = AND{32} $_pushpop_readsp, $reg_ready, @reg_data_in
 $_sp_add_update = DELAY $_push_sp_ready
 @_sp_addend[0:31] = AND{32} $is_PUSH, 0xFFFFFFFC[0:31]
-next_stage PushSPUpdated, "next_stage (Push SP Updated)", AND $is_PUSH, @stage_state[3], $reg_write
+@_sp_addend[0:31] = AND{32} $is_POP,  0x00000004[0:31]
+$_write_newsp = AND $_pushpop_readsp, $_sp_new_rdy
+$reg_enable = PULSE $_write_newsp
+$reg_write = PULSE $_write_newsp
+@reg_data_out = AND{32} $_write_newsp, @_sp_new
+next_stage PushPopSPUpdated, "next_stage (Push/Pop SP Updated)", AND $_pushpop_readsp, $_sp_new_rdy
+// === Push ===
 // - Write data to [SP]
-$_push_save = PULSE (AND $is_PUSH, @stage_state[4])
-$mem_enable = DELAY $_push_save
+$_push_save = AND $is_PUSH, @stage_state[4]
+$mem_enable = PULSE $_push_save
 $mem_write = DELAY $_push_save
-@mem_addr = AND{32} $_push_save, @reg_data_in
+@mem_addr = AND{32} $_push_save, @_sp_new
 @mem_data_out = AND{32} $_push_save, @alu_in_src
 // - Data written, instruction complete
-next_instruction Push, "next_instruction (Push)", DELAY{4} $_push_save
+next_stage Push, "next_stage (Push - Write Done)", AND $_push_save, $mem_ready
+// - Wait until state change to ensure mem signals are cleare
+next_instruction Push, "next_instruction (Push)", AND $is_PUSH, @stage_state[5]
 // === Pop ===
-next_stage PopDestAvail, "next_stage (Push Data Avaliable)", AND $is_POP, $decode_complete
 #array _pop_data	32
 @_pop_data = @alu_in_dst	// (ab)use ALU latch
 // - Read SP and get memory
-$_pop_read = AND $is_POP, @stage_state[3]
-$reg_enable = PULSE $_pop_read
-@reg_addr[0:3] = AND{4} $_pop_read, 13[0:3]
-$mem_enable = AND $_pop_read, $reg_ready
-@mem_addr = AND{32} $_pop_read, $reg_ready, @reg_data_in
+$_pop_read = AND $is_POP, @stage_state[4]
+$mem_enable = DELAY $_pop_read
+@mem_addr = AND{32} $_pop_read, @_sp
 @_pop_data = AND{32} $_pop_read, $mem_ready, @mem_data_in
 next_stage PopDataLoaded, "next_stage (Pop Data Loaded)", AND $_pop_read, $mem_ready
-// - Update SP
-$_pop_updatesp = AND $is_POP, @stage_state[4]
-$reg_enable = DELAY $_pop_updatesp
-@reg_addr[0:3] = AND{4} $_pop_updatesp, 13[0:3]
-$_sp_add_update = PULSE (AND $_pop_updatesp, $reg_ready)
-@_sp_addend[0:31] = AND{32} $is_POP, 4[0:31]
-next_stage PopSPUpdated, "next_stage (Pop SP Updated)", AND $is_POP, @stage_state[4], $reg_write
 // - Save data
 $_pop_save = AND $is_POP, @stage_state[5]
 $alu_save = DELAY $_pop_save
@@ -368,7 +382,7 @@ next_instruction MRC, "next_instruction (MRC)", DELAY{4} $is_MRC
 $next_instruction, $next_stage, \
 	$reg_enable,@reg_addr,$reg_write,@reg_data_out, \
 	$flags_C_clear,$flags_C_set \
-	= CPU32_SHIFT $is_SHIFT, @stage_state[0:5], @instr[0:16], $reg_ready,@reg_data_in,$flags_C
+	= CPU32_SHIFT $is_SHIFT, @stage_state[0], @stage_state[3:6], @instr[0:16], $reg_ready,@reg_data_in,$flags_C
 
 // === Load Effective Address (LEA) ===
 $_LEA_active = AND $is_LEA, $decode_complete
@@ -382,7 +396,7 @@ next_instruction LEA, "next_instruction (LEA)", DELAY{3} $_LEA_active
 $next_instruction, $next_stage,\
 	$mem_enable,@mem_addr,@mem_size,$mem_write,@mem_data_out,\
 	$reg_enable,@reg_addr,$reg_write,@reg_data_out\
-	= CPU32_NWLS $is_NONWLS, @stage_state[0:5], @instr[0:27], $mem_ready,@mem_data_in, $reg_ready,@reg_data_in
+	= CPU32_NWLS $is_NONWLS, @stage_state[0], @stage_state[3:6], @instr[0:27], $mem_ready,@mem_data_in, $reg_ready,@reg_data_in
 
 // === Conditional Jumps / Calls ===
 #array cond 8
@@ -405,8 +419,7 @@ $condition_true = AND @cond[6], (NOR $flags_C, $flags_Z)	; CF=0,ZF=0
 $condition_true = DELAY @cond[7]
 $_jump_cond = XOR $condition_true, $cond_inverse
 
-next_stage JMPDEC, "next_stage (JMPDEC)", DELAY{4} $is_BRANCH
-next_stage IJMPDEC, "next_stage (IJMPDEC)", AND $is_IBRANCH, $decode_complete
+//next_stage JMPDEC, "next_stage (JMPDEC)", AND @stage $is_BRANCH
 
 #display $is_BRANCH,@stage_state[3] "%1i(jmpcond) = %1i(condition_true) ^ %1i(cond_inverse)" $_jump_cond, $condition_true, $cond_inverse
 #display $is_IBRANCH,@stage_state[3] "%1i(jmpcond) = %1i(condition_true) ^ %1i(cond_inverse)" $_jump_cond, $condition_true, $cond_inverse

@@ -1,4 +1,3 @@
-;
 ; CPU-32 Design
 ; - By John Hodge (thePowersGang)
 ;
@@ -21,7 +20,7 @@ $is_MOV, $is_AND, $is_OR, $is_XOR, $is_ADD, $is_SUB, $is_CMP, $is_TST = DEMUX{3}
 $flags_Z_clear = PULSE $enable
 $flags_Z_set   = AND (DELAY $done), (NOR @alu_out)
 $flags_S_clear = PULSE $enable
-$flags_S_Set   = AND $done, @alu_out[31]
+$flags_S_set   = AND $done, @alu_out[31]
 $_done = DELAY{2} $done
 @_alu_out = DELAY{2} @alu_out
 
