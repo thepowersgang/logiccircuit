@@ -29,3 +29,5 @@ $ready, @ret, $borrow_out = ADDER_8BIT (DELAY $enable), (DELAY @val1), (NOT @val
 $ready, @ret, $borrow_out = ADDER_16BIT (DELAY $enable), (DELAY @val1), (NOT @val2), (NOT $borrow_in)
 
 #endunit
+
+; vim: ft=logiccircuit
