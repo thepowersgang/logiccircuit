@@ -60,17 +60,19 @@ $carry_out = AND @p, $carry_in
 #array _ret 4
 #array carry 4
 
+$_en_d8 = DELAY{8} $enable
+
 @_ret[0], @carry[0] = ADDER @val1[0], @val2[0], $carry_in
 @_ret[1], @carry[1] = ADDER (DELAY{2} @val1[1], @val2[1]), @carry[0]
 @_ret[2], @carry[2] = ADDER (DELAY{4} @val1[2], @val2[2]), @carry[1]
 @_ret[3], @carry[3] = ADDER (DELAY{6} @val1[3], @val2[3]), @carry[2]
 
-@ret[0] = AND (DELAY{8} $enable), (DELAY{6} @_ret[0])
-@ret[1] = AND (DELAY{8} $enable), (DELAY{4} @_ret[1])
-@ret[2] = AND (DELAY{8} $enable), (DELAY{2} @_ret[2])
-@ret[3] = AND (DELAY{8} $enable), @_ret[3]
+@ret[0] = AND $_en_d8, (DELAY{6} @_ret[0])
+@ret[1] = AND $_en_d8, (DELAY{4} @_ret[1])
+@ret[2] = AND $_en_d8, (DELAY{2} @_ret[2])
+@ret[3] = AND $_en_d8, @_ret[3]
 
-$carry_out = AND (DELAY{8} $enable), @carry[3]
+$carry_out = AND $_en_d8, @carry[3]
 $ready = DELAY{9} $enable
 
 #endunit
@@ -127,7 +129,7 @@ $g = AND $b, $c
 %endif
 
 // 8-Bit Carry-Select Adder
-// - Delay of 13 (ADDER_4BIT_RIPPLE + 2)
+// - Delay of 10 (ADDER_4BIT_RIPPLE + 1)
 #defunit ADDER_8BIT
 #input $enable, @val1[8], @val2[8], $carry_in
 #output $ready, @ret[8], $carry_out
@@ -138,15 +140,15 @@ $g = AND $b, $c
 $ready_first, @_ret_low, $carry_mid = ADDER_4BIT_RIPPLE $enable, @val1[0:3], @val2[0:3], $carry_in
 $NULL, @_ret_hi_0, $carry_0 = ADDER_4BIT_RIPPLE $enable, @val1[4:7], @val2[4:7], 0
 $NULL, @_ret_hi_1, $carry_1 = ADDER_4BIT_RIPPLE $enable, @val1[4:7], @val2[4:7], 1
-@ret[0:3]  = AND{4} (DELAY $ready_first), (DELAY @_ret_low)
-@ret[4:7]  = AND{4} (DELAY $ready_first), (MUX{1,4} 1, $carry_mid, @_ret_hi_0, @_ret_hi_1)
-$carry_out = AND (DELAY $ready_first), (MUX 1, $carry_mid, $carry_0, $carry_1)
-$ready = DELAY{2} $ready_first
+@ret[0:3]  = AND{4} $ready_first, @_ret_low
+@ret[4:7]  = MUX{1,4} $ready_first, $carry_mid, @_ret_hi_0, @_ret_hi_1
+$carry_out = MUX $ready_first, $carry_mid, $carry_0, $carry_1
+$ready = DELAY $ready_first
 
 #endunit
 
 // 16-Bit Adder
-// - Delay of 15 (ADDER_8BIT + 2)
+// - Delay of 11 (ADDER_8BIT + 1)
 #defunit ADDER_16BIT
 #input $enable, @val1[16], @val2[16], $carry_in
 #output $ready, @ret[16], $carry_out
@@ -157,15 +159,15 @@ $ready = DELAY{2} $ready_first
 $ready_first, @_ret_low, $carry_mid = ADDER_8BIT $enable, @val1[0:7], @val2[0:7], $carry_in
 $NULL, @_ret_hi_0, $carry_0 = ADDER_8BIT $enable, @val1[8:15], @val2[8:15], 0
 $NULL, @_ret_hi_1, $carry_1 = ADDER_8BIT $enable, @val1[8:15], @val2[8:15], 1
-@ret[0:7]  = AND{8} (DELAY $ready_first), (DELAY @_ret_low)
-@ret[8:15] = AND{8} (DELAY $ready_first), (MUX{1,8} 1, $carry_mid, @_ret_hi_0, @_ret_hi_1)
-$carry_out = AND (DELAY $ready_first), (MUX 1, $carry_mid, $carry_0, $carry_1)
-$ready = DELAY{2} $ready_first
+@ret[0:7]  = AND{8} $ready_first, @_ret_low
+@ret[8:15] = MUX{1,8} $ready_first, $carry_mid, @_ret_hi_0, @_ret_hi_1
+$carry_out = MUX{1} $ready_first, $carry_mid, $carry_0, $carry_1
+$ready = DELAY $ready_first
 
 #endunit
 
 // 32-Bit Adder
-// - Delay of 17 (ADDER_16BIT + 2)
+// - Delay of 12 (ADDER_16BIT + 1)
 %define bits	32
 #defunit ADDER_32BIT
 #input $enable, @val1[bits], @val2[bits], $carry_in
@@ -177,10 +179,10 @@ $ready = DELAY{2} $ready_first
 $ready_first, @_ret_low, $carry_mid = ADDER_16BIT $enable, @val1[0:bits/2-1], @val2[0:bits/2-1], $carry_in
 $NULL, @_ret_hi_0, $carry_0 = ADDER_16BIT $enable, @val1[bits/2:bits-1], @val2[bits/2:bits-1], 0
 $NULL, @_ret_hi_1, $carry_1 = ADDER_16BIT $enable, @val1[bits/2:bits-1], @val2[bits/2:bits-1], 1
-@ret[0:bits/2-1]  = AND{bits/2} (DELAY $ready_first), (DELAY @_ret_low)
-@ret[bits/2:bits-1] = AND{bits/2} (DELAY $ready_first), (MUX{1,bits/2} 1, $carry_mid, @_ret_hi_0, @_ret_hi_1)
-$carry_out = AND (DELAY $ready_first), (MUX 1, $carry_mid, $carry_0, $carry_1)
-$ready = DELAY{2} $ready_first
+@ret[0:bits/2-1]  = AND{bits/2} $ready_first, @_ret_low
+@ret[bits/2:bits-1] = MUX{1,bits/2} $ready_first, $carry_mid, @_ret_hi_0, @_ret_hi_1
+$carry_out = MUX $ready_first, $carry_mid, $carry_0, $carry_1
+$ready = DELAY{1} $ready_first
 
 #endunit
 

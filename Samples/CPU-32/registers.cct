@@ -6,6 +6,10 @@
 
 #array reg_select	16
 
+#array _data_in_delay	32
+@_data_in_delay = DELAY @reg_data_in
+$_wr_delay = DELAY $reg_write
+
 @reg_select = DEMUX{4} $enable, @reg_addr
 
 %assign i 0
@@ -13,15 +17,15 @@
 #array reg_ %+ i %+ _value 32
 #array reg_ %+ i %+ _newvalue 32
 
-$reg_ %+ i %+ _write = AND @reg_select[i], (DELAY $reg_write)
-@reg_ %+ i %+ _newvalue = AND{32} @reg_select[i], (DELAY $reg_write), (DELAY @reg_data_in)
+$reg_ %+ i %+ _write = AND @reg_select[i], $_wr_delay
+@reg_ %+ i %+ _newvalue = AND{32} @reg_select[i], $_wr_delay, @_data_in_delay
 $NULL, @reg_ %+ i %+ _value = LATCH{32} 1, $reg_ %+ i %+ _write, (DELAY @reg_ %+ i %+ _newvalue)
-@reg_data_out = AND{32} (DELAY @reg_select[i]), @reg_ %+ i %+ _value
+@reg_data_out = AND{32} @reg_select[i], @reg_ %+ i %+ _value
 
 %assign i i+1
 %endrep
 
-$ready = DELAY{3} $enable	// DEMUX, _write, LATCH(writes take 2), AND
+$ready = DELAY{2} $enable	// DEMUX, _write, LATCH(writes take 2), AND
 
 // --- Register Display ---
 #display 1 "R 0=%32x R 1=%32x R 2=%32x R 3=%32x" @reg_0_value[32-1:0], @reg_1_value[32-1:0], \

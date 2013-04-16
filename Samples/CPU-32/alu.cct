@@ -30,28 +30,18 @@ $_done = DELAY{2} $done
 $done    = PULSE $is_MOV
 // --- AND ---
 #display $is_AND "AND 0x%32x & 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
-%assign i 0
-%rep NUM_GPR_BITS
-@alu_out[i] = AND $is_AND, @alu_in_src[i], @alu_in_dst[i]
-%assign i i+1
-%endrep
+#array _and_res	32
+@_and_res = AND{32,2} @alu_in_src, @alu_in_dst
+@alu_out = AND{32} $is_AND, @_and_res
 $done = PULSE $is_AND
 // --- OR  ---
 #display $is_OR "OR 0x%32x | 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
-%assign i 0
-%rep NUM_GPR_BITS
-@alu_out[i] = AND (DELAY $is_OR), (OR @alu_in_src[i], @alu_in_dst[i])
-%assign i i+1
-%endrep
-$done = PULSE (DELAY $is_OR)
+@alu_out = AND{32} $is_OR, (OR{32,2} @alu_in_src, @alu_in_dst)
+$done = PULSE $is_OR
 // --- XOR ---
 #display $is_XOR "XOR 0x%32x & 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
-%assign i 0
-%rep NUM_GPR_BITS
-@alu_out[i] = AND (DELAY $is_XOR), (XOR @alu_in_src[i], @alu_in_dst[i])
-%assign i i+1
-%endrep
-$done = PULSE (DELAY $is_XOR)
+@alu_out = AND{32} $is_XOR, (XOR{32,2} @alu_in_src, @alu_in_dst)
+$done = PULSE $is_XOR
 // --- Common Adder ---
 #array alu_adder_op2	NUM_GPR_BITS
 #array add_out	NUM_GPR_BITS
@@ -60,36 +50,28 @@ $done    = DELAY{3} $add_done
 @alu_out = DELAY{3} @add_out
 // --- ADD ---
 #display $is_ADD "ADD 0x%32x + 0x%32x + %i" @alu_in_dst[31:0], @alu_in_src[31:0], $flags_C
-$flags_C_clear = PULSE (DELAY $is_ADD)
-$flags_O_clear = PULSE (DELAY $is_ADD)
+$flags_C_clear = PULSE $is_ADD
+$flags_O_clear = PULSE $is_ADD
 $alu_adder_pulse = DELAY $is_ADD
 @alu_adder_op2   = AND{32} $is_ADD, @alu_in_src
-$alu_adder_CF    = AND $is_ADD, $flags_C
+$alu_adder_CF    = AND $is_ADD, (DELAY $flags_C)
 $flags_C_set = AND $is_ADD, $add_done, $add_C_out
 $flags_O_set = AND $is_ADD, (NOT   @alu_in_dst[31]), (NOT   @alu_in_src[31]), (DELAY @alu_out[31])	// 00,1
 $flags_O_set = AND $is_ADD, (DELAY @alu_in_dst[31]), (DELAY @alu_in_src[31]), (NOT   @alu_out[31])	// 11,0
-// --- SUB ---
+// --- SUB/CMP ---
+$_sub_en = OR $is_SUB, $is_CMP
 #display $is_SUB "SUB 0x%32x - 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
-$flags_C_clear = PULSE (DELAY{2} $is_SUB)
-$alu_adder_pulse = DELAY{2} $is_SUB
-@alu_adder_op2   = AND{32} $is_SUB, (NOT @alu_in_src)
-$alu_adder_CF    = AND $is_SUB, (NOT $flags_C)
-$flags_C_set = AND $is_SUB, (DELAY $add_done), (NOT $add_C_out)
+$flags_C_clear = PULSE $_sub_en
+$alu_adder_pulse = DELAY $_sub_en
+@alu_adder_op2   = AND{32} $_sub_en, (NOT @alu_in_src)
+$alu_adder_CF    = AND $_sub_en, (NOT $flags_C)
+$flags_C_set = AND $_sub_en, (DELAY $add_done), (NOT $add_C_out)
 // --- CMP --
 #display $is_CMP "CMP 0x%32x - 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
-$flags_C_clear = PULSE (DELAY{2} $is_CMP)
-$alu_adder_pulse = DELAY{2} $is_SUB
-@alu_adder_op2   = AND{32} $is_CMP, (NOT @alu_in_src)
-$alu_adder_CF    = AND $is_CMP, (NOT $flags_C)
 $alu_nosave = DELAY $is_CMP
-$flags_C_set = AND $is_CMP, (DELAY $add_done), (NOT $add_C_out)
 // --- TST --
 #display $is_TST "TST 0x%32x & 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
-%assign i 0
-%rep NUM_GPR_BITS
-@alu_out[i] = AND $is_TST, @alu_in_src[i], @alu_in_dst[i]
-%assign i i+1
-%endrep
+@alu_out = AND{32} $is_TST, @_and_res
 $alu_nosave = DELAY $is_TST
 $done       = PULSE $is_TST
 

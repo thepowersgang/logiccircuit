@@ -127,6 +127,7 @@ $stage_reset = DELAY $reset
 // =============================
 // === Stage 0: Opcode Fetch ===
 // =============================
+;; BLOCK "Opcode Fetch"
 #display @stage_state[0] "Opcode fetch" 1
 // - Request memory
 @mem_addr[2:31] = AND{30} @stage_state[0], @pc[2:31]	// Set memory address to PC (ignore bottom two bits)
@@ -134,10 +135,12 @@ $mem_enable  = PULSE @stage_state[0]	// Enable memory for read
 // - Read complete, save into @instr
 @instr = AND{32} @stage_state[0], $mem_ready, @mem_data_in	// Save the opcode
 next_stage OPRDY, "next_stage (OPRDY)", AND @stage_state[0], $mem_ready
+;; ENDBLOCK
 
 // =============================
 // === Stage 1: Increment PC ===
 // =============================
+;; BLOCK "Increment PC"
 #display @stage_state[1] "PC Update" 1
 // - Add 4 to PC
 #array _pc_new 32
@@ -152,6 +155,7 @@ $pc_clear = DELAY $_pc_clear
 @pc_new = DELAY{2} @_pc_new
 ; Don't move to decode until PC is updated
 next_stage PCCLR, "next_stage (PCCLR)", DELAY $_pc_clear
+;; ENDBLOCK
 
 // ================================
 // === Stage 2: Opcode Decoding ===
@@ -181,6 +185,8 @@ $is_LDF     = AND $decode_enable, (NXOR{16,2} @instr[31:16], 0xB800[15:0])
 $is_MCR     = AND $decode_enable, (XNOR{24,2} @instr[31:8], 0xB80100[23:0])
 ; 10111000 00000001 00000001	- MRC
 $is_MRC     = AND $decode_enable, (XNOR{24,2} @instr[31:8], 0xB80101[23:0])
+; 10111000 00000001 00000010 00000000	- IRET
+$is_IRET    = AND $decode_enable, (XNOR{32,2} @instr[31:0], 0xB8010200[31:0])
 ; 10111000 0000001x	- Shift / Rotate
 $is_SHIFT   = AND $decode_enable, (XNOR{15,2} @instr[31:17], 0xB802[15:1])
 ; 101111mm	- LEA R, op2
@@ -190,7 +196,12 @@ $is_NONWLS  = AND $decode_enable, (NXOR{4,2} @instr[31:28], 0b1100[3:0])
 
 #array interrupt_num	4
 // === Handle Undefined Opcodes ===
-$is_invl = NOR $is_ALU, $is_BRANCH, $is_IBRANCH, $is_PUSH, $is_POP, $is_LDF, $is_MRC, $is_MCR,\
+#display $decode_enable "is_* =" $is_ALU, $is_BRANCH, $is_IBRANCH, $is_PUSH, $is_POP, $is_LDF,\
+	$is_MRC, $is_MCR, $is_IRET, \
+	$is_SHIFT, $is_LEA, $is_NONWLS
+
+$is_invl = NOR $is_ALU, $is_BRANCH, $is_IBRANCH, $is_PUSH, $is_POP, $is_LDF,\
+	$is_MRC, $is_MCR, $is_IRET, \
 	$is_SHIFT, $is_LEA, $is_NONWLS
 $is_UNDEF = AND (DELAY{2} $decode_enable), $is_invl
 #display $is_UNDEF "UNDEFINED INSTRUCTION!" 0
@@ -221,18 +232,18 @@ $pc_clear = DELAY{2} $_intr_pulse
 next_instruction Intr, "next_instruction (Intr)", DELAY{3} $_intr_pulse
 
 // === Address/Operand Decoding ===
-$no_decode_r = AND $decode_enable, $is_IBRANCH
-$no_decode_r = AND $decode_enable, (NXOR{5,2} @instr[31:27], 0b00000[4:0])	// MOV
-$no_read_m   = AND $decode_enable, (NXOR{5,2} @instr[31:27], 0b01000[4:0])	// Reversed MOV
-$no_decode_r = AND $decode_enable, $is_PUSH
-$no_decode_r = AND $decode_enable, $is_POP
-$no_read_m   = AND $decode_enable, $is_POP
-$switch_operands = AND $decode_enable, $is_POP
-$no_read_m       = AND $decode_enable, $is_LEA
-$no_decode_r     = AND $decode_enable, $is_LEA
-$switch_operands = AND $decode_enable, $is_LEA
+$no_read_r = AND $decode_enable, $is_IBRANCH
+$no_read_r = AND $decode_enable, (NXOR{5,2} @instr[31:27], 0b00000[4:0])	// MOV
+$no_read_r = AND $decode_enable, $is_PUSH
+$no_read_r = AND $decode_enable, $is_POP
+$no_read_r = AND $decode_enable, $is_LEA
+$no_read_m = AND $decode_enable, (NXOR{5,2} @instr[31:27], 0b01000[4:0])	// Reversed MOV
+$no_read_m = AND $decode_enable, $is_POP
+$no_read_m = AND $decode_enable, $is_LEA
 // - Swap ALU operands
 $switch_operands = AND $decode_enable, $is_ALU, @instr[30]
+$switch_operands = AND $decode_enable, $is_POP
+$switch_operands = AND $decode_enable, $is_LEA
 
 $decode_start = AND @stage_state[2], $is_ALU
 $decode_start = AND @stage_state[2], $is_IBRANCH
@@ -245,7 +256,7 @@ $decode_clear = PULSE @stage_state[0]
 #display $decode_start "Decode @instr=%27x" @instr[26:0]
 $decode_complete, $addr_is_mem, @alu_addr, @alu_in_dst, @alu_in_src,\
 	$reg_enable, @reg_addr, $mem_enable, @mem_addr = CPU32_ADDRESS_DECODE \
-	$decode_start, $decode_clear, $switch_operands, (NOT $no_decode_r), (NOT $no_read_m), @instr[0:26], \
+	$decode_start, $decode_clear, $switch_operands, (NOT $no_read_r), (NOT $no_read_m), @instr[0:26], \
 	$reg_ready, @reg_data_in, $mem_ready, @mem_data_in, @pc
 
 next_stage DecodeCompleteAddr, "next_stage (Decode Complete-Addr)", AND @stage_state[2], $decode_complete
@@ -348,10 +359,12 @@ next_instruction Pop, "next_instruction (Pop)", AND $is_POP, @stage_state[6]
 // TODO: a) Is this needed, b) Should it be reg-reg instead of reg-mem?
 
 // === Load Flags (LDF) ===
-@flags_clear[0:3] = AND{4} (PULSE $is_LDF), (NOT   @instr[8:11])
-@flags_set[0:3]   = AND{4} (PULSE $is_LDF), (DELAY @instr[0:3])
-next_instruction LDF, "next_instruction (LDF)", DELAY{3} $is_LDF
+$_ldf_pulse = PULSE (AND $is_LDF, @stage_state[3])
+@flags_clear[0:3] = AND{4} $_ldf_pulse, (DELAY  @instr[8:11])
+@flags_set[0:3]   = AND{4} (DELAY $_ldf_pulse), (DELAY @instr[0:3])
+next_instruction LDF, "next_instruction (LDF)", DELAY{3} $_ldf_pulse
 
+// === MCR ===
 #array _cr_wr_sel	16
 #array cr_data_set 32
 @_cr_wr_sel = DEMUX{4} $cr_sel_write, @instr[4:7]
@@ -364,7 +377,7 @@ $cr5_clear = PULSE @_cr_wr_sel[5] \\ @cr5_new = AND{32} @_cr_wr_sel[5], @cr_data
 $cr6_clear = PULSE @_cr_wr_sel[6] \\ @cr6_new = AND{32} @_cr_wr_sel[6], @cr_data_set
 $cr7_clear = PULSE @_cr_wr_sel[7] \\ @cr7_new = AND{32} @_cr_wr_sel[7], @cr_data_set
 $NULL = OR @_cr_wr_sel[8:15]
-// === MCR ===
+// - Actual "code"
 $reg_enable = DELAY $is_MCR
 @reg_addr[0:3] = AND{4} $is_MCR, @instr[0:3]
 $cr_sel_write = AND $reg_ready, $is_MCR
@@ -378,6 +391,22 @@ $reg_write = PULSE $is_MRC
 @reg_data_out = MUX{4,32} $is_MRC, @instr[4:7], @cr0,@cr1, @cr2,@cr3, @cr4,@cr5, @cr6,@cr7, 0*256
 next_instruction MRC, "next_instruction (MRC)", DELAY{4} $is_MRC
 
+// === IRET ===
+$_iret_pulse = PULSE (AND $is_IRET, @stage_state[3])
+// - Restore SP
+$reg_enable = DELAY $_iret_pulse
+@reg_addr[0:3] = AND{4} $_iret_pulse, 13[0:3]
+$reg_write = DELAY $_iret_pulse
+@reg_data_out = AND{32} $_iret_pulse, @cr6
+// - Restore flags
+@flags_clear[0:3] = AND{4} $_iret_pulse, 1*4
+@flags_set[0:3] = AND{4} (DELAY $_iret_pulse), @cr7[0:3]
+// - Set PC
+$pc_clear = DELAY $_iret_pulse
+@pc_new = AND{32} (DELAY $_iret_pulse), @cr0
+next_instruction IRET, "next_instruction (IRET)", DELAY{4} $_iret_pulse
+
+
 // === Shift / Rotate ===
 $next_instruction, $next_stage, \
 	$reg_enable,@reg_addr,$reg_write,@reg_data_out, \
@@ -385,7 +414,7 @@ $next_instruction, $next_stage, \
 	= CPU32_SHIFT $is_SHIFT, @stage_state[0], @stage_state[3:6], @instr[0:16], $reg_ready,@reg_data_in,$flags_C
 
 // === Load Effective Address (LEA) ===
-$_LEA_active = AND $is_LEA, $decode_complete
+$_LEA_active = AND $is_LEA, @stage_state[3]
 $reg_enable = PULSE $_LEA_active
 $reg_write = PULSE $_LEA_active
 @reg_addr[0:3] = AND{4} $_LEA_active, @instr[20:23]

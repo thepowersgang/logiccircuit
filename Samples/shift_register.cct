@@ -6,15 +6,21 @@
 #input $pulse, $dir_is_right, @value[8], $carry_in
 #output $ready, @value_out[8], $carry_out
 
+$dir_L = NOT   $dir_is_right
+$dir_R = DELAY $dir_is_right
+
+$_pulse = DELAY $_pulse
+#array dval 8
+@dval = DELAY @value
+$dcarry = DELAY $carry_in
+
 ; Shift Right
-$carry_out = DELAY{2} @value[0]
-@value_out[0:6] = AND{7} (DELAY $pulse), (DELAY $dir_is_right), (DELAY @value[1:7])
-@value_out[7] = AND (DELAY $pulse), (DELAY $dir_is_right), (DELAY $carry_in)
+$carry_out = AND $_pulse, $dir_R, @dval[0]
+@value_out[0:7] = AND{8} $_pulse, $dir_R, @dval[1:7], $dcarry
 
 ; Shift Left
-@value_out[0] = AND (DELAY $pulse), (NOT $dir_is_right), (DELAY $carry_in)
-@value_out[1:7] = AND{7} (DELAY $pulse), (NOT $dir_is_right), (DELAY @value[0:6])
-$carry_out = DELAY{2} @value[7]
+@value_out[0:7] = AND{8} $_pulse, $dir_L, $dcarry, @dval
+$carry_out = AND $_pulse, $dir_L, @dval[7]
 
 $ready = DELAY{2} $pulse
 
@@ -63,20 +69,24 @@ $ready = DELAY{2} $pulse
 $ready = DELAY{2} $pulse
 @count_enable = DEMUX{%2} $pulse, @count
 
+#array dval %1
+@dval = DELAY @value
+$dcarry = DELAY $carry_in
+
 %assign i 0
 %rep %1
   %assign j 0
   %rep i
-@value_out[j] = AND @count_enable[i], (DELAY $carry_in)
+@value_out[j] = AND @count_enable[i], $dcarry
     %assign j j+1
   %endrep
   %rep %1-i
     %assign src ((j-i) % %1)
-@value_out[j] = AND @count_enable[i], (DELAY @value[src])
+@value_out[j] = AND @count_enable[i], @dval[src]
     %assign j j+1
   %endrep
   %if i != 0
-$carry_out = AND @count_enable[i], (DELAY @value[%1-i])
+$carry_out = AND @count_enable[i], @dval[%1-i]
   %endif
   %assign i i+1
 %endrep
@@ -115,6 +125,9 @@ $ready = DELAY{1} $pulse
 %assign countmax 1<<%2
 #array count_enable countmax
 
+#array dval %1
+@dval = DELAY @value
+
 $ready = DELAY{2} $pulse
 @count_enable = DEMUX{%2} $pulse, @count
 %assign i 0
@@ -123,7 +136,7 @@ $ready = DELAY{2} $pulse
   %rep %1
     %assign k ((i+j) % %1)
     %assign l ((countmax - j) % countmax)
-    @value_out[i] = AND @count_enable[l], (DELAY  @value[k])
+    @value_out[i] = AND @count_enable[l], @dval[k]
   %assign j j+1
   %endrep
 %assign i i+1

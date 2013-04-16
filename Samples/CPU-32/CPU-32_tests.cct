@@ -45,7 +45,6 @@ $_nextop = PULSE{1} $reg_enable
 %else
 #array op_stage 2
 @op_stage = SEQUENCER{2} 1, $ins_end, $_nextop
-;#testassert $ins_end @op_stage[1] 1
 %endif
 #display 1 "TST stage   " @stage
 #display 1 "TST op_stage" @op_stage
@@ -287,12 +286,24 @@ __end   1,1
 #endtestcase
 
 
-//#testcase 100 "CPU - LDF (clear)"
-//
-//#testassert $ins_end @
-//
-//#testcomplete $ins_end
-//#endtestcase
+#testcase 100 "CPU - LDF"
+__CPU32_TEST_WRAPPER 1
+__stage 3,2
+
+$mem_ready = DELAY $mem_enable
+$reg_ready = DELAY $reg_enable
+
+// - LDF 0xF, 0xF (full set)
+__memrd 0,0, 0x000, 0xB8000F0F
+__end 0,1
+#testassert @stage[0],$ins_end @flags[0:3] 0xF[0:3]
+// - LDF 0xC, 0x0 (half clear)
+__memrd 1,0, 0x004, 0xB8000C00
+__end 1,1
+#testassert @stage[1],$ins_end @flags[0:3] 0x3[0:3]
+
+#testcomplete @stage[2]
+#endtestcase
 
 #testcase 200 "CPU - LEA"
 
@@ -354,7 +365,7 @@ __memrd 4,0, 0x010, 0x8F000000
 //
 #testcase 400 "CPU - #UD+MRC"
 __CPU32_TEST_WRAPPER 1
-__stage 7, 3
+__stage 10, 3
 
 $mem_ready = PULSE $mem_enable
 $reg_ready = PULSE $reg_enable
@@ -385,21 +396,20 @@ __memrd 5,0, 0x014, 0xB8010171
 __regwr 5,1, 1, 0x0000000E
 __end 5,2
 
-// TODO: IRET
 // - LDF 0x0F, 0x00
-;__memrd 6,0, 0x018, 0xB8000F00
-;__end 6,1
-;#testassert @stage[6],$ins_end @flags[0:3] 0x0[0:3]
+__memrd 6,0, 0x018, 0xB8000F00
+__end 6,1
+#testassert @stage[6],$ins_end @flags[0:3] 0x0[0:3]
 // - IRET
-;__memrd 7,0, 0x01C, 0xB8010200
-;__regwr 7,1, 13, 0x12345678
-;__end 7,2
+__memrd 7,0, 0x01C, 0xB8010200
+__regwr 7,1, 13, 0x12345678
+__end 7,2
 // - NOP
-;#testassert @stage[7],$ins_end @flags[0:3] 0xE[0:3]
-;__memrd 8,0, 0x004, 0x8F000000
-;__end 8,1
+#testassert @stage[7],$ins_end @flags[0:3] 0xE[0:3]
+__memrd 8,0, 0x084, 0x8F000000
+__end 8,1
 
-#testcomplete @stage[6]
+#testcomplete @stage[9]
 #endtestcase
 
 #testcase 600 "CPU - Shifts"
