@@ -4,5 +4,10 @@
 *.swo
 logic_cct
 src/obj/
-
+*.bin
 callgrind.*
+
+gitstats/
+
+cct.binary
+cct.ascii

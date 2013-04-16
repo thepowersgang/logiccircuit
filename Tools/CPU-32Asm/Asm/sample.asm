@@ -21,12 +21,10 @@ puthex:
 	mov r0, r2
 	shr r2, 4
 	and r0, 0xF
-;	lea r1, [pc + r0<<0 + rel hex]
-;	ldrb r0, [r1]
-	ldrb r0, [r0 + hex]
+	ldrbz r0, [r0 + hex]
 	call putch
 	test r2, r2
-	jmp.nz .loop	; Actually NZ
+	jmp.nz .loop
 	
 	pop r14
 	jmp r14
