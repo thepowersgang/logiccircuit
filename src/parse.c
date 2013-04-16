@@ -384,6 +384,82 @@ int ParseLine(tParser *Parser)
 	case TOK_NEWLINE:	return 0;
 	// End of file
 	case TOK_EOF:	return 1;
+
+	// Meta comment (GUI Blocks/Positioning)
+	case TOK_META_COMMENT:
+		SyntaxAssert(Parser, GetToken(Parser), TOK_IDENT );
+		if( strcmp(Parser->TokenStr, "BLOCK") == 0 ) {
+			 int	x = -1, y = -1, w = -1, h = -1;
+			char	*name = NULL;
+			// ;; BLOCK ["name"] [(X,Y)] [W,H]
+			// - Defines a block/group of elements
+			GetToken(Parser);
+			if( Parser->Token == TOK_STRING )
+			{
+				name = strndup(Parser->TokenStr+1, Parser->TokenLength-2);
+				GetToken(Parser);
+			}
+			
+			if( Parser->Token == TOK_PAREN_OPEN )
+			{
+				x = ParseNumber(Parser);
+				SyntaxAssert(Parser, GetToken(Parser), TOK_COMMA);
+				y = ParseNumber(Parser);
+				SyntaxAssert(Parser, GetToken(Parser), TOK_PAREN_CLOSE);
+				GetToken(Parser);
+			}
+			
+			if( Parser->Token == TOK_NUMBER )
+			{
+				PutBack(Parser);
+				w = ParseNumber(Parser);
+				SyntaxAssert(Parser, GetToken(Parser), TOK_COMMA);
+				h = ParseNumber(Parser);
+				GetToken(Parser);
+			}
+			
+			SyntaxAssert(Parser, Parser->Token, TOK_NEWLINE);
+			
+			Build_StartBlock(name, x, y, w, h);
+			if( name )
+				free(name);
+		}
+		else if( strcmp(Parser->TokenStr, "ENDBLOCK") == 0 ) {
+			// ;; ENDBLOCK
+			// - Ends the last defined block
+			SyntaxAssert(Parser, GetToken(Parser), TOK_NEWLINE);
+			Build_EndBlock();
+		}
+		else if( strcmp(Parser->TokenStr, "POS") == 0 ) {
+			 int	x = -1, y = -1, w = -1, h = -1;
+			// ;; POS [(X,Y)] [W,H]
+			// - Set position of a code line (creates a mini block essentially)
+			GetToken(Parser);
+			if( Parser->Token == TOK_PAREN_OPEN )
+			{
+				x = ParseNumber(Parser);
+				SyntaxAssert(Parser, GetToken(Parser), TOK_COMMA);
+				y = ParseNumber(Parser);
+				SyntaxAssert(Parser, GetToken(Parser), TOK_PAREN_CLOSE);
+				GetToken(Parser);
+			}
+			
+			if( Parser->Token == TOK_NUMBER )
+			{
+				PutBack(Parser);
+				w = ParseNumber(Parser);
+				SyntaxAssert(Parser, GetToken(Parser), TOK_COMMA);
+				h = ParseNumber(Parser);
+				GetToken(Parser);
+			}
+			
+			SyntaxAssert(Parser, Parser->Token, TOK_NEWLINE);
+			
+			Build_LinePos(x, y, w, h);
+		}
+		else {
+		}
+		break;
 	
 	// Meta statement
 	case TOK_META_STATEMENT:
@@ -663,6 +739,7 @@ int ParseLine(tParser *Parser)
 		// Clean up
 		List_Free(outputs);
 		free(destArray.Items);
+		Build_EndLine();
 		return 0;
 	}
 	// never reached

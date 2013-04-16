@@ -16,7 +16,8 @@ typedef struct sDisplayItem	tDisplayItem;
 typedef struct sBreakpoint	tBreakpoint;
 typedef struct sAssertion	tAssertion;
 typedef struct sExecUnitRef	tExecUnitRef;
-// No tExecUnit here
+typedef struct sExecUnit	tExecUnit;
+typedef struct sBlock	tBlock;
 typedef struct sGroupDef	tGroupDef;
 typedef struct sUnitTemplate	tUnitTemplate;
 
@@ -55,9 +56,22 @@ struct sExecUnitRef
 	tList	Inputs;
 	tList	Outputs;
 	struct sUnitTemplate	*Def;
+	tBlock	*Block;
 };
 
-typedef struct sExecUnit
+// Block of elements in a unit (used for visualising)
+struct sBlock
+{
+	tBlock	*Next;
+	tBlock	*Parent;
+	tBlock	*SubBlocks;
+	const char	*Name;
+	tExecUnit	*Unit;
+	tElement	*Elements;
+	void	*Rendered;
+};
+
+struct sExecUnit
 {
 	const char	*Name;
 	tList	Inputs;
@@ -76,7 +90,10 @@ typedef struct sExecUnit
 	tDisplayItem	*DisplayItems;
 	tBreakpoint	*Breakpoints;
 	tAssertion	*Assertions;
-} tExecUnit;
+	
+	tBlock	RootBlock;
+	tBlock	*Blocks;
+};
 
 typedef struct sTestCase
 {
@@ -190,6 +207,10 @@ extern tList	*Build_ReferenceUnit(const char *Name, int NParams, const int *Para
 
 extern tElement	*Build_DuplicateElement(const tElement *Element);
 
+extern void	Build_StartBlock(const char *Name, int X, int Y, int W, int H);
+extern void	Build_EndBlock(void);
+extern void	Build_LinePos(int X, int Y, int W, int H);
+extern void	Build_EndLine(void);
 
 extern int	Build_IsConstValue(tLinkValue *Val);
 

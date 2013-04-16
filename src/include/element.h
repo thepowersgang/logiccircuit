@@ -32,6 +32,8 @@ struct sElement
 	size_t	InfoSize;
 	void	*Info;
 
+	void	*Block;
+
 	 int	NParams;
 	 int	Params[MAX_PARAMS];
 

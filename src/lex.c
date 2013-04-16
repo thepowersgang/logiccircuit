@@ -11,21 +11,6 @@
 #include <string.h>
 #include <ctype.h>
 
-// === GLOBALS ===
-const char * const casTOKEN_NAMES[] = {
-	"TOK_NULL", "TOK_EOF",
-	"TOK_META_STATEMENT", "TOK_NUMBER", "TOK_IDENT", "TOK_STRING",
-	"TOK_LINE", "TOK_GROUP",
-	"TOK_NEWLINE", "TOK_COMMA", "TOK_ASSIGN", "TOK_COLON",
-	"TOK_PLUS", "TOK_MINUS", "TOK_STAR", "TOK_SLASH",
-	"TOK_PAREN_OPEN", "TOK_PAREN_CLOSE",
-	"TOK_BRACE_OPEN", "TOK_BRACE_CLOSE",
-	"TOK_SQUARE_OPEN","TOK_SQUARE_CLOSE",
-	
-	"TOK_LINE, TOK_GROUP, TOK_NUMBER or TOK_PAREN_OPEN"
-	"TOK_LINE, TOK_GROUP"
-};
-
 // === PROTOTYPES ===
  int	GetToken(tParser *Parser);
 void	PutBack(tParser *Parser);
@@ -52,14 +37,18 @@ int GetToken(tParser *Parser)
 			continue;
 		}
 		
-		#if 1
-		// ASM Comments
+		// ASM-style Comments
 		if( *Parser->CurPos == ';' ) {
+			#if SUPPORT_META_COMMENTS
+			Parser->CurPos ++;
+			if( *Parser->CurPos == ';' )
+				break;
+			#endif
+			
 			while( *Parser->CurPos != '\n' )
 				Parser->CurPos ++;
 			continue ;
 		}
-		#endif
 		
 		#if 1
 		// NASM/YASM Preprocessor Comments
@@ -122,7 +111,13 @@ int GetToken(tParser *Parser)
 		}
 		ret = TOK_NULL;
 		break;
-	
+
+	#if SUPPORT_META_COMMENTS
+	// Meta-Comment (;;)
+	case ';':
+		ret = TOK_META_COMMENT;
+		break;
+	#endif
 	// Meta-Statement (Definition, Etc)
 	case '#':
 		// Read identifier
@@ -231,8 +226,6 @@ int GetToken(tParser *Parser)
 		Parser->TokenStr = strndup(Parser->TokenStart, Parser->TokenLength);
 	}
 	
-	//printf("%s\n", casTOKEN_NAMES[ret]);
-	
 	return ret;
 }
 
@@ -244,6 +237,7 @@ const char *GetTokenStr(enum eTokens Token)
 	{
 	_ent(TOK_NULL)
 	_ent(TOK_EOF)
+	_ent(TOK_META_COMMENT)
 	_ent(TOK_META_STATEMENT)
 	_ent(TOK_NUMBER)
 	_ent(TOK_IDENT)

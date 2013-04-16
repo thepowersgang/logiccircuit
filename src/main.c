@@ -1,5 +1,9 @@
 /*
+ * LogicCircuit
+ * - By John Hodge (thePowersGang)
  * 
+ * main.c
+ * - Program Core
  */
 #include <common.h>
 #include <stdio.h>

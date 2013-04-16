@@ -1,5 +1,9 @@
 /*
- *
+ * LogicCircuit
+ * - By John Hodge (thePowersGang)
+ * 
+ * build.c
+ * - Mesh construction
  */
 #include <common.h>
 #include <string.h>
@@ -28,6 +32,7 @@ tTestCase	*gpTests;
 // - Parser State
 tUnitTemplate	*gpCurUnit;
 tTestCase	*gpCurTest;
+tBlock  	*gpCurBlock;
 
 // === CODE ===
 int Build_IsConstValue(tLinkValue *Val)
@@ -70,6 +75,7 @@ int Unit_DefineUnit(const char *Name)
 	}
 	
 	gpCurUnit = tpl;
+	gpCurBlock = &tpl->Internals.RootBlock;
 	
 	return 0;
 }
@@ -128,6 +134,7 @@ int Test_CreateTest(int MaxLength, const char *Name, int NameLength)
 	memcpy(gpCurTest->Name, Name, NameLength);
 	gpCurTest->Name[NameLength] = '\0';
 	gpCurTest->Internals.Name = gpCurTest->Name;
+	gpCurBlock = &gpCurTest->Internals.RootBlock;
 
 	tTestCase *p;
 	for( p = gpTests; p && p->Next; p = p->Next )
@@ -507,6 +514,7 @@ tList *Build_AppendUnit(tUnitTemplate *Unit, const tList *Inputs)
 	ref = malloc(sizeof(tExecUnitRef) + extrasize);
 	assert(ref);
 	// - Base values
+	ref->Block = gpCurBlock;
 	ref->Inputs.NItems = Inputs->NItems;
 	ref->Outputs.NItems = Unit->Internals.Outputs.NItems;
 	// - Set up pointers
@@ -567,6 +575,7 @@ tList *Build_AppendElement(tElementDef *def, int NParams, const int *Params, con
 		return NULL;
 	}
 	ele->Type = def;	// Force type to be set
+	ele->Block = gpCurBlock;
 	
 	if( Inputs->NItems != ele->NInputs ) {
 		fprintf(stderr, "%s requested %i inputs, %i passed\n", def->Name, ele->NInputs, Inputs->NItems);
@@ -632,6 +641,45 @@ tList *Build_ReferenceUnit(const char *Name, int NParams, const int *Params, con
 	return NULL;
 }
 
+// -------------------------------------------------
+// Blocks / Groupings
+// -------------------------------------------------
+void Build_StartBlock(const char *Name, int X, int Y, int W, int H)
+{
+	// - Empty name is reserved for codeline blocks
+	if( Name && Name[0] == '\0' )
+		return ;
+	// Build_int_StartBlock(Name, X, Y, W, H);
+//	tExecUnit	*cur = Build_int_GetCurExecUnit();
+}
+void Build_EndBlock(void)
+{
+	tExecUnit	*cur = Build_int_GetCurExecUnit();
+	if( gpCurBlock == NULL || gpCurBlock == &cur->RootBlock ) {
+		// Oops?
+		return ;
+	}
+	gpCurBlock = gpCurBlock->Parent;
+}
+void Build_LinePos(int X, int Y, int W, int H)
+{
+	// Build_int_StartBlock("", X, Y, W, H);
+}
+void Build_EndLine(void)
+{
+	tExecUnit	*cur = Build_int_GetCurExecUnit();
+	if( gpCurBlock == NULL || gpCurBlock == &cur->RootBlock )
+		return ;
+	if( !gpCurBlock->Name || gpCurBlock->Name[0] != '\0' ) {
+		// Ignore
+		return ;
+	}
+	gpCurBlock = gpCurBlock->Parent;
+}
+
+// ------------------------------------------------
+// List manipulation
+// ------------------------------------------------
 /**
  */
 void List_Free(tList *List)

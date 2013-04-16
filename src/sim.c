@@ -200,6 +200,10 @@ void Sim_DuplicateCheck(tExecUnit *Root)
 				continue ;
 			if( ele->NInputs != ele2->NInputs )
 				continue ;
+			if( ele->NParams != ele2->NParams )
+				continue;
+			if( memcmp(ele->Params, ele2->Params, ele->NParams*sizeof(int)) != 0 )
+				continue ;
 			if( memcmp(ele->Inputs, ele2->Inputs, ele->NInputs*sizeof(tLink*)) != 0 )
 				continue ;
 			nDup ++;
@@ -208,7 +212,8 @@ void Sim_DuplicateCheck(tExecUnit *Root)
 
 		if( nDup > 0 )
 		{
-			fprintf(stderr, "%s: Element %s ", Root->Name, ele->Type->Name);
+			// TODO: Could silently merge elements
+			fprintf(stderr, "%s: %i extra of %s ", Root->Name, nDup, ele->Type->Name);
 			for( int i = 0; i < ele->NInputs; i ++ ) {
 				if( ele->Inputs[i]->Name[0] )
 					fprintf(stderr, "%s", ele->Inputs[i]->Name);
@@ -218,7 +223,6 @@ void Sim_DuplicateCheck(tExecUnit *Root)
 					fprintf(stderr, ", ");
 			}
 			fprintf(stderr, "\n");
-			fprintf(stderr, " is duplicated %i times\n", nDup);
 		}
 	}
 	free(visited_eles);
@@ -476,6 +480,7 @@ void Sim_RunStep(tExecUnit *Unit)
 	}
 	
 	// === Update elements ===
+	// TODO: Threaded?
 	for( tElement *ele = Unit->Elements; ele; ele = ele->Next )
 	{
 		assert(ele != ele->Next);
