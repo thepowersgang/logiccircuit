@@ -68,7 +68,7 @@ struct sBlock
 	const char	*Name;
 	tExecUnit	*Unit;
 	tElement	*Elements;
-	void	*Rendered;
+	struct sDispInfo	*DispInfo;
 };
 
 struct sExecUnit
