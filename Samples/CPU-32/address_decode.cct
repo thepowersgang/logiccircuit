@@ -68,6 +68,7 @@ $NULL, @int_addr = LATCH{32} 1, $int_addr_clear, @int_addr
 ;#display $trigger "internal addr = 0x%32x" @int_addr[31:0]
 
 ; Decode
+%if 0
 $is_op_Rr   = AND $_enable, (NOT   @instr[26]), (NOT   @instr[25]), (NOT   @instr[24])
 $is_op_Ri20 = AND $_enable, (NOT   @instr[26]), (NOT   @instr[25]), (DELAY @instr[24])
 $is_op_Ri16 = AND $_enable, (NOT   @instr[26]), (DELAY @instr[25]), (NOT   @instr[24])
@@ -76,6 +77,10 @@ $is_op_RM16 = AND $_enable, (DELAY @instr[26]), (NOT   @instr[25]), (NOT   @inst
 $is_op_RM8  = AND $_enable, (DELAY @instr[26]), (NOT   @instr[25]), (DELAY @instr[24])
 $is_op_RPC16 = AND $_enable, (DELAY @instr[26]), (DELAY @instr[25]), (NOT   @instr[24])
 $is_op_RPC8  = AND $_enable, (DELAY @instr[26]), (DELAY @instr[25]), (DELAY @instr[24])
+%endif
+$is_op_Rr, $is_op_Ri20, $is_op_Ri16, $is_op_Rs16, \
+	$is_op_RM16, $is_op_RM8, $is_op_RPC16, $is_op_RPC8 \
+	= DEMUX{3} $_enable, @instr[24:26]
 
 // TODO: Could use @instr[26] instead
 $has_mem_read = OR $is_op_RM16, $is_op_RM16, $is_op_RPC16, $is_op_RPC8
@@ -85,28 +90,35 @@ $is_mem_dest = AND $switch, $has_mem_read
 @dest_addr[3:0] = AND{4} (DELAY{4} $_enable), $switch, $read_m, (DELAY $is_op_Rr), @instr[19:16]
 
 ; Rr
+#block "Rr"
 $reading_Rr = AND $pulse, $is_op_Rr
 $reg_enable = DELAY $reading_Rr
 @reg_addr[3:0] = AND{4} $reading_Rr, @instr[19:16]
 $op_2_read_set = AND $is_op_Rr, (NOT $reading_op1), $reg_ready
 @op_2 = AND{32} $is_op_Rr, (NOT $reading_op1), $reg_ready, @reg_data_in
+#endblock
 
 ; Ri20
+#block "Ri20"
 $reading_Ri20 = AND $pulse, $is_op_Ri20
 $op_2_read_set = DELAY $reading_Ri20
 @op_2[19:0] = AND{20} $reading_Ri20, @instr[19:0]
+#endblock
 
 ; Ri16 / Rs16
+#block "Ri16/Rs16"
 $reading_Ri16 = AND $pulse, $is_op_Ri16
 $reading_Ri16 = AND $pulse, $is_op_Rs16
 $_Ri16_sign = AND $is_op_Rs16, @instr[15]
 $op_2_read_set, @op_2[0:31] = ROTATE_LEFT_N_32 $reading_Ri16, 0,@instr[16:19], @instr[0:15],$_Ri16_sign*16
+#endblock
 
 #array _mem_add_op1 32
 #array _mem_add_op2 32
 #array _mem8_reg_shifted 32
 
 ; === RM16 / RPC16 ===
+#block "RM16 / RPC16"
 $is_M16 = OR $is_op_RM16, $is_op_RPC16
 ; - Prepare add (M16)
 $reading_M16 = AND $pulse, $is_op_RM16
@@ -125,7 +137,9 @@ $m16_add_ready = AND $pulse, $is_op_RPC16
 $_mem_add_start = DELAY $m16_add_ready
 ; - Add is done, trigger the read
 $addr_ready = AND $_enable, $is_M16, $_mem_add_done
+#endblock
 ; === RM8 / RPC9 ===
+#block "RM8 / RPC8"
 $is_M8 = OR $is_op_RM8, $is_op_RPC8
 $is_M8_stg1_clear = OR $_pulse, $_mem8_add1_done
 $NULL, $is_M8_stg1 = LATCH 1, $is_M8_stg1_clear, (PULSE $is_M8)
@@ -162,8 +176,10 @@ $addr_ready = AND $is_M8, (NOT $is_M8_stg1), $_mem_add_done
 #display $_mem_add_start "add 0x%32x and 0x%32x" @_mem_add_op1[31:0], @_mem_add_op2[31:0]
 $_mem_add_done, @int_addr, $NULL = ADDER_32BIT $_mem_add_start, @_mem_add_op1, @_mem_add_op2, 0
 #display $_mem_add_done "add gave 0x%32x" @int_addr[31:0]
+#endblock
 
 ; === Memory Load ===
+#block "Memory Load"
 $op_2_read_set = PULSE (AND $addr_ready, (NOT $read_m))
 $mem_enable = AND $addr_ready, $read_m
 @mem_addr = AND{32} $addr_ready, $read_m, @int_addr
@@ -172,8 +188,10 @@ $mem_enable = AND $addr_ready, $read_m
 $op_2_read_set = PULSE (AND $mem_ready, (NOT $op_2_read), $_enable)
 ; - Set @dest_addr if $switch and it's a memory reference
 @dest_addr = AND{32} $addr_ready, $is_mem_dest, @int_addr
+#endblock
 
 ; === Read Op1 ===
+#block "Read operand 1"
 $reading_op1 = AND $read_r, $op_2_read
 #display $reading_op1 "Reading OP1" 0
 $reg_enable = PULSE $reading_op1
@@ -183,6 +201,7 @@ $op_1_read = AND $reading_op1, $_enable, $reg_ready
 ; === Skip Op1? ===
 $op_1_read = AND $op_2_read, $_enable, (NOT $read_r)
 #display $op_1_read "OP1 Read set" $op_1_read
+#endblock
 
 ; === Ready if not mem dest ===
 $rdy_set = AND $op_1_read, (NOT $switch)

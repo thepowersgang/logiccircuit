@@ -24,31 +24,44 @@ $flags_S_set   = AND $done, @alu_out[31]
 $_done = DELAY{2} $done
 @_alu_out = DELAY{2} @alu_out
 
+#display $enable "= 0x%32x (%32x)" @alu_out[31:0], @_alu_out[31:0]
+#display $enable "done=%1i,_done=%1i" $done, $_done
+
 // --- MOV ---
+#block "MOV"
 #display $is_MOV "MOV 0x%32x" @alu_in_src[31:0]
 @alu_out = AND{32} $is_MOV, @alu_in_src
 $done    = PULSE $is_MOV
+#endblock
 // --- AND ---
+#block "AND"
 #display $is_AND "AND 0x%32x & 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
 #array _and_res	32
 @_and_res = AND{32,2} @alu_in_src, @alu_in_dst
 @alu_out = AND{32} $is_AND, @_and_res
 $done = PULSE $is_AND
+#endblock
 // --- OR  ---
+#block "OR"
 #display $is_OR "OR 0x%32x | 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
 @alu_out = AND{32} $is_OR, (OR{32,2} @alu_in_src, @alu_in_dst)
 $done = PULSE $is_OR
+#endblock
 // --- XOR ---
+#block "XOR"
 #display $is_XOR "XOR 0x%32x & 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
 @alu_out = AND{32} $is_XOR, (XOR{32,2} @alu_in_src, @alu_in_dst)
 $done = PULSE $is_XOR
+#endblock
 // --- Common Adder ---
+#block "Add / Sub / Cmp"
 #array alu_adder_op2	NUM_GPR_BITS
 #array add_out	NUM_GPR_BITS
 $add_done, @add_out, $add_C_out = ADDER_32BIT $alu_adder_pulse, @alu_in_dst, @alu_adder_op2, $alu_adder_CF
 $done    = DELAY{3} $add_done
 @alu_out = DELAY{3} @add_out
 // --- ADD ---
+#block "ADD"
 #display $is_ADD "ADD 0x%32x + 0x%32x + %i" @alu_in_dst[31:0], @alu_in_src[31:0], $flags_C
 $flags_C_clear = PULSE $is_ADD
 $flags_O_clear = PULSE $is_ADD
@@ -58,7 +71,9 @@ $alu_adder_CF    = AND $is_ADD, (DELAY $flags_C)
 $flags_C_set = AND $is_ADD, $add_done, $add_C_out
 $flags_O_set = AND $is_ADD, (NOT   @alu_in_dst[31]), (NOT   @alu_in_src[31]), (DELAY @alu_out[31])	// 00,1
 $flags_O_set = AND $is_ADD, (DELAY @alu_in_dst[31]), (DELAY @alu_in_src[31]), (NOT   @alu_out[31])	// 11,0
+#endblock
 // --- SUB/CMP ---
+#block "SUB / CMP"
 $_sub_en = OR $is_SUB, $is_CMP
 #display $is_SUB "SUB 0x%32x - 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
 $flags_C_clear = PULSE $_sub_en
@@ -69,14 +84,15 @@ $flags_C_set = AND $_sub_en, (DELAY $add_done), (NOT $add_C_out)
 // --- CMP --
 #display $is_CMP "CMP 0x%32x - 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
 $alu_nosave = DELAY $is_CMP
+#endblock
+#endblock
 // --- TST --
+#block "TST"
 #display $is_TST "TST 0x%32x & 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
 @alu_out = AND{32} $is_TST, @_and_res
 $alu_nosave = DELAY $is_TST
 $done       = PULSE $is_TST
-
-#display $enable "= 0x%32x (%32x)" @alu_out[31:0], @_alu_out[31:0]
-#display $enable "done=%1i,_done=%1i" $done, $_done
+#endblock
 
 #endunit
 

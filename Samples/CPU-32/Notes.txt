@@ -19,7 +19,7 @@ CR1	- Exception reason
 CR2	- MMU Base
 CR3	- System Control Flags
 CR4	- Avail 1
-CR5	- Avail 2
+CR5	- Supervisor SP (loaded on supervisor mode entry)
 CR6	- Interrupt Saved SP
 CR7	- Interrupt Saved Flags
 CR8-15	- Undef
@@ -47,7 +47,9 @@ Exception Vectors:
 0x1C	- RESERVED
 
 TODO:
-- MMU / Permission levels
+- MMU
+- Permission levels
+ > With SP replace if there's a PL change
 - CPUID?
 
 Normal Format:

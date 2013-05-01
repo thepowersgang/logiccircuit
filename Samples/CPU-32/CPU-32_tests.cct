@@ -447,7 +447,7 @@ __end 1,3
 // - RCR R15, R14, 16
 __memrd 2,0, 0x008, 0xB803FEF0
 __regrd 2,1, 0xE, 0x12345678
-__regwr 2,2, 0xF, 0x5678091A
+__regwr 2,2, 0xF, 0xACF01234
 __end 2,3
 #testassert @stage[2],$ins_end $CF_set  0
 #testassert @stage[2],$ins_end $CF_clrd 1 
