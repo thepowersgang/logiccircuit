@@ -4,10 +4,12 @@
 %ifndef _ADDER_CCT
 %define _ADDER_CCT
 
+%define USE_LOWLEVEL_ADDERS	0
+
 ;
 ; 1-bit full adder
 ;
-#defunit ADDER
+#defunit FULLADDER
 #input $val1, $val2, $carry_in
 #output $ret, $carry_out
 
@@ -18,7 +20,7 @@ $carry_out = OR (AND $val1, $val2), (AND $val1, $carry_in), (AND $val2, $carry_i
 
 #testcase 4 "Full Adder"
 $en = PULSE 1
-$ret, $carry = ADDER $en, $en, $en
+$ret, $carry = FULLADDER $en, $en, $en
 #testassert (DELAY{2} $en) $ret 1
 #testassert (DELAY{2} $en) $carry 1
 #testcomplete (DELAY{2} $en)
@@ -62,10 +64,10 @@ $carry_out = AND @p, $carry_in
 
 $_en_d8 = DELAY{8} $enable
 
-@_ret[0], @carry[0] = ADDER @val1[0], @val2[0], $carry_in
-@_ret[1], @carry[1] = ADDER (DELAY{2} @val1[1], @val2[1]), @carry[0]
-@_ret[2], @carry[2] = ADDER (DELAY{4} @val1[2], @val2[2]), @carry[1]
-@_ret[3], @carry[3] = ADDER (DELAY{6} @val1[3], @val2[3]), @carry[2]
+@_ret[0], @carry[0] = FULLADDER @val1[0], @val2[0], $carry_in
+@_ret[1], @carry[1] = FULLADDER (DELAY{2} @val1[1], @val2[1]), @carry[0]
+@_ret[2], @carry[2] = FULLADDER (DELAY{4} @val1[2], @val2[2]), @carry[1]
+@_ret[3], @carry[3] = FULLADDER (DELAY{6} @val1[3], @val2[3]), @carry[2]
 
 @ret[0] = AND $_en_d8, (DELAY{6} @_ret[0])
 @ret[1] = AND $_en_d8, (DELAY{4} @_ret[1])
@@ -128,6 +130,32 @@ $g = AND $b, $c
 #endunit
 %endif
 
+%macro defadder_cs 1
+%assign bits %1
+#defunit ADDER_ %+ bits %+ BIT
+#input $enable, @val1[bits], @val2[bits], $carry_in
+#output $ready, @ret[bits], $carry_out
+%if USE_LOWLEVEL_ADDERS
+%assign halfbits bits/2
+#array _ret_low halfbits
+#array _ret_hi_0 halfbits
+#array _ret_hi_1 halfbits
+
+$ready_first, @_ret_low, $carry_mid = ADDER_ %+ halfbits %+ BIT $enable, @val1[0:halfbits-1], @val2[0:bits/2-1], $carry_in
+$NULL, @_ret_hi_0, $carry_0 = ADDER_ %+ halfbits %+ BIT $enable, @val1[halfbits:bits-1], @val2[bits/2:bits-1], 0
+$NULL, @_ret_hi_1, $carry_1 = ADDER_ %+ halfbits %+ BIT $enable, @val1[bits/2:bits-1], @val2[bits/2:bits-1], 1
+@ret[0:halfbits-1]  = AND{halfbits} $ready_first, @_ret_low
+@ret[halfbits:bits-1] = MUX{1,halfbits} $ready_first, $carry_mid, @_ret_hi_0, @_ret_hi_1
+$carry_out = MUX $ready_first, $carry_mid, $carry_0, $carry_1
+$ready = DELAY{1} $ready_first
+%else
+// At 6/7 - "CPU - Memory Read/Write" hits a timing error
+$ready, @ret, $carry_out = DELAY{8} (ADDER{bits} $enable, @val1, @val2, $carry_in)
+%endif
+#endunit
+%endmacro
+
+
 // 8-Bit Carry-Select Adder
 // - Delay of 10 (ADDER_4BIT_RIPPLE + 1)
 #defunit ADDER_8BIT
@@ -149,42 +177,14 @@ $ready = DELAY $ready_first
 
 // 16-Bit Adder
 // - Delay of 11 (ADDER_8BIT + 1)
-#defunit ADDER_16BIT
-#input $enable, @val1[16], @val2[16], $carry_in
-#output $ready, @ret[16], $carry_out
-#array _ret_low 8
-#array _ret_hi_0 8
-#array _ret_hi_1 8
-
-$ready_first, @_ret_low, $carry_mid = ADDER_8BIT $enable, @val1[0:7], @val2[0:7], $carry_in
-$NULL, @_ret_hi_0, $carry_0 = ADDER_8BIT $enable, @val1[8:15], @val2[8:15], 0
-$NULL, @_ret_hi_1, $carry_1 = ADDER_8BIT $enable, @val1[8:15], @val2[8:15], 1
-@ret[0:7]  = AND{8} $ready_first, @_ret_low
-@ret[8:15] = MUX{1,8} $ready_first, $carry_mid, @_ret_hi_0, @_ret_hi_1
-$carry_out = MUX{1} $ready_first, $carry_mid, $carry_0, $carry_1
-$ready = DELAY $ready_first
-
-#endunit
+defadder_cs 16
 
 // 32-Bit Adder
 // - Delay of 12 (ADDER_16BIT + 1)
-%define bits	32
-#defunit ADDER_32BIT
-#input $enable, @val1[bits], @val2[bits], $carry_in
-#output $ready, @ret[bits], $carry_out
-#array _ret_low bits/2
-#array _ret_hi_0 bits/2
-#array _ret_hi_1 bits/2
+defadder_cs 32
 
-$ready_first, @_ret_low, $carry_mid = ADDER_16BIT $enable, @val1[0:bits/2-1], @val2[0:bits/2-1], $carry_in
-$NULL, @_ret_hi_0, $carry_0 = ADDER_16BIT $enable, @val1[bits/2:bits-1], @val2[bits/2:bits-1], 0
-$NULL, @_ret_hi_1, $carry_1 = ADDER_16BIT $enable, @val1[bits/2:bits-1], @val2[bits/2:bits-1], 1
-@ret[0:bits/2-1]  = AND{bits/2} $ready_first, @_ret_low
-@ret[bits/2:bits-1] = MUX{1,bits/2} $ready_first, $carry_mid, @_ret_hi_0, @_ret_hi_1
-$carry_out = MUX $ready_first, $carry_mid, $carry_0, $carry_1
-$ready = DELAY{1} $ready_first
-
-#endunit
+// 64-bit adder
+defadder_cs 64
 
 
 #testcase 20 "Adder CS 32"

@@ -26,8 +26,8 @@ $mem_ready, @mem_value = MEMORY_SPACE 1, @mem_address, 0, 0,0,0,0,0,0,0,0
 #display 1 "Value 1 = 0x%16x" @val1[15:0]
 #display 1 "Value 2 = 0x%16x" @val2[15:0]
 
-@val1 = CONST{16,0x0011} 1	// Low to High (0 - 7)
-@val2 = CONST{16,0xFFFE} 1
+@val1 = DELAY 0x0011[0:15]	// Low to High (0 - 7)
+@val2 = DELAY 0xFFFE[0:15]
 $carry_in = DELAY 0
 $enable = DELAY 1
 

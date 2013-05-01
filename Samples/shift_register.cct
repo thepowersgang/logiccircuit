@@ -1,6 +1,31 @@
 %ifndef _SHIFT_REGISTER_CCT_
 %define _SHIFT_REGISTER_CCT_
 
+%define USE_LOWLEVEL_ROTSHIFTS	0
+
+;
+; Templated left shift
+;
+%macro def_shift_1 1
+#defunit SHIFT_LEFT_1_ %+ %1
+#input $pulse, @value[%1], $carry_in
+#output $ready, @value_out[%1], $carry_out
+$ready = DELAY{1} $pulse
+@value_out[0] = DELAY $carry_in
+@value_out[1:%1-1],$carry_out = DELAY @value[0:%1-1]
+#endunit
+
+#defunit SHIFT_RIGHT_1_ %+ %1
+#input $pulse, @value[%1], $carry_in
+#output $ready, @value_out[%1], $carry_out
+$ready, @value_out[%1-1:0], $carry_out = SHIFT_LEFT_1_ %+ %1 $pulse, @value[%1-1:0], $carry_in
+#endunit
+%endmacro
+
+def_shift_1 16
+def_shift_1 32
+def_shift_1 64
+
 // Shift Unit - 8-bit
 #defunit SHIFT_UNIT_8
 #input $pulse, $dir_is_right, @value[8], $carry_in
@@ -64,6 +89,7 @@ $ready = DELAY{2} $pulse
 #input $pulse, @count[%2], @value[%1], $carry_in
 #output $ready, @value_out[%1], $carry_out
 
+%if USE_LOWLEVEL_ROTSHIFTS
 #array count_enable %1
 
 $ready = DELAY{2} $pulse
@@ -91,6 +117,23 @@ $carry_out = AND @count_enable[i], @dval[%1-i]
   %assign i i+1
 %endrep
 
+%else
+
+%assign valmax %1 - 1
+%assign countmax 1<<%2
+%assign countlimit countmax-1
+$NULL, $carry_out = DELAY (DELAY $pulse), (MUX{%2,1} $pulse, @count, 0,@value[valmax:valmax-(countlimit-1)])
+$ready, @value_out = DELAY (DELAY $pulse), (MUX{%2,%1} $pulse, @count, @value[0:valmax] \ 
+%assign n 1
+%rep countmax-1
+%assign lowlimit valmax-n
+	, $carry_in*n,@value[0:lowlimit] \ 
+%assign n n+1
+%endrep
+)
+
+%endif
+
 #endunit
 %endmacro
 
@@ -103,12 +146,7 @@ $carry_out = AND @count_enable[i], @dval[%1-i]
 #output $ready, @value_out[%1]
 
 $ready = DELAY{1} $pulse
-%assign i 0
-%rep %1
-  %assign k ((i+1) % %1)
-  @value_out[i] = DELAY  @value[k]
-%assign i i+1
-%endrep
+@value_out = DELAY @value[%1-1],@value[0:%1-2]
 
 #endunit
 %endmacro
@@ -122,25 +160,41 @@ $ready = DELAY{1} $pulse
 #input $pulse, @count[%2], @value[%1]
 #output $ready, @value_out[%1]
 
-%assign countmax 1<<%2
-#array count_enable countmax
+%assign countvals 1<<%2
+
+%if USE_LOWLEVEL_ROTSHIFTS
+#array count_enable countvals
 
 #array dval %1
 @dval = DELAY @value
 
 $ready = DELAY{2} $pulse
 @count_enable = DEMUX{%2} $pulse, @count
-%assign i 0
-%rep %1
-  %assign j 0
-  %rep %1
-    %assign k ((i+j) % %1)
-    %assign l ((countmax - j) % countmax)
-    @value_out[i] = AND @count_enable[l], @dval[k]
-  %assign j j+1
-  %endrep
-%assign i i+1
+@value_out = AND{%1} @count_enable[0], @dval
+%assign valmax %1 - 1
+%assign countmax countvals - 1
+%assign n 1
+%rep countvals-1
+	@value_out = AND{%1} @count_enable[n], @dval[valmax-(n-1):valmax],@dval[0:valmax-n]
+%assign n n+1
 %endrep
+
+%else
+// Rotate left
+// 0: @value[0:valmax]
+// 1: @value[valmax],@value[0:valmax-1]
+// 2: @value[valmax-1:valmax],@value[0:valmax-2]
+// n: @value[valmax-(n-1):valmax],@value[0:valmax-n]
+%assign valmax %1 - 1
+%assign countmax countvals - 1
+$ready, @value_out = DELAY (DELAY $pulse), (MUX{%2,%1} $pulse, @count, @value[0:valmax] \ 
+%assign n 1
+%rep countvals-1
+	, @value[valmax-(n-1):valmax],@value[0:valmax-n] \ 
+%assign n n+1
+%endrep
+)
+%endif
 
 #endunit
 %endmacro
@@ -182,10 +236,31 @@ $rdy, @_out = ROTATE_LEFT_N_32 (DELAY 1), 0[0:4], 0x01234567[0:31]
 #testcomplete $rdy
 #endtestcase
 
-#testcase 10 "Rotate Left 32 - 28"
+#testcase 10 "Rotate Left 32 - 4"
 #array _out 32
 $rdy, @_out = ROTATE_LEFT_N_32 (DELAY 1), 4[0:4], 0x01234567[0:31]
 #testassert $rdy @_out[31:0] 0x12345670[31:0]
+#testcomplete $rdy
+#endtestcase
+
+#testcase 10 "Rotate Left 32 - 3"
+#array _out 32
+$rdy, @_out = ROTATE_LEFT_N_32 (DELAY 1), 3[0:4], 0x81234567[0:31]
+#testassert $rdy @_out[31:0] 0x091A2B3C[31:0]
+#testcomplete $rdy
+#endtestcase
+
+#testcase 10 "Rotate Left 33 - 4"
+#array _out 33
+$rdy, @_out = ROTATE_LEFT_N_33 (DELAY 1), 4[0:4], 0x11234567[0:32]
+#testassert $rdy @_out[0:32] 0x112345670[0:32]
+#testcomplete $rdy
+#endtestcase
+
+#testcase 10 "Rotate Left 33 - 3"
+#array _out 33
+$rdy, @_out = ROTATE_LEFT_N_33 (DELAY 1), 3[0:4], 0x81234567[0:32]
+#testassert $rdy @_out[32:0] 0x091A2B3A[32:0]
 #testcomplete $rdy
 #endtestcase
 
