@@ -26,6 +26,7 @@ extern tDisplayItem	*gpDisplayItems;
 extern tTestCase	*gpTests;
 
 extern int ParseFile(const char *Filename);
+extern void	Render_RenderBlockBMP(const char *DestFile, tBlock *Block);
 
 // === MACRO! ===
 #define ADD_ELEDEF(name)	do {\
@@ -85,6 +86,7 @@ int main(int argc, char *argv[])
 	ADD_ELEDEF(SEQUENCER);
 	ADD_ELEDEF(MEMORY_DRAM);
 	ADD_ELEDEF(FILEROM);
+	ADD_ELEDEF(ADDER);
 	
 	// Load Circuit file(s)
 	for( int i = 1; i < argc; i ++ )
@@ -137,6 +139,26 @@ int main(int argc, char *argv[])
 				fread(gaROMFileData[giNumROMFiles], 1, gaROMFileSizes[giNumROMFiles], fp);
 				fclose(fp);
 				giNumROMFiles ++;
+			}
+			else if( strcmp(argv[i], "-vis") == 0 ) {
+				if(i + 2 >= argc)	return -1;
+				 int	bFound = 0;
+				const char	*file = argv[i+2];
+				const char	*unit = argv[i+1];
+				i += 2;
+				if( unit[0] == '\0' )
+					Render_RenderBlockBMP(file, &gRootUnit.RootBlock);
+				else {
+					for( tUnitTemplate *tpl = gpUnits; tpl; tpl = tpl->Next ) {
+						if( strcmp(tpl->Name, unit) == 0 ) {
+							bFound = 1;
+							Render_RenderBlockBMP(file, &tpl->Internals.RootBlock);
+							break;
+						}
+					}
+					if( !bFound )
+						fprintf(stderr, "Can't find element '%s'\n", unit);
+				}
 			}
 			else {
 				// ERROR
@@ -214,11 +236,14 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
+//	Render_RenderBlockBMP("cct.bmp", &gRootUnit.RootBlock);
+
+
 	printf("Compiling root...\n");
 	tExecUnit *compiled_root = Sim_CreateMesh(NULL, NULL);
 
 	// TODO: Support saving tree to a file
-	if( 1 ) {
+	if( 0 ) {
 		WriteCompiledVersion("cct.binary", 1, compiled_root);
 		WriteCompiledVersion("cct.ascii", 0, compiled_root);
 	}

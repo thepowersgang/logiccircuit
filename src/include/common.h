@@ -65,7 +65,7 @@ struct sBlock
 	tBlock	*Next;
 	tBlock	*Parent;
 	tBlock	*SubBlocks;
-	const char	*Name;
+	char	*Name;
 	tExecUnit	*Unit;
 	tElement	*Elements;
 	struct sDispInfo	*DispInfo;
@@ -203,7 +203,7 @@ extern int	List_EquateLinks(tList *Dest, const tList *Src);
 /**
  * \brief Create a gate/unit
  */
-extern tList	*Build_ReferenceUnit(const char *Name, int NParams, const int *Params, const tList *Inputs);
+extern tList	*Build_ReferenceUnit(const char *Name, int NParams, const int *Params, const tList *Inputs, const tList *Outputs);
 
 extern tElement	*Build_DuplicateElement(const tElement *Element);
 

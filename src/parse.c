@@ -18,7 +18,7 @@
 // === PROTOTYPES ===
  int	ParseNumber(tParser *Parser);
  int	ParseValue(tParser *Parser, tList *destList);
-tList	*ParseOperation(tParser *Parser);
+tList	*ParseOperation(tParser *Parser, tList *Outputs);
  int	ParseLine(tParser *Parser);
  int	ParseFile(const char *Filename);
 void	SyntaxError(tParser *Parser, const char *Fmt, ...);
@@ -39,7 +39,7 @@ unsigned long long GetNumber(tParser *Parser)
 	}
 	
 	char	*end;	
-	unsigned long long	ret = strtol(start, &end, base);
+	unsigned long long	ret = strtoll(start, &end, base);
 	size_t	len = end - Parser->TokenStr;
 	assert(len <= Parser->TokenLength);
 	if(len < Parser->TokenLength)
@@ -267,12 +267,12 @@ int ParseValue(tParser *Parser, tList *destList)
 			if( start > end )
 			{
 				for( int i = start; i >= end; i -- )
-					List_AppendLine( destList, (num & (1 << i)) ? "1" : "0" );
+					List_AppendLine( destList, (num & (1ULL << i)) ? "1" : "0" );
 			}
 			else
 			{
 				for( int i = start; i <= end; i ++ )
-					List_AppendLine( destList, (num & (1 << i)) ? "1" : "0" );
+					List_AppendLine( destList, (num & (1ULL << i)) ? "1" : "0" );
 			}
 		}
 
@@ -280,7 +280,7 @@ int ParseValue(tParser *Parser, tList *destList)
 	
 	case TOK_PAREN_OPEN:
 		{
-		tList *tmplist = ParseOperation(Parser);
+		tList *tmplist = ParseOperation(Parser, NULL);
 		List_AppendList(destList, tmplist);
 		List_Free(tmplist);
 		SyntaxAssert(Parser, GetToken(Parser), TOK_PAREN_CLOSE);
@@ -307,7 +307,7 @@ tList *_commitList(tList *Input)
 /**
  * \brief Parse a gate definition
  */
-tList *ParseOperation(tParser *Parser)
+tList *ParseOperation(tParser *Parser, tList *Outputs)
 {
 	char	*name;
 	tList	inputs = {0};
@@ -318,7 +318,12 @@ tList *ParseOperation(tParser *Parser)
 	// Check for a constant value
 	if( ParseValue(Parser, &inputs) == 0 )
 	{
-		return _commitList(&inputs);
+		if( Outputs ) {
+			List_EquateLinks(Outputs, &inputs);
+			return (void*)-1;
+		}
+		else
+			return _commitList(&inputs);
 	}
 	
 	// Check if token is an ident
@@ -359,7 +364,7 @@ tList *ParseOperation(tParser *Parser)
 	
 	// Create output
 	{
-		tList	*ret = Build_ReferenceUnit( name, numParams, params, &inputs );
+		tList	*ret = Build_ReferenceUnit( name, numParams, params, &inputs, Outputs );
 		if(!ret) {
 			List_Free(&inputs);
 			SyntaxError(Parser, "Unknown unit %s", name);
@@ -384,82 +389,6 @@ int ParseLine(tParser *Parser)
 	case TOK_NEWLINE:	return 0;
 	// End of file
 	case TOK_EOF:	return 1;
-
-	// Meta comment (GUI Blocks/Positioning)
-	case TOK_META_COMMENT:
-		SyntaxAssert(Parser, GetToken(Parser), TOK_IDENT );
-		if( strcmp(Parser->TokenStr, "BLOCK") == 0 ) {
-			 int	x = -1, y = -1, w = -1, h = -1;
-			char	*name = NULL;
-			// ;; BLOCK ["name"] [(X,Y)] [W,H]
-			// - Defines a block/group of elements
-			GetToken(Parser);
-			if( Parser->Token == TOK_STRING )
-			{
-				name = strndup(Parser->TokenStr+1, Parser->TokenLength-2);
-				GetToken(Parser);
-			}
-			
-			if( Parser->Token == TOK_PAREN_OPEN )
-			{
-				x = ParseNumber(Parser);
-				SyntaxAssert(Parser, GetToken(Parser), TOK_COMMA);
-				y = ParseNumber(Parser);
-				SyntaxAssert(Parser, GetToken(Parser), TOK_PAREN_CLOSE);
-				GetToken(Parser);
-			}
-			
-			if( Parser->Token == TOK_NUMBER )
-			{
-				PutBack(Parser);
-				w = ParseNumber(Parser);
-				SyntaxAssert(Parser, GetToken(Parser), TOK_COMMA);
-				h = ParseNumber(Parser);
-				GetToken(Parser);
-			}
-			
-			SyntaxAssert(Parser, Parser->Token, TOK_NEWLINE);
-			
-			Build_StartBlock(name, x, y, w, h);
-			if( name )
-				free(name);
-		}
-		else if( strcmp(Parser->TokenStr, "ENDBLOCK") == 0 ) {
-			// ;; ENDBLOCK
-			// - Ends the last defined block
-			SyntaxAssert(Parser, GetToken(Parser), TOK_NEWLINE);
-			Build_EndBlock();
-		}
-		else if( strcmp(Parser->TokenStr, "POS") == 0 ) {
-			 int	x = -1, y = -1, w = -1, h = -1;
-			// ;; POS [(X,Y)] [W,H]
-			// - Set position of a code line (creates a mini block essentially)
-			GetToken(Parser);
-			if( Parser->Token == TOK_PAREN_OPEN )
-			{
-				x = ParseNumber(Parser);
-				SyntaxAssert(Parser, GetToken(Parser), TOK_COMMA);
-				y = ParseNumber(Parser);
-				SyntaxAssert(Parser, GetToken(Parser), TOK_PAREN_CLOSE);
-				GetToken(Parser);
-			}
-			
-			if( Parser->Token == TOK_NUMBER )
-			{
-				PutBack(Parser);
-				w = ParseNumber(Parser);
-				SyntaxAssert(Parser, GetToken(Parser), TOK_COMMA);
-				h = ParseNumber(Parser);
-				GetToken(Parser);
-			}
-			
-			SyntaxAssert(Parser, Parser->Token, TOK_NEWLINE);
-			
-			Build_LinePos(x, y, w, h);
-		}
-		else {
-		}
-		break;
 	
 	// Meta statement
 	case TOK_META_STATEMENT:
@@ -698,6 +627,72 @@ int ParseLine(tParser *Parser)
 				SyntaxError(Parser, "#endtestcase without #testcase");
 			Test_CloseTest();
 		}
+		else if( strcmp(Parser->TokenStr, "#block") == 0 ) {
+			 int	x = -1, y = -1, w = -1, h = -1;
+			char	*name = NULL;
+			// ;; BLOCK ["name"] [(X,Y)] [W,H]
+			// - Defines a block/group of elements
+			GetToken(Parser);
+			if( Parser->Token == TOK_STRING )
+			{
+				name = strndup(Parser->TokenStr+1, Parser->TokenLength-2);
+				GetToken(Parser);
+			}
+			
+			if( Parser->Token == TOK_PAREN_OPEN )
+			{
+				x = ParseNumber(Parser);
+				SyntaxAssert(Parser, GetToken(Parser), TOK_COMMA);
+				y = ParseNumber(Parser);
+				SyntaxAssert(Parser, GetToken(Parser), TOK_PAREN_CLOSE);
+				GetToken(Parser);
+			}
+			
+			if( Parser->Token == TOK_NUMBER )
+			{
+				PutBack(Parser);
+				w = ParseNumber(Parser);
+				SyntaxAssert(Parser, GetToken(Parser), TOK_COMMA);
+				h = ParseNumber(Parser);
+				GetToken(Parser);
+			}
+			PutBack(Parser);
+			
+			Build_StartBlock(name, x, y, w, h);
+			if( name )
+				free(name);
+		}
+		else if( strcmp(Parser->TokenStr, "#endblock") == 0 ) {
+			// ;; ENDBLOCK
+			// - Ends the last defined block
+			Build_EndBlock();
+		}
+		else if( strcmp(Parser->TokenStr, "#pos") == 0 ) {
+			 int	x = -1, y = -1, w = -1, h = -1;
+			// ;; POS [(X,Y)] [W,H]
+			// - Set position of a code line (creates a mini block essentially)
+			GetToken(Parser);
+			if( Parser->Token == TOK_PAREN_OPEN )
+			{
+				x = ParseNumber(Parser);
+				SyntaxAssert(Parser, GetToken(Parser), TOK_COMMA);
+				y = ParseNumber(Parser);
+				SyntaxAssert(Parser, GetToken(Parser), TOK_PAREN_CLOSE);
+				GetToken(Parser);
+			}
+			
+			if( Parser->Token == TOK_NUMBER )
+			{
+				PutBack(Parser);
+				w = ParseNumber(Parser);
+				SyntaxAssert(Parser, GetToken(Parser), TOK_COMMA);
+				h = ParseNumber(Parser);
+				GetToken(Parser);
+			}
+			PutBack(Parser);
+			
+			Build_LinePos(x, y, w, h);
+		}
 		else {
 			SyntaxError(Parser, "Unknown meta-statement '%s'",
 				Parser->TokenStr);
@@ -724,21 +719,23 @@ int ParseLine(tParser *Parser)
 		}
 		
 		// Get gate (or gate chain)
-		outputs = ParseOperation( Parser );
+		outputs = ParseOperation( Parser, &destArray );
+		assert(outputs == (void*)-1);
 		
 		// Assign
-		if( List_EquateLinks( &destArray, outputs ) )
-			SyntaxError(Parser,
-				"Mismatch of left and right counts (%i != %i)",
-				destArray.NItems, outputs->NItems
-				);
+		//if( List_EquateLinks( &destArray, outputs ) )
+		//	SyntaxError(Parser,
+		//		"Mismatch of left and right counts (%i != %i)",
+		//		destArray.NItems, outputs->NItems
+		//		);
 		
 		// Ensure a newline
 		SyntaxAssert( Parser, GetToken(Parser), TOK_NEWLINE );
 		
 		// Clean up
-		List_Free(outputs);
-		free(destArray.Items);
+		//List_Free(outputs);
+		List_Free(&destArray);
+		//free(destArray.Items);
 		Build_EndLine();
 		return 0;
 	}

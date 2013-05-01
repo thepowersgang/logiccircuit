@@ -32,7 +32,7 @@ struct sElement
 	size_t	InfoSize;
 	void	*Info;
 
-	void	*Block;
+	struct sBlock	*Block;
 
 	 int	NParams;
 	 int	Params[MAX_PARAMS];

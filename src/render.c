@@ -13,11 +13,14 @@
 #include <stdint.h>
 #include <assert.h>
 #include <stdio.h>
+#include <math.h>
 
 #define UB_READ 	001
 #define UB_WRITE	002
 #define UB_EXTREAD	004
 #define UB_EXTWRITE	010
+#define UB_INPUT	020
+#define UB_OUTPUT	040
 
 enum eDispElementType
 {
@@ -27,6 +30,8 @@ enum eDispElementType
 	DISPELE_AND,
 	DISPELE_OR,
 	DISPELE_XOR,
+	DISPELE_MUX,
+	DISPELE_DEMUX,
 };
 
 // === TYPES ===
@@ -54,6 +59,7 @@ struct sDispValRef
 	tDispValue	*Value;
 	 int	First, Last;
 	 int	Ofs;
+	uint64_t	Const;
 };
 struct sDispInfo
 {
@@ -66,14 +72,20 @@ struct sDispInfo
 	
 	 int	NInputs;
 	tDispValRef	*Inputs;
+	tDispValue	**ParentInputVals;
 	 int	NOutputs;
 	tDispValRef	*Outputs;
+	tDispValue	**ParentOutputVals;	// Pointer to the parent's tDispValue for each output
 	
-	 int	W, H;
+	 int	X, Y, W, H;
 };
 struct sDispElement
 {
 	char	*Name;
+	enum eDispElementType	Type;
+//	void	*Ptr;
+
+	 int	bInvertOut;
 
 	 int	NInputs;
 	tDispValRef	*Inputs;
@@ -83,31 +95,104 @@ struct sDispElement
 	 int	X, Y, W, H;
 };
 
+typedef struct sRasterSuirface
+{
+	 int	Type;	// = 0
+	 int	W, H;
+	uint32_t	Data[];
+} tRasterSurface;
+
 // === CONSTANTS ===
-const int	ciUnitXSize = 32;
-const int	ciUnitYSize = 32;
-const int	ciSubunitXSize = 4;
-const int	ciSubunitYSize = 4;
+#define SIZEBASE	30
+const int	ciUnitXSize = SIZEBASE;
+const int	ciUnitYSize = SIZEBASE;
+const int	ciSubunitXSize = SIZEBASE/5;
+const int	ciSubunitYSize = SIZEBASE/5;
 const int	ciSingleLineWidth = 1;
 const int	ciMultiLineWidth = 3;
+tDispValue	gDispValueConst = {.Name = "-constant-", .UsageBits=UB_READ|UB_INPUT};
 
 // === PROTOTYPES ===
-void	*Render_RenderBlockRaster(tExecUnit *Unit, tBlock *Block, int *W, int *H);
+void	Render_RenderBlockBMP(const char *DestFile, tBlock *Block);
+void	*Render_RenderBlockRaster(tExecUnit *Unit, tBlock *Block);
 void	Render_int_PrerenderBlockRec(tExecUnit *Unit, tBlock *Block);
 void	Render_int_PrerenderBlock(tExecUnit *Unit, tBlock *Block);
-void	Render_int_RasteriseBlock(tBlock *Block, void *Surface, int W, int H, int X, int Y, int MaxDepth);
+void	Render_int_RasteriseBlock(tBlock *Block, void *Surface, int X, int Y, int MaxDepth);
 
 // === CODE ===
-void *Render_RenderBlockRaster(tExecUnit *Unit, tBlock *Block, int *W, int *H)
+void Render_RenderBlockBMP(const char *DestFile, tBlock *Block)
+{
+	tRasterSurface *imagedata = Render_RenderBlockRaster(Block->Unit, Block);
+	
+	FILE *fp = fopen(DestFile, "wb");
+	struct {
+		char	Sig[2];
+		uint32_t	Size;
+		uint16_t	resvd;
+		uint16_t	resvd2;
+		uint32_t	DataOfs;
+		
+		uint32_t	HdrSize;
+		 int32_t	ImgW;
+		 int32_t	ImgH;
+		uint16_t	NPlanes;
+		uint16_t	BPP;
+		uint32_t	Compression;
+		uint32_t	DataSize;
+		uint32_t	HRes;
+		uint32_t	VRes;
+		uint32_t	PaletteSize;
+		uint32_t	NImportant;
+		uint16_t	_pad;
+	} __attribute__((packed)) hdr;
+
+	hdr.Sig[0] = 'B';	hdr.Sig[1] = 'M';
+	hdr.Size = sizeof(hdr) + imagedata->W*imagedata->H*4;
+	hdr.DataOfs = sizeof(hdr);
+	hdr.resvd = 0;
+	hdr.resvd2 = 0;
+	hdr.HdrSize = 40;
+	hdr.ImgW = imagedata->W;
+	hdr.ImgH = imagedata->H;
+	hdr.NPlanes = 1;
+	hdr.BPP = 32;
+	hdr.Compression = 0;
+	hdr.DataSize = imagedata->W*imagedata->H*4;
+	hdr.HRes = 1000;
+	hdr.VRes = 1000;
+	hdr.PaletteSize = 0;
+	hdr.NImportant = 0;
+	hdr._pad = 0;
+
+//	printf("fwrite(%p, %x, %x, %p)\n", &hdr, sizeof(hdr), 1, fp);
+	fwrite(&hdr, sizeof(hdr), 1, fp);
+//	printf("fwrite(%p, %x, %x, %p)\n", imagedata->Data, imagedata->H, imagedata->W*4, fp);
+	for( int row = imagedata->H; row --; )
+		fwrite(imagedata->Data+row*imagedata->W, imagedata->W, 4, fp);
+	
+	free(imagedata);
+}
+
+void *Render_RenderBlockRaster(tExecUnit *Unit, tBlock *Block)
 {
 	// Ensure all blocks are vectored
 	Render_int_PrerenderBlockRec(Unit, Block);
 	// Allocate image buffer
-	*W = Block->DispInfo->W * ciUnitXSize;
-	*H = Block->DispInfo->H * ciUnitYSize;
+	int w = Block->DispInfo->W * ciUnitXSize;
+	int h = Block->DispInfo->H * ciUnitYSize;
+	// Apply some sane image ranges (8K each way)
+	assert(w < (1<<13));
+	assert(h < (1<<13));
 	// Rasterise blocks (with optional max depth)
-	void *ret = malloc( *W * *H * 4);
-	Render_int_RasteriseBlock(ret, Block, *W, *H, 0, 0, INT_MAX);
+	tRasterSurface *ret = malloc( sizeof(tRasterSurface) + w * h * 4);
+	for(int i = 0; i < w*h; i ++ )
+		ret->Data[i] = 0xFF000000;
+	assert(ret);
+	ret->Type = 0;
+	ret->W = w;
+	ret->H = h;
+	Render_int_RasteriseBlock(Block, ret, 0, 0, INT_MAX);
+	printf("ret = %p\n", ret);
 	return ret;
 }
 
@@ -117,6 +202,7 @@ void Render_int_PrerenderBlockRec(tExecUnit *Unit, tBlock *Block)
 	// - Ensures that inputs/outputs of child blocks are known when parent is processed
 	for( tBlock *child = Block->SubBlocks; child; child = child->Next )
 		Render_int_PrerenderBlockRec(Unit, child);
+	printf("Processing: '%s'\n", Block->Name);
 	Render_int_PrerenderBlock(Unit, Block);
 }
 
@@ -125,19 +211,294 @@ static inline void int_Prerender_MarkVal(int NumValues, tDispValue **Values, tLi
 	if( Value->Info )
 	{
 		int ofs = (intptr_t)Value->Info - 1;
+		//printf("Value->Info = %p\n", Value->Info);
+		assert(Value->Info != (void*)-1);
 		assert(0 <= ofs && ofs < NumValues);
 		assert(Values[ofs]);
 		Values[ofs]->UsageBits |= Mask;
 	}
 }
 
-int Render_int_ListToRefs(tDispValRef *Refs, int NItems, tLink *const*Items)
+int Render_int_ListToRefs(tDispInfo *Info, tDispValRef *Refs, int NItems, tLink *const*Items)
 {
-	// TODO: Render_int_ListToRefs
-	return 0;
+	 int	nRefs = 0;
+	
+	tDispValue	*grp = NULL;
+	 int	dir = 0;
+	 int	first = 0, next = 0;
+	for( int i = 0; i < NItems; i ++ )
+	{
+		tLinkValue	*val = Items[i]->Value;
+		if( val == &gValue_One || val == &gValue_Zero )
+		{
+			if( grp )
+			{
+				if( Refs ) {
+					Refs[nRefs].Value = grp;
+					Refs[nRefs].First = first;
+					Refs[nRefs].Last = next-1;
+					Refs[nRefs].Ofs = nRefs+2;
+				}
+				nRefs ++;
+			}
+			uint64_t	constval = 0;
+			 int	const_ofs = 0;
+			while( val == &gValue_One || val == &gValue_Zero ) {
+				if( val == &gValue_One )
+					constval |= (1ULL << const_ofs);
+				if( ++const_ofs == 64 )
+					break;
+				if( ++i == NItems )
+					break;
+				val = Items[i]->Value;
+			}
+			if( Refs ) {
+				Refs[nRefs].Value = &gDispValueConst;
+				Refs[nRefs].First = 0;
+				Refs[nRefs].Last = const_ofs-1;
+				Refs[nRefs].Ofs = nRefs + 2;
+				Refs[nRefs].Const = constval;
+			}
+			i --;
+			nRefs ++;
+			grp = NULL;
+			continue ;
+		}
+		// TODO: Group constant values
+		tDispValue	*dval = Info->Values[ (intptr_t)val->Info - 1 ];
+		 int	idx = 0;
+		for( int j = 0; j < dval->NumLines; j ++ ) {
+			if(dval->Values[j] == val) {
+				idx = j;
+				break;
+			}
+		}
+		if( grp && grp == dval && idx == next && (dir == 0 || dir == 1) )
+		{
+			dir = 1;
+			next ++;
+		}
+		else if( grp && grp == dval && idx == next-2 && (dir == 0 || dir == -1) )
+		{
+			dir = -1;
+			next --;
+		}
+		else
+		{
+			// - Commit `grp`
+			if( grp )
+			{
+				if( Refs ) {
+					Refs[nRefs].Value = grp;
+					Refs[nRefs].First = first;
+					Refs[nRefs].Last = next-1;
+					Refs[nRefs].Ofs = nRefs+2;
+				}
+				nRefs ++;
+			}
+			grp = dval;
+			first = idx;
+			next = first + 1;
+			dir = 0;
+		}
+	}
+	if( grp )
+	{
+		if( Refs ) {
+			Refs[nRefs].Value = grp;
+			Refs[nRefs].First = first;
+			Refs[nRefs].Last = next-1;
+			Refs[nRefs].Ofs = nRefs+2;
+		}
+		nRefs ++;
+	}
+	return nRefs;
 }
 
-tDispElement *Render_int_MakeDispEle(const char *Name, int NParams, int *Params,
+tDispValue *Render_int_PrerenderBlock_MakeVal(int nSubValues, const char *Name)
+{
+	tDispValue *ret = malloc(sizeof(tDispValue)
+		+ nSubValues*sizeof(tLinkValue*)
+		+ strlen(Name) + 1
+		);
+	assert(ret);
+	ret->Values = (void*)(ret + 1);
+	ret->Name = (void*)(ret->Values + nSubValues);
+	
+	strcpy(ret->Name, Name);
+	ret->UsageBits = 0;
+	ret->NumLines = nSubValues;
+	return ret;
+}
+
+tDispValue **Render_int_PrerenderBlock_GetValues(tBlock *Block, int *nValues)
+{
+	tExecUnit *Unit = Block->Unit;
+	tDispValue	**vals;
+	 int	nGroups = 0;
+
+	for(tGroupDef *grp = Unit->Groups; grp; grp = grp->Next)
+	{
+		 int	nUsed = 0;
+		// Check if a line from this group was used
+		// - If so, set flag and exclude line from single check
+		for(int i = 0; i < grp->Size; i ++) {
+			if( grp->Links[i]->Value->Info ) {
+				grp->Links[i]->Value->Info = (void*)-1;
+				nUsed ++;
+			}
+		}
+		// No links from group used
+		if( nUsed == 0 )
+			continue ;
+		nGroups ++;
+	}
+
+	// Turn multiple anon links into groups
+	// - Iterate elements and subunits looking for anon link outputs
+	//  > Throw an assert if named and anon links are used in the same block.
+	for( tElement *ele = Unit->Elements; ele; ele = ele->Next )
+	{
+		if( ele->Block != Block )
+			continue;
+		if( ele->NOutputs == 0 || ele->Outputs[0]->Name[0] != '\0' )
+			continue;
+		//printf(">> %s{?}\n", ele->Type->Name);
+		for( int i = 0; i < ele->NOutputs; i ++ ) {
+			tLink	*link = ele->Outputs[i];
+			tLinkValue	*val = link->Value;
+			// NOTE: Assertions hold when cct is loaded from source
+			// - Source does not allow mixing named and anon outputs
+			assert(link->Name[0] == '\0');
+			assert(val->FirstLink == link);
+			assert(link->ValueNext == NULL);
+			val->Info = (void*)-1;
+		}
+		nGroups ++;
+	}
+	for( tExecUnitRef *subu = Unit->SubUnits; subu; subu = subu->Next )
+	{
+		if( subu->Block != Block )
+			continue;
+		if( subu->Outputs.NItems == 0 || subu->Outputs.Items[0]->Name[0] != '\0' )
+			continue;
+		//printf(">> %s\n", subu->Def->Name);
+		for( int i = 0; i < subu->Outputs.NItems; i ++ ) {
+			tLink	*link = subu->Outputs.Items[i];
+			tLinkValue	*val = link->Value;
+			val->Info = (void*)-1;
+		}
+		nGroups ++;
+	}
+
+	// Look for single-element groups (i.e. Lines)
+	// - Count used single links
+	// - Set index
+	for(tLinkValue *val = Unit->Values; val; val = val->Next)
+	{
+		if( !val->Info )
+			continue ;
+		if( val->Info == (void*)-1 )
+			continue ;
+		
+		
+		val->Info = (void*)(intptr_t)(nGroups+1);
+		nGroups ++;
+	}
+	
+	vals = calloc(sizeof(tDispValue*),nGroups);
+	
+	// Create display value descriptors for groups
+	// - Setting indexes too
+	 int	grpnum = 0;
+	for(tGroupDef *grp = Unit->Groups; grp; grp = grp->Next)
+	{
+		 int	nUsed = 0;
+		for(int i = 0; i < grp->Size; i ++) {
+			if( grp->Links[i]->Value->Info ) {
+				grp->Links[i]->Value->Info = (void*)(intptr_t)(grpnum+1);
+				nUsed ++;
+			}
+		}
+		// No links from group used
+		if( nUsed == 0 )
+			continue ;
+		// Create description
+		vals[grpnum] = Render_int_PrerenderBlock_MakeVal(grp->Size, grp->Name);
+		for(int i = 0; i < grp->Size; i ++)
+			vals[grpnum]->Values[i] = grp->Links[i]->Value;
+		grpnum ++;
+	}
+	// - Anon groups
+	for( tElement *ele = Unit->Elements; ele; ele = ele->Next )
+	{
+		if( ele->Block != Block )
+			continue;
+		if( ele->NOutputs == 0 || ele->Outputs[0]->Name[0] != '\0' )
+			continue;
+		
+		vals[grpnum] = Render_int_PrerenderBlock_MakeVal(ele->NOutputs, "");
+		for( int i = 0; i < ele->NOutputs; i ++ ) {
+			tLinkValue *val = ele->Outputs[i]->Value;
+			val->Info = (void*)(intptr_t)(grpnum+1);
+			vals[grpnum]->Values[i] = val;
+		}
+		grpnum ++;
+	}
+	for( tExecUnitRef *subu = Unit->SubUnits; subu; subu = subu->Next )
+	{
+		if( subu->Block != Block )
+			continue;
+		if( subu->Outputs.NItems == 0 || subu->Outputs.Items[0]->Name[0] != '\0' )
+			continue;
+		vals[grpnum] = Render_int_PrerenderBlock_MakeVal(subu->Outputs.NItems, "");
+		for( int i = 0; i < subu->Outputs.NItems; i ++ ) {
+			tLink	*link = subu->Outputs.Items[i];
+			tLinkValue	*val = link->Value;
+			val->Info = (void*)(intptr_t)(grpnum+1);
+			vals[grpnum]->Values[i] = val;
+		}
+		grpnum ++;
+	}
+	
+	// Single links
+	for(tLinkValue *val = Unit->Values; val; val = val->Next)
+	{
+		if( !val->Info )
+			continue ;
+		 int ofs = (intptr_t)val->Info - 1;
+		assert(0 <= ofs && ofs < nGroups);
+		if( vals[ofs] )
+			continue ;
+		
+		// Determine name to use
+		const char *prefname = NULL;
+		for(tLink *link = val->FirstLink; link; link = link->ValueNext) {
+			if( link->Name[0] == '$' )
+				prefname = link->Name;
+		}
+		assert(prefname != NULL);
+		
+		// Allocate
+		vals[ofs] = Render_int_PrerenderBlock_MakeVal(1, prefname);
+		vals[ofs]->Values[0] = val;
+	}
+	
+	*nValues = nGroups;
+	return vals;
+}
+
+static inline int MAX(int a, int b)
+{
+	return (a > b) ? a : b;
+}
+
+static inline int MIN(int a, int b)
+{
+	return (a < b) ? a : b;
+}
+
+tDispElement *Render_int_MakeDispEle(tDispInfo *Info, const char *Name, int NParams, int *Params,
 	int NInputs, tLink * const *Inputs, int NOutputs, tLink * const *Outputs)
 {
 	tDispElement	*dispele;
@@ -170,17 +531,238 @@ tDispElement *Render_int_MakeDispEle(const char *Name, int NParams, int *Params,
 		}
 		dispele->Name[namelen++] = '}';
 	}
-	dispele->Name[namelen++] = '\0';
-	
-	dispele->NInputs = Render_int_ListToRefs(NULL, NInputs, Inputs);
+	dispele->Name[namelen] = '\0';
+
+	// Inputs	
+	dispele->NInputs = Render_int_ListToRefs(Info, NULL, NInputs, Inputs);
 	dispele->Inputs = malloc( dispele->NInputs * sizeof(tDispValRef) );
-	Render_int_ListToRefs(dispele->Inputs, NInputs, Inputs);
+	Render_int_ListToRefs(Info, dispele->Inputs, NInputs, Inputs);
 	
-	dispele->NOutputs = Render_int_ListToRefs(NULL, NOutputs, Outputs);
+	// Outputs
+	dispele->NOutputs = Render_int_ListToRefs(Info, NULL, NOutputs, Outputs);
 	dispele->Outputs = malloc( dispele->NOutputs * sizeof(tDispValRef) );
-	Render_int_ListToRefs(dispele->Outputs, NOutputs, Outputs);
-	
+	Render_int_ListToRefs(Info, dispele->Outputs, NOutputs, Outputs);
+
+	// Dimensions and type
+	 int	bDontCenter = 0;
+	dispele->W = 0;
+	dispele->H = 0;
+	if( strcmp(Name, "AND") == 0 ) {
+		dispele->Type = DISPELE_AND;
+		dispele->bInvertOut = 0;
+	}
+	else if( strcmp(Name, "NAND") == 0 ) {
+		dispele->Type = DISPELE_AND;
+		dispele->bInvertOut = 1;
+	}
+	else if( strcmp(Name, "OR") == 0 ) {
+		dispele->Type = DISPELE_OR;
+		dispele->bInvertOut = 0;
+	}
+	else if( strcmp(Name, "NOR") == 0 ) {
+		dispele->Type = DISPELE_OR;
+		dispele->bInvertOut = 1;
+	}
+	else if( strcmp(Name, "XOR") == 0 ) {
+		dispele->Type = DISPELE_XOR;
+		dispele->bInvertOut = 0;
+	}
+	else if( strcmp(Name, "XNOR") == 0 ) {
+		dispele->Type = DISPELE_XOR;
+		dispele->bInvertOut = 1;
+	}
+	else if( strcmp(Name, "DELAY") == 0 ) {
+		dispele->Type = DISPELE_DELAY;
+		dispele->bInvertOut = 0;
+	}
+	else if( strcmp(Name, "NOT") == 0 ) {
+		dispele->Type = DISPELE_DELAY;
+		dispele->bInvertOut = 1;
+	}
+	else if( strcmp(Name, "PULSE") == 0 ) {
+		dispele->Type = DISPELE_PULSE;
+		dispele->bInvertOut = 0;
+	}
+	else if( strcmp(Name, "MUX") == 0 ) {
+		dispele->Type = DISPELE_MUX;
+		dispele->bInvertOut = 0;
+	}
+	else if( strcmp(Name, "DEMUX") == 0 ) {
+		dispele->Type = DISPELE_DEMUX;
+		dispele->bInvertOut = 0;
+	}
+	else {
+		dispele->Type = DISPELE_GENERIC;
+		dispele->bInvertOut = 0;
+		dispele->W = 2;
+		bDontCenter = 1;
+	}
+	if( dispele->W == 0 )
+		dispele->W = 1;
+	if( dispele->H == 0 ) {
+		int	subu_size = MAX(dispele->NInputs, dispele->NOutputs) + 3;
+		dispele->H = (subu_size * ciSubunitYSize + ciUnitYSize-1) / ciUnitYSize;
+	}
+	dispele->X = 0;
+	dispele->Y = 0;
+
+	if( !bDontCenter )
+	{
+		 int	ofs;
+		printf("%s:\n", dispele->Name);
+		ofs = (dispele->H*ciUnitYSize - dispele->NInputs*ciSubunitYSize) / (2 * ciSubunitYSize);
+		for( int i = 0; i < dispele->NInputs; i ++ ) {
+			tDispValRef	*vr = &dispele->Inputs[i];
+			printf(" %s[%i:%i]\n", vr->Value->Name, vr->First, vr->Last);
+			dispele->Inputs[i].Ofs = ofs + i;
+		}
+		ofs = (dispele->H*ciUnitYSize - dispele->NOutputs*ciSubunitYSize) / (2 * ciSubunitYSize);
+		for( int i = 0; i < dispele->NOutputs; i ++ ) {
+			dispele->Outputs[i].Ofs = ofs + i;
+		}
+	}
+
 	return dispele;
+}
+
+#define _dolayout(code)	do { \
+	for( int eleidx = 0; eleidx < DispInfo->nElements; eleidx ++ ) { \
+		tDispElement	*de = DispInfo->Elements[eleidx]; \
+		{code}\
+	}\
+	for( tBlock *child = Block->SubBlocks; child; child = child->Next ) {\
+		tDispInfo	*de = child->DispInfo; \
+		{code}\
+	}\
+} while(0)
+
+void Render_int_PrerenderBlock_LayoutDiagonal(tBlock *Block, tDispInfo *DispInfo, int x, int y)
+{
+	_dolayout(
+		if( de->X || de->Y )
+			continue ;
+		de->X = x;
+		de->Y = y;
+		
+		x += (de->W+1)/2;
+		y += de->H;
+	);
+}
+
+void Render_int_PrerenderBlock_LayoutTree(tBlock *Block, tDispInfo *DispInfo)
+{
+	 int	x = -1;
+	 int	min_x = 0;
+	 int	out_y = 1;
+	// 1. Directly connected to output
+	// 1a. All are outputs
+	_dolayout(
+		 int	nDirectOut = 0;
+		for( int i = 0; i < de->NOutputs; i ++ ) {
+			if( de->Outputs[i].Value->UsageBits & UB_OUTPUT )
+				nDirectOut ++;
+		}
+		if( nDirectOut != de->NOutputs )
+			continue ;
+		de->X = x - de->W;
+		de->Y = out_y;
+		out_y += de->H;
+		min_x = MIN(min_x, de->X);
+	);
+	x = min_x-1;
+	out_y = 1;
+	// 1b. At least one is an output
+	_dolayout(
+		if( de->X != 0 )	continue;
+		 int	nDirectOut = 0;
+		for( int i = 0; i < de->NOutputs; i ++ ) {
+			if( de->Outputs[i].Value->UsageBits & UB_OUTPUT )
+				nDirectOut ++;
+		}
+		if( nDirectOut == 0 )
+			continue ;
+		de->X = x - de->W;
+		de->Y = out_y;
+		out_y += de->H;
+		min_x = MIN(min_x, de->X);
+	);
+	
+	// 2. Directly connected to input (change start X for Diagonal)
+	x = 1;
+	 int	in_y = 1;
+	 int	maxx = 0;
+	// 2a. All inputs
+	_dolayout(
+		if( de->X )	continue;
+		 int	nDirectIn = 0;
+		for( int i = 0; i < de->NInputs; i ++ ) {
+			if( de->Inputs[i].Value->UsageBits & UB_INPUT )
+				nDirectIn ++;
+		}
+		if( nDirectIn != de->NInputs )
+			continue ;
+		de->X = x;
+		de->Y = in_y;
+		in_y += de->H;
+		maxx = MAX(maxx, x + de->W);
+	);
+	// 2b. At least one input
+	x = maxx+1;
+	in_y = 1;
+	_dolayout(
+		if( de->X )	continue;
+		 int	nDirectIn = 0;
+		for( int i = 0; i < de->NInputs; i ++ ) {
+			if( de->Inputs[i].Value->UsageBits & UB_INPUT )
+				nDirectIn ++;
+		}
+		if( nDirectIn != de->NInputs )
+			continue ;
+		de->X = x;
+		de->Y = in_y;
+		in_y += de->H;
+		maxx = MAX(maxx, x + de->W);
+	);
+
+	// ? Second indirect?	
+	
+	// Final. Internals done using diagonal layout
+	Render_int_PrerenderBlock_LayoutDiagonal(Block, DispInfo, maxx+1, 1);
+}
+
+void Render_int_PrerenderBlock_Layout_FixNegs(tBlock *Block, tDispInfo *DispInfo)
+{
+	int min_neg_x = 0, min_neg_y = 0;
+	int max_pos_x = 0, max_pos_y = 0;
+
+	_dolayout(
+		if(de->X < 0)
+			min_neg_x = MIN(min_neg_x, de->X);
+		else
+			max_pos_x = MAX(max_pos_x, de->X + de->W);
+		
+		if(de->Y < 0)
+			min_neg_y = MIN(min_neg_y, de->Y);
+		else
+			max_pos_y = MAX(max_pos_y, de->Y + de->H);
+	);
+	
+	// TODO: Handle cases where elements from opposite sides will fit together
+	
+	int w = max_pos_x + (-min_neg_x) + 1;
+	int h = max_pos_y + (-min_neg_y) + 1;
+	
+	_dolayout(
+		if(de->X < 0)
+			de->X = w - (-de->X);
+		if(de->Y < 0)
+			de->Y = h - (-de->Y);
+	);
+	
+	DispInfo->W = w;
+	DispInfo->H = h;
+	
+	printf("%ix%i: '%s'\n", DispInfo->W, DispInfo->H, Block->Name);
 }
 
 void Render_int_PrerenderBlock(tExecUnit *Unit, tBlock *Block)
@@ -192,6 +774,8 @@ void Render_int_PrerenderBlock(tExecUnit *Unit, tBlock *Block)
 	// Nuke value pointers
 	for( tLinkValue *val = Unit->Values; val; val = val->Next )
 		val->Info = NULL;
+	gValue_One.Info = NULL;
+	gValue_Zero.Info = NULL;
 
 	// 1. Make list of used values in this block
 	//  - Count elements while we're at it
@@ -234,104 +818,7 @@ void Render_int_PrerenderBlock(tExecUnit *Unit, tBlock *Block)
 
 	// -- Build up list of 'local' lines --
 	 int	nGroups = 0;
-	tDispValue **vals;
-	{
-		for(tGroupDef *grp = Unit->Groups; grp; grp = grp->Next)
-		{
-			 int	nUsed = 0;
-			// Check if a line from this group was used
-			// - If so, set flag and exclude line from single check
-			for(int i = 0; i < grp->Size; i ++) {
-				if( grp->Links[i]->Value->Info ) {
-					grp->Links[i]->Value->Info = (void*)-1;
-					nUsed ++;
-				}
-			}
-			// No links from group used
-			if( nUsed == 0 )
-				continue ;
-			nGroups ++;
-		}
-		
-		// Look for single-element groups (i.e. Lines)
-		// - Count used single links
-		// - Set index
-		for(tLinkValue *val = Unit->Values; val; val = val->Next)
-		{
-			if( !val->Info )
-				continue ;
-			if( val->Info == (void*)-1 )
-				continue ;
-			
-			
-			val->Info = (void*)(intptr_t)(nGroups+1);
-			nGroups ++;
-		}
-		
-		vals = calloc(sizeof(tDispValue*),nGroups);
-		
-		// Create display value descriptors for groups
-		// - Setting indexes too
-		 int	grpnum = 0;
-		for(tGroupDef *grp = Unit->Groups; grp; grp = grp->Next)
-		{
-			 int	nUsed = 0;
-			for(int i = 0; i < grp->Size; i ++) {
-				if( grp->Links[i]->Value->Info ) {
-					grp->Links[i]->Value->Info = (void*)(intptr_t)(grpnum+1);
-					nUsed ++;
-				}
-			}
-			// No links from group used
-			if( nUsed == 0 )
-				continue ;
-			// Create description
-			vals[grpnum] = malloc(sizeof(tDispValue)
-				+ grp->Size*sizeof(tLinkValue)
-				+ 1+strlen(grp->Name) + 1
-				);
-			assert(vals[grpnum]);
-			vals[grpnum]->Values = (void*)(vals[grpnum] + 1);
-			vals[grpnum]->Name = (void*)(vals[grpnum]->Values + grp->Size);
-			
-			vals[grpnum]->Name[0] = '@';
-			strcpy(vals[grpnum]->Name+1, grp->Name);
-			vals[grpnum]->UsageBits = 0;
-			vals[grpnum]->NumLines = grp->Size;
-			for(int i = 0; i < grp->Size; i ++)
-				vals[grpnum]->Values[i] = grp->Links[i]->Value;
-			grpnum ++;
-		}
-		
-		// Single links
-		for(tLinkValue *val = Unit->Values; val; val = val->Next)
-		{
-			if( !val->Info )
-				continue ;
-			 int ofs = (intptr_t)val->Info - 1;
-			assert(0 <= ofs && ofs < nGroups);
-			if( vals[ofs] )
-				continue ;
-			
-			// Determine name to use
-			const char *prefname = "";
-			for(tLink *link = val->FirstLink; link; link = link->Next) {
-				if( link->Name[0] == '$' )
-					prefname = link->Name;
-			}
-			
-			// Allocate
-			vals[ofs] = malloc(sizeof(tDispValue) + 1*sizeof(tLinkValue*) + strlen(prefname)+1);
-			assert(vals[ofs]);
-			
-			vals[ofs]->Values = (void*)(vals[ofs] + 1);
-			vals[ofs]->Name = (void*)(vals[ofs]->Values + 1);
-			strcpy(vals[ofs]->Name, prefname);
-			vals[ofs]->UsageBits = 0;
-			vals[ofs]->NumLines = 1;
-			vals[ofs]->Values[0] = val;
-		}
-	}
+	tDispValue **vals = Render_int_PrerenderBlock_GetValues(Block, &nGroups);
 
 	// 2. Find all input / output lines (by usage)
 	// 3. Locate rw lines that are used outside
@@ -339,8 +826,18 @@ void Render_int_PrerenderBlock(tExecUnit *Unit, tBlock *Block)
 	for( tElement *ele = Unit->Elements; ele; ele = ele->Next )
 	{
 		 int	shift = 0;
-		if( ele->Block != Block )
+		
+		if( ele->Block != Block ) {
+			// Check if the element is in a sub-block of this
+			tBlock	*b = ele->Block->Parent;
+			while(b && b != Block)
+				b = b->Parent;
+			// If so, ignore it
+			if( b )
+				continue ;
+			// Referenced outside of subblocks
 			shift = 2;
+		}
 		for( int i = 0; i < ele->NInputs; i ++ )
 			int_Prerender_MarkVal(nGroups,vals, ele->Inputs[i]->Value, UB_READ<<shift);
 		for( int i = 0; i < ele->NOutputs; i ++ )
@@ -349,8 +846,17 @@ void Render_int_PrerenderBlock(tExecUnit *Unit, tBlock *Block)
 	for( tExecUnitRef *subu = Unit->SubUnits; subu; subu = subu->Next )
 	{
 		 int	shift = 0;
-		if( subu->Block != Block )
+		if( subu->Block != Block ) {
+			// Check if the element is in a sub-block of this
+			tBlock	*b = subu->Block->Parent;
+			while(b && b != Block)
+				b = b->Parent;
+			// If so, ignore it
+			if( b )
+				continue ;
+			// Referenced outside of subblocks
 			shift = 2;
+		}
 		for( int i = 0; i < subu->Inputs.NItems; i ++ )
 			int_Prerender_MarkVal(nGroups,vals, subu->Inputs.Items[i]->Value, UB_READ<<shift);
 		for( int i = 0; i < subu->Outputs.NItems; i ++ )
@@ -358,15 +864,19 @@ void Render_int_PrerenderBlock(tExecUnit *Unit, tBlock *Block)
 	}
 	for( tBlock *child = Block->SubBlocks; child; child = child->Next )
 	{
-		for( int i = 0; i < child->DispInfo->NInputs; i ++ ) {
-			tDispValue	*dv = child->DispInfo->Inputs[i].Value;
+		tDispInfo	*cdi = child->DispInfo;
+		for( int i = 0; i < cdi->NInputs; i ++ ) {
+			tDispValue	*dv = cdi->Inputs[i].Value;
 			for( int j = 0; j < dv->NumLines; j ++ )
 				int_Prerender_MarkVal(nGroups,vals, dv->Values[j], UB_READ);
+			// Clobber input value pointer, I feel bad
+			cdi->Inputs[i].Value = vals[ (intptr_t)dv->Values[0]->Info - 1 ]; 
 		}
-		for( int i = 0; i < child->DispInfo->NOutputs; i ++ ) {
-			tDispValue	*dv = child->DispInfo->Outputs[i].Value;
+		for( int i = 0; i < cdi->NOutputs; i ++ ) {
+			tDispValue	*dv = cdi->Outputs[i].Value;
 			for( int j = 0; j < dv->NumLines; j ++ )
 				int_Prerender_MarkVal(nGroups,vals, dv->Values[j], UB_WRITE);
+			cdi->Outputs[i].Value = vals[ (intptr_t)dv->Values[0]->Info - 1 ]; 
 		}
 	}
 	for( int i = 0; i < Unit->Inputs.NItems; i ++ )
@@ -391,9 +901,18 @@ void Render_int_PrerenderBlock(tExecUnit *Unit, tBlock *Block)
 	
 	// Create rendered description
 	tDispInfo	*dispinfo;
-	dispinfo = malloc(sizeof(tDispInfo) + (nInputs + nOutputs)*sizeof(tDispValRef));
+	dispinfo = malloc(sizeof(tDispInfo) + (nInputs + nOutputs)*(sizeof(tDispValRef)+sizeof(tDispValue*)));
+	dispinfo->NInputs = nInputs;
 	dispinfo->Inputs = (void*)(dispinfo + 1);
+	dispinfo->NOutputs = nOutputs;
 	dispinfo->Outputs = dispinfo->Inputs + nInputs;
+	dispinfo->ParentInputVals = (void*)(dispinfo->Outputs + nOutputs);
+	dispinfo->ParentOutputVals = dispinfo->ParentInputVals + nInputs;
+	dispinfo->nValues = nGroups;
+	dispinfo->Values = vals;
+	dispinfo->X = 0;
+	dispinfo->Y = 0;
+	Block->DispInfo = dispinfo;
 
 	// - Populate inputs/outputs
 	 int	in_ofs = 0, out_ofs = 0;
@@ -406,6 +925,7 @@ void Render_int_PrerenderBlock(tExecUnit *Unit, tBlock *Block)
 			dispinfo->Inputs[in_ofs].First = 0;
 			dispinfo->Inputs[in_ofs].Last = vals[i]->NumLines-1;
 			dispinfo->Inputs[in_ofs].Ofs = in_ofs;
+			vals[i]->UsageBits |= UB_INPUT;
 			in_ofs ++;
 		}
 		// Written locally and read outside : Output
@@ -414,6 +934,7 @@ void Render_int_PrerenderBlock(tExecUnit *Unit, tBlock *Block)
 			dispinfo->Outputs[out_ofs].First = 0;
 			dispinfo->Outputs[out_ofs].Last = vals[i]->NumLines-1;
 			dispinfo->Outputs[out_ofs].Ofs = out_ofs;
+			vals[i]->UsageBits |= UB_OUTPUT;
 			out_ofs ++;
 		}
 	}
@@ -423,6 +944,7 @@ void Render_int_PrerenderBlock(tExecUnit *Unit, tBlock *Block)
 	//  - Convert blocks of 0/1 into an constant source
 	//  - ?Prefixed NOT elements as a dot
 	//  - Handle assignment to '$NULL' and convert to unconnected output
+	dispinfo->nElements = numElements;
 	dispinfo->Elements = malloc( numElements * sizeof(tDispElement*) );
 	 int	eleidx = 0;
 	for( tElement *ele = Unit->Elements; ele; ele = ele->Next )
@@ -430,33 +952,382 @@ void Render_int_PrerenderBlock(tExecUnit *Unit, tBlock *Block)
 		if( ele->Block != Block )
 			continue ;
 		dispinfo->Elements[eleidx] =
-			Render_int_MakeDispEle(ele->Type->Name, ele->NParams, ele->Params,
+			Render_int_MakeDispEle(dispinfo, ele->Type->Name, ele->NParams, ele->Params,
 				ele->NInputs, ele->Inputs, ele->NOutputs, ele->Outputs);
 		eleidx ++;
 	}
 	for( tExecUnitRef *subu = Unit->SubUnits; subu; subu = subu->Next )
 	{
-		if( subu->Block != Block );
+		if( subu->Block != Block )
 			continue ;
 		dispinfo->Elements[eleidx] =
-			Render_int_MakeDispEle(subu->Def->Name, 0, NULL,
+			Render_int_MakeDispEle(dispinfo, subu->Def->Name, 0, NULL,
 				subu->Inputs.NItems,  subu->Inputs.Items,
 				subu->Outputs.NItems, subu->Outputs.Items);
 		eleidx ++;
 	}
+	assert(eleidx == numElements);
 
-	// -- Layout --	
-	// 1. Directly connected to input and output
-	// 2. Directly connected to input or output
-	// 3. Any others internally, working from the output
-	// TODO: Element layout
+	// DEBUG!
+	#if 1
+	printf("%i values\n", dispinfo->nValues);
+	for( int i = 0; i < dispinfo->nValues; i ++ ) {
+		printf("- %s[%i] (0%o)\n",
+			dispinfo->Values[i]->Name,
+			dispinfo->Values[i]->NumLines,
+			dispinfo->Values[i]->UsageBits
+			);
+	}
+	printf("%i elements\n", dispinfo->nElements);
+	for( int i = 0; i < dispinfo->nElements; i ++ ) {
+		printf("- %s\n", dispinfo->Elements[i]->Name);
+	}
+	#endif
+	// /DEBUG
+
+	// -- Layout --
+	//Render_int_PrerenderBlock_LayoutDiagonal(Block, dispinfo, 1, 1);
+	Render_int_PrerenderBlock_LayoutTree(Block, dispinfo);
+	Render_int_PrerenderBlock_Layout_FixNegs(Block, dispinfo);
+
+	// Reposition inputs/outputs to shorten distance from set
 	
 	// Route lines around elements:
 	// - Prefer vertical junctions
 	// TODO: Line routing
 }
 
-void Render_int_RasteriseBlock(tBlock *Block, void *Surface, int W, int H, int X, int Y, int MaxDepth)
+void Render_int_FillRect(void *Surface, int X, int Y, int W, int H)
 {
+	if( *(int*)Surface == 0 )
+	{
+		tRasterSurface	*srf = Surface;
+		assert(X+W <= srf->W);
+		assert(Y+H <= srf->H);
+		
+		uint32_t	*dst = srf->Data + Y*srf->W + X;
+		for(int row = 0; row < H; row ++)
+		{
+			memset(dst, 255, W*4);
+			dst += srf->W;
+		}
+	}
+	else
+	{
+		assert( *(int*)Surface == 0 );
+	}
+}
+
+void Render_int_DrawRect(void *Surface, int X, int Y, int W, int H)
+{
+	if( *(int*)Surface == 0 )
+	{
+		tRasterSurface	*srf = Surface;
+		assert(X+W <= srf->W);
+		assert(Y+H <= srf->H);
+		assert(W);
+		assert(H);
+		
+		uint32_t	*dst = srf->Data + Y*srf->W + X;
+		memset(dst, 255, W*4);
+		if(H == 1)	return;
+		dst += srf->W;
+		for(int row = 1; row < H-1; row ++)
+		{
+			dst[0] = -1;
+			dst[W-1] = -1;
+			dst += srf->W;
+		}
+		memset(dst, 255, W*4);
+	}
+	else
+	{
+		assert( *(int*)Surface == 0 );
+	}
+}
+
+//static inline int abs(int a) { return (a < 0) ? -a : a; }
+
+void Render_int_DrawLine(void *Surface, int X, int Y, int W, int H)
+{
+	if( *(int*)Surface == 0 )
+	{
+		tRasterSurface	*srf = Surface;
+
+		assert(X+W >= 0);
+		assert(X+W <= srf->W);
+		assert(Y+H >= 0);
+		assert(Y+H <= srf->H);
+		
+		if( abs(W) > abs(H) )
+		{
+			if(W < 0) {
+				X += W;
+				Y += H;
+				W = -W;
+				H = -H;
+			}
+			uint32_t	*dst = srf->Data + Y*srf->W + X;
+			for(int i = 0; i < W; i ++ )
+				dst[i + (i * H / W)*srf->W] = -1;
+		}
+		else
+		{
+			if(H < 0) {
+				X += W;
+				Y += H;
+				W = -W;
+				H = -H;
+			}
+			uint32_t	*dst = srf->Data + Y*srf->W + X;
+			for(int i = 0; i < H; i ++ )
+				dst[i*srf->W + (i * W / H)] = -1;
+		}
+	}
+	else
+	{
+		assert(*(int*)Surface == 0);
+	}
+}
+
+void Render_int_DrawArch(void *Surface, int X, int Y, int W, int H)
+{
+	 int	half_h = H/2;
+	 int	half_h_2 = half_h*half_h;
+	 int	last_x;
+	
+	for( int i = 0; i <= half_h; i ++ )
+	{
+		int end_x = W*sqrt(half_h_2 - i*i)/half_h;
+		if(i > 0)
+		{
+			Render_int_DrawLine(Surface,
+				X + last_x, Y + (half_h-i),
+				end_x - last_x, -1
+				);
+			Render_int_DrawLine(Surface,
+				X + last_x, Y + (half_h+i-1),
+				end_x - last_x, 1
+				);
+		}
+		last_x = end_x;
+	}
+	
+}
+
+void Render_int_FillCircle(void *Surface, int X, int Y, int W, int H)
+{
+	 int	half_h = H/2;
+	 int	half_h_2 = half_h*half_h;
+
+	X += W/2;	
+
+	for( int i = 0; i <= half_h; i ++ )
+	{
+		int end_x = W*sqrt(half_h_2 - i*i)/H;
+		Render_int_DrawLine(Surface, X, Y + (half_h-i ),   end_x, -1 );
+		Render_int_DrawLine(Surface, X, Y + (half_h+i-1),  end_x, 1);
+		Render_int_DrawLine(Surface, X, Y + (half_h-i ),  -end_x, -1 );
+		Render_int_DrawLine(Surface, X, Y + (half_h+i-1), -end_x, 1);
+	}
+	
+}
+
+void Render_int_RasteriseBlock_DrawLine(void *Surface, const tDispValRef *Ref, int X, int Y, int DirV, int SubuLen)
+{
+	if( DirV )
+	{
+		 int	w = (Ref->Value->NumLines > 1 ? ciMultiLineWidth : ciSingleLineWidth);
+		Render_int_FillRect(Surface,
+			X + (ciSubunitXSize - w)/2, Y,
+			w, ciSubunitYSize*SubuLen
+			);
+	}
+	else
+	{
+		 int	h = (Ref->Value->NumLines > 1 ? ciMultiLineWidth : ciSingleLineWidth);
+		Render_int_FillRect(Surface,
+			X, Y + (ciSubunitYSize-h)/2,
+			ciSubunitXSize*SubuLen, h
+			);
+	}
+}
+
+void Render_int_RasteriseBlock(tBlock *Block, void *Surface, int X, int Y, int MaxDepth)
+{
+	tDispInfo	*DispInfo = Block->DispInfo;
+	if( MaxDepth == 0 )
+		return ;
+
+	Render_int_DrawRect(Surface, X, Y, DispInfo->W*ciUnitXSize, DispInfo->H*ciUnitYSize);
+
+	for( int eleid = 0; eleid < DispInfo->nElements; eleid ++ )
+	{
+		tDispElement	*de = DispInfo->Elements[eleid];
+		 int	base_x = X + de->X * ciUnitXSize;
+		 int	base_y = Y + de->Y * ciUnitYSize;
+		switch( de->Type )
+		{
+		case DISPELE_PULSE:
+			// _|-
+			Render_int_DrawLine(Surface,
+				base_x+ciSubunitXSize+ciSubunitXSize/2,
+				base_y+ciSubunitYSize+2*ciSubunitYSize,
+				ciSubunitXSize/2, 1
+				);
+			Render_int_DrawLine(Surface,
+				base_x+ciSubunitXSize+ciSubunitXSize,
+				base_y+ciSubunitYSize+ciSubunitYSize,
+				1, ciSubunitYSize
+				);
+			Render_int_DrawLine(Surface,
+				base_x+ciSubunitXSize+ciSubunitXSize,
+				base_y+ciSubunitYSize+ciSubunitYSize,
+				ciSubunitXSize/2, 1
+				);
+			// fall
+		case DISPELE_DELAY: {
+			 int	h = de->H * ciUnitYSize - 2*ciSubunitYSize;
+			 int	half_h = h / 2;
+			Render_int_DrawLine(Surface,
+				base_x + ciSubunitXSize,
+				base_y + ciSubunitYSize,
+				1,
+				h
+				);
+			Render_int_DrawLine(Surface, 
+				base_x + ciSubunitXSize,
+				base_y + ciSubunitYSize,
+				de->W * ciUnitXSize - 2*ciSubunitXSize,
+				half_h
+				);
+			Render_int_DrawLine(Surface, 
+				base_x + ciSubunitXSize,
+				base_y + ciSubunitYSize + h,
+				de->W * ciUnitXSize - 2*ciSubunitXSize,
+				-half_h
+				);
+			break; }
+		case DISPELE_MUX: {
+			 int	h = de->H * ciUnitYSize - 2*ciSubunitYSize;
+			 int	w = de->W * ciUnitXSize - 2*ciSubunitXSize;
+			 int	slope = (de->H > 1 ? ciSubunitXSize*2 : ciSubunitXSize);
+			Render_int_DrawLine(Surface,
+				base_x + ciSubunitXSize, base_y + ciSubunitYSize,
+				1, h
+				);
+			Render_int_DrawLine(Surface, 
+				base_x + ciSubunitXSize, base_y + ciSubunitYSize,
+				w,
+				slope
+				);
+			Render_int_DrawLine(Surface,
+				base_x + w + ciSubunitXSize, base_y+ciSubunitYSize+slope,
+				1, h-2*slope
+				);
+			Render_int_DrawLine(Surface, 
+				base_x + ciSubunitXSize, base_y + ciSubunitYSize + h,
+				de->W * ciUnitXSize - 2*ciSubunitXSize,
+				-slope
+				);
+			
+			break; }
+		case DISPELE_DEMUX: {
+			 int	h = de->H * ciUnitYSize - 2*ciSubunitYSize;
+			 int	w = de->W * ciUnitXSize - 2*ciSubunitXSize;
+			 int	slope = (de->H > 1 ? ciSubunitXSize*2 : ciSubunitXSize);
+			Render_int_DrawLine(Surface,
+				base_x + ciSubunitXSize + w, base_y + ciSubunitYSize,
+				1, h
+				);
+			Render_int_DrawLine(Surface, 
+				base_x + ciSubunitXSize + w, base_y + ciSubunitYSize,
+				-w,
+				slope
+				);
+			Render_int_DrawLine(Surface,
+				base_x + ciSubunitXSize, base_y+ciSubunitYSize+slope,
+				1, h-2*slope
+				);
+			Render_int_DrawLine(Surface, 
+				base_x + w + ciSubunitXSize, base_y + ciSubunitYSize + h,
+				-w,
+				-slope
+				);
+			
+			break; }
+		case DISPELE_AND: {
+			 int	h = de->H * ciUnitYSize - 2*ciSubunitYSize;
+			Render_int_DrawLine(Surface,
+				base_x + ciSubunitXSize, base_y + ciSubunitYSize,
+				1, h
+				);
+			Render_int_DrawArch(Surface,
+				base_x + ciSubunitXSize, base_y + ciSubunitYSize,
+				ciUnitXSize-2*ciSubunitXSize, h
+				);
+			break; }
+		case DISPELE_XOR: {
+			 int	h = de->H * ciUnitYSize - 2*ciSubunitYSize;
+			Render_int_DrawArch(Surface,
+				base_x + ciSubunitXSize/2, base_y + ciSubunitYSize,
+				ciSubunitXSize, h
+				);
+			Render_int_DrawArch(Surface,
+				base_x + ciSubunitXSize, base_y + ciSubunitYSize,
+				ciSubunitXSize, h
+				);
+			Render_int_DrawArch(Surface,
+				base_x + ciSubunitXSize, base_y + ciSubunitYSize,
+				ciUnitXSize-2*ciSubunitXSize, h
+				);
+			break; }
+		case DISPELE_OR: {
+			 int	h = de->H * ciUnitYSize - 2*ciSubunitYSize;
+			Render_int_DrawArch(Surface,
+				base_x + ciSubunitXSize, base_y + ciSubunitYSize,
+				ciSubunitXSize, h
+				);
+			Render_int_DrawArch(Surface,
+				base_x + ciSubunitXSize, base_y + ciSubunitYSize,
+				ciUnitXSize-2*ciSubunitXSize, h
+				);
+			break; }
+		case DISPELE_GENERIC:
+		default:
+			Render_int_DrawRect(Surface,
+				base_x + ciSubunitXSize,
+				base_y + ciSubunitYSize,
+				de->W * ciUnitXSize - 2*ciSubunitXSize,
+				de->H * ciUnitYSize - 2*ciSubunitYSize
+				);
+			break;
+		}
+		for( int i = 0; i < de->NInputs; i ++ )
+			Render_int_RasteriseBlock_DrawLine(Surface, &de->Inputs[i],
+				base_x, base_y + (de->Inputs[i].Ofs)*ciSubunitYSize,
+				0, 1
+				);
+		for( int i = 0; i < de->NOutputs; i ++ ) {
+			 int	x = base_x + de->W * ciUnitXSize - ciSubunitXSize;
+			 int	y = base_y + (de->Outputs[i].Ofs)*ciSubunitYSize;
+			Render_int_RasteriseBlock_DrawLine(Surface, &de->Outputs[i],
+				x, y, 0, 1
+				);
+			if( de->bInvertOut ) {
+				Render_int_FillCircle(Surface,
+					x - ciSubunitXSize / 2, y, ciSubunitXSize, ciSubunitYSize
+					);
+			}
+		}
+	}
+
+	for(tBlock *child = Block->SubBlocks; child; child = child->Next)
+	{
+		Render_int_RasteriseBlock(child, Surface,
+			X + child->DispInfo->X*ciUnitXSize,
+			Y + child->DispInfo->Y*ciUnitYSize,
+			MaxDepth-1);
+	}
 	// TODO: Render_int_RasteriseBlock
 }

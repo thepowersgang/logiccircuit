@@ -26,13 +26,13 @@ tLinkValue	gValue_Zero;
 tLinkValue	gValue_One;
 tElementDef	*gpElementDefs;
 // - Mesh State
-tExecUnit	gRootUnit = {.Name="_ROOT_"};
+tExecUnit	gRootUnit = {.Name="_ROOT_",.RootBlock={.Unit=&gRootUnit}};
 tUnitTemplate	*gpUnits;
 tTestCase	*gpTests;
 // - Parser State
 tUnitTemplate	*gpCurUnit;
 tTestCase	*gpCurTest;
-tBlock  	*gpCurBlock;
+tBlock  	*gpCurBlock = &gRootUnit.RootBlock;
 
 // === CODE ===
 int Build_IsConstValue(tLinkValue *Val)
@@ -76,6 +76,7 @@ int Unit_DefineUnit(const char *Name)
 	
 	gpCurUnit = tpl;
 	gpCurBlock = &tpl->Internals.RootBlock;
+	tpl->Internals.RootBlock.Unit = &tpl->Internals;
 	
 	return 0;
 }
@@ -115,6 +116,7 @@ int Unit_CloseUnit(void)
 	if(!gpCurUnit)	return -1;
 
 	gpCurUnit = NULL;
+	gpCurBlock = &gRootUnit.RootBlock;
 	return 0;
 }
 
@@ -206,6 +208,7 @@ int Test_CloseTest(void)
 	if(!gpCurTest)	return -1;
 
 	gpCurTest = NULL;
+	gpCurBlock = &gRootUnit.RootBlock;
 	return 0;
 }
 
@@ -497,13 +500,29 @@ tLink *CreateNamedLink(const char *Name)
 /**
  * \brief Append a #defunit unit to the state
  */
-tList *Build_AppendUnit(tUnitTemplate *Unit, const tList *Inputs)
+tList *Build_AppendUnit(tUnitTemplate *Unit, const tList *Inputs, const tList *Outputs)
 {
+	tList	*ret = (void*)-1;
+	
 	// Check input counts
 	if( Inputs->NItems != Unit->Internals.Inputs.NItems ) {
 		// TODO: Error message?
 		fprintf(stderr, "ERROR: %s takes %i lines, %i given\n",
 			Unit->Name, Unit->Internals.Inputs.NItems, Inputs->NItems);
+		return NULL;
+	}
+	if( !Outputs ) {
+		 int	nOut = Unit->Internals.Outputs.NItems;
+		ret = malloc(sizeof(tList) + nOut * sizeof(tLink*) );
+		ret->NItems = nOut;
+		ret->Items = (void*)(ret + 1);
+		for( int i = 0; i < nOut; i ++ )
+			ret->Items[i] = CreateAnonLink();
+		Outputs = ret;
+	}
+	if( Outputs->NItems != Unit->Internals.Outputs.NItems ) {
+		fprintf(stderr, "ERROR: %s outputs %i lines, %i read\n",
+			Unit->Name, Unit->Internals.Outputs.NItems, Outputs->NItems);
 		return NULL;
 	}
 
@@ -514,9 +533,10 @@ tList *Build_AppendUnit(tUnitTemplate *Unit, const tList *Inputs)
 	ref = malloc(sizeof(tExecUnitRef) + extrasize);
 	assert(ref);
 	// - Base values
+//	assert(gpCurBlock);
 	ref->Block = gpCurBlock;
 	ref->Inputs.NItems = Inputs->NItems;
-	ref->Outputs.NItems = Unit->Internals.Outputs.NItems;
+	ref->Outputs.NItems = Outputs->NItems;
 	// - Set up pointers
 	ref->Inputs.Items = (void*)(ref + 1);
 	ref->Outputs.Items = (void*)(ref->Inputs.Items + Inputs->NItems);
@@ -527,32 +547,25 @@ tList *Build_AppendUnit(tUnitTemplate *Unit, const tList *Inputs)
 		Link_Ref(Inputs->Items[i]);
 		ref->Inputs.Items[i] = Inputs->Items[i];
 	}
-	for( int i = 0; i < ref->Outputs.NItems; i ++ )
+	for( int i = 0; i < Outputs->NItems; i ++ )
 	{
-		ref->Outputs.Items[i] = CreateAnonLink();
+		if(ret != (void*)-1)
+			Link_Ref(Outputs->Items[i]);
+		ref->Outputs.Items[i] = Outputs->Items[i];
 	}
 
 	// Append to list
 	tExecUnitRef	**imphead = &Build_int_GetCurExecUnit()->SubUnits;
 	ref->Next = *imphead;
 	*imphead = ref;
-
-	// Create output return
-	tList *ret = malloc( sizeof(tList) + ref->Outputs.NItems * sizeof(tLink*) );
-	ret->NItems = ref->Outputs.NItems;
-	ret->Items = (void *)( ret + 1 );
-	for( int i = 0; i < ref->Outputs.NItems; i ++ ) {
-		Link_Ref(ref->Outputs.Items[i]);
-		ret->Items[i] = ref->Outputs.Items[i];
-	}
 	
 	return ret;	
 }
 
-tList *Build_AppendElement(tElementDef *def, int NParams, const int *Params, const tList *Inputs)
+tList *Build_AppendElement(tElementDef *def, int NParams, const int *Params, const tList *Inputs, const tList *Outputs)
 {
 	tElement	*ele;
-	tList	*ret = NULL;
+	tList	*ret = (void*)-1;
 	
 	// Sanity check input numbers
 	if( Inputs->NItems < def->MinInput ) {
@@ -582,14 +595,30 @@ tList *Build_AppendElement(tElementDef *def, int NParams, const int *Params, con
 		free(ele);
 		return NULL;
 	}
+	if( Outputs && Outputs->NItems != ele->NOutputs ) {
+		fprintf(stderr, "%s requested %i outputs, %i passed\n", def->Name, ele->NOutputs, Outputs->NItems);
+		free(ele);
+		return NULL;
+	}
+	if( !Outputs ) {
+		ret = malloc( sizeof(tList) + ele->NOutputs*sizeof(tLink*) );
+		ret->NItems = ele->NOutputs;
+		ret->Items = (void*)(ret + 1);
+		for( int i = 0; i < ele->NOutputs; i ++ )
+			ret->Items[i] = CreateAnonLink();
+		Outputs = ret;
+	}
 
 	// Populate
 	for( int i = 0; i < Inputs->NItems; i ++ ) {
 		Link_Ref(Inputs->Items[i]);
 		ele->Inputs[i] = Inputs->Items[i];
 	}
-	for( int i = 0; i < ele->NOutputs; i ++ )
-		ele->Outputs[i] = CreateAnonLink();
+	for( int i = 0; i < ele->NOutputs; i ++ ) {
+		if(ret != (void*)-1)
+			Link_Ref(Outputs->Items[i]);
+		ele->Outputs[i] = Outputs->Items[i];
+	}
 	ele->NParams = NParams;
 	for( int i = 0; i < NParams; i ++ )
 		ele->Params[i] = Params[i];
@@ -599,15 +628,6 @@ tList *Build_AppendElement(tElementDef *def, int NParams, const int *Params, con
 	ele->Next = *listhead;
 	*listhead = ele;
 	
-	// Create return list
-	ret = malloc( sizeof(tList) + ele->NOutputs*sizeof(tLink*) );
-	ret->NItems = ele->NOutputs;
-	ret->Items = (void *)( ret + 1 );
-	for( int i = 0; i < ele->NOutputs; i ++ ) {
-		Link_Ref(ele->Outputs[i]);
-		ret->Items[i] = ele->Outputs[i];
-	}
-	
 	return ret;
 	
 }
@@ -615,17 +635,17 @@ tList *Build_AppendElement(tElementDef *def, int NParams, const int *Params, con
 /**
  * \brief Create a new unit instance
  */
-tList *Build_ReferenceUnit(const char *Name, int NParams, const int *Params, const tList *Inputs)
+tList *Build_ReferenceUnit(const char *Name, int NParams, const int *Params, const tList *Inputs, const tList *Outputs)
 {
 	// First, check for template units (#defunit)
 	for( tUnitTemplate *tpl = gpUnits; tpl; tpl = tpl->Next )
 	{
-		// We can't recurse, so also check that
 		if( strcmp(Name, tpl->Name) == 0 )
 		{
+			// We can't recurse, so also check that
 			if( tpl == gpCurUnit )
 				break;
-			return Build_AppendUnit(tpl, Inputs);
+			return Build_AppendUnit(tpl, Inputs, Outputs);
 		}
 	}
 
@@ -634,7 +654,7 @@ tList *Build_ReferenceUnit(const char *Name, int NParams, const int *Params, con
 	{
 		if( strcmp(Name, def->Name) == 0 )
 		{
-			return Build_AppendElement(def, NParams, Params, Inputs);
+			return Build_AppendElement(def, NParams, Params, Inputs, Outputs);
 		}
 	}
 	
@@ -644,26 +664,44 @@ tList *Build_ReferenceUnit(const char *Name, int NParams, const int *Params, con
 // -------------------------------------------------
 // Blocks / Groupings
 // -------------------------------------------------
+void Build_int_StartBlock(const char *Name, int X, int Y, int W, int H)
+{
+	tExecUnit	*cur = Build_int_GetCurExecUnit();
+	size_t	namelen = (Name ? strlen(Name) + 1 : 0);
+	tBlock	*newblock = calloc(1, sizeof(tBlock) + namelen);
+	if( Name ) {
+		newblock->Name = (char*)(newblock + 1);
+		strcpy(newblock->Name, Name);
+	}
+	newblock->Unit = cur;
+	
+	newblock->Next = gpCurBlock->SubBlocks;
+	newblock->Parent = gpCurBlock;
+	gpCurBlock->SubBlocks = newblock;
+	
+	gpCurBlock = newblock;
+}
+
 void Build_StartBlock(const char *Name, int X, int Y, int W, int H)
 {
 	// - Empty name is reserved for codeline blocks
 	if( Name && Name[0] == '\0' )
 		return ;
-	// Build_int_StartBlock(Name, X, Y, W, H);
-//	tExecUnit	*cur = Build_int_GetCurExecUnit();
+	Build_int_StartBlock(Name, X, Y, W, H);
 }
 void Build_EndBlock(void)
 {
 	tExecUnit	*cur = Build_int_GetCurExecUnit();
 	if( gpCurBlock == NULL || gpCurBlock == &cur->RootBlock ) {
 		// Oops?
+		fprintf(stderr, "Block closed while at root\n");
 		return ;
 	}
 	gpCurBlock = gpCurBlock->Parent;
 }
 void Build_LinePos(int X, int Y, int W, int H)
 {
-	// Build_int_StartBlock("", X, Y, W, H);
+	Build_int_StartBlock("", X, Y, W, H);
 }
 void Build_EndLine(void)
 {

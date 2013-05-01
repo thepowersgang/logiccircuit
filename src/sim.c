@@ -206,6 +206,8 @@ void Sim_DuplicateCheck(tExecUnit *Root)
 				continue ;
 			if( memcmp(ele->Inputs, ele2->Inputs, ele->NInputs*sizeof(tLink*)) != 0 )
 				continue ;
+			if( ele2->Outputs[0]->Name[0] )
+				continue ;
 			nDup ++;
 			visited_eles[idx2] = 1;
 		}

@@ -38,13 +38,8 @@ int GetToken(tParser *Parser)
 		}
 		
 		// ASM-style Comments
+		// NOTE: `yasm -e` kills these befire we see them
 		if( *Parser->CurPos == ';' ) {
-			#if SUPPORT_META_COMMENTS
-			Parser->CurPos ++;
-			if( *Parser->CurPos == ';' )
-				break;
-			#endif
-			
 			while( *Parser->CurPos != '\n' )
 				Parser->CurPos ++;
 			continue ;
@@ -112,12 +107,6 @@ int GetToken(tParser *Parser)
 		ret = TOK_NULL;
 		break;
 
-	#if SUPPORT_META_COMMENTS
-	// Meta-Comment (;;)
-	case ';':
-		ret = TOK_META_COMMENT;
-		break;
-	#endif
 	// Meta-Statement (Definition, Etc)
 	case '#':
 		// Read identifier
