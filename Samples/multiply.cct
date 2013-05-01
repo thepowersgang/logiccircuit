@@ -1,0 +1,67 @@
+
+%include "adder.cct"
+%include "shift_register.cct"
+
+#defunit MULTIPLY_32
+#input $start, @val1[32],@val2[32]
+#output $ready, @out[64]
+
+// Serial add and shift
+#array int_res	64
+#array int_res_set	64
+#array int_val1	32
+#array int_val1_set	32
+#array int_val2	64
+#array int_val2_set	64
+#array add_result	64
+
+$pulse = PULSE $start
+
+$NULL, @int_val1 = LATCH{32} 1, $val1_clr, (AND{32} $val1_clr, @int_val1_set)
+$NULL, @int_val2 = LATCH{64} 1, $val2_clr, (AND{64} $val2_clr, @int_val2_set)
+$NULL, @int_res = LATCH{64} 1, $res_clr, (AND{64} $res_clr, @int_res_set)
+
+$res_clr = DELAY $pulse
+$val1_clr = DELAY $pulse
+@int_val1_set[0:31] = AND{32} $pulse, @val1
+$val2_clr = DELAY $pulse
+@int_val2_set[0:31] = AND{32} $pulse, @val2
+
+$add_start = DELAY{3} $pulse
+
+#display $add_start "0x%64x + %1x*0x%64x" @int_res[63:0], @int_val1[0], @int_val2[63:0]
+$add_complete, @add_result, $int_carry = ADDER_64BIT (DELAY $add_start), @int_res, (AND{64} @int_val1[0], @int_val2), 0
+
+$res_clr, @int_res_set = DELAY $add_complete, @add_result
+#display $res_clr "Res Set = 0x%64x" @int_res_set[63:0]
+;$val1_clr, @int_val1_set[31:0], $NULL = SHIFT_LEFT_1_32 $add_complete, @int_val1[31:0], 0
+$val1_clr, @int_val1_set, $NULL = SHIFT_RIGHT_1_32 $add_complete, @int_val1, 0
+#display $val1_clr "Val1 = 0x%32x" @int_val1_set[31:0]
+$val2_clr, @int_val2_set, $NULL = SHIFT_LEFT_1_64 $add_complete, @int_val2, 0
+#display $val2_clr "Val2 = 0x%64x" @int_val2_set[63:0]
+
+
+$is_not_complete = OR @int_val1
+$round_complete = DELAY{5} $add_complete	// 5  = shift, latch and, latch, or, delay/not
+
+$add_start = AND (DELAY $is_not_complete), $round_complete
+$_ready    = AND (NOT   $is_not_complete), $round_complete
+$ready = DELAY $_ready
+@out = AND{64} $_ready, @int_res
+#endunit
+
+#testcase 100 "Multiply [32] 10*10"
+#array valout 64
+$done, @valout = MULTIPLY_32 (DELAY 1), 10[0:31], 10[0:31]
+#testassert $done @valout[0:63] 100[0:63]
+#testcomplete $done
+#endtestcase
+
+#testcase 800 "Multiply [32] 4,000,000,000*10"
+#array valout 64
+$done, @valout = MULTIPLY_32 (DELAY 1), 4000000000[0:31], 10[0:31]
+#testassert $done @valout[0:63] 40000000000[0:63]
+#testcomplete $done
+#endtestcase
+
+; vim: ft=logiccircuit
