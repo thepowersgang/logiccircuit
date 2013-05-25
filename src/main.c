@@ -26,7 +26,7 @@ extern tDisplayItem	*gpDisplayItems;
 extern tTestCase	*gpTests;
 
 extern int ParseFile(const char *Filename);
-extern void	Render_RenderBlockBMP(const char *DestFile, tBlock *Block);
+extern void	Render_RenderBlockBMP(const char *DestFile, tBlock *Block, const char *Path);
 
 // === MACRO! ===
 #define ADD_ELEDEF(name)	do {\
@@ -141,23 +141,27 @@ int main(int argc, char *argv[])
 				giNumROMFiles ++;
 			}
 			else if( strcmp(argv[i], "-vis") == 0 ) {
-				if(i + 2 >= argc)	return -1;
-				 int	bFound = 0;
+				if(i + 3 >= argc)	return -1;
 				const char	*file = argv[i+2];
 				const char	*unit = argv[i+1];
-				i += 2;
+				const char	*blockpath = argv[i+3];
+				tBlock	*block = NULL;
+				i += 3;
 				if( unit[0] == '\0' )
-					Render_RenderBlockBMP(file, &gRootUnit.RootBlock);
+					block = &gRootUnit.RootBlock;
 				else {
 					for( tUnitTemplate *tpl = gpUnits; tpl; tpl = tpl->Next ) {
 						if( strcmp(tpl->Name, unit) == 0 ) {
-							bFound = 1;
-							Render_RenderBlockBMP(file, &tpl->Internals.RootBlock);
+							block = &tpl->Internals.RootBlock;
 							break;
 						}
 					}
-					if( !bFound )
-						fprintf(stderr, "Can't find element '%s'\n", unit);
+				}
+				if( !block ) {
+					fprintf(stderr, "Can't find element '%s'\n", unit);
+				}
+				else {
+					Render_RenderBlockBMP(file, block, blockpath);
 				}
 			}
 			else {
