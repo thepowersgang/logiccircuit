@@ -675,9 +675,13 @@ void Build_int_StartBlock(const char *Name, int X, int Y, int W, int H)
 	}
 	newblock->Unit = cur;
 	
-	newblock->Next = gpCurBlock->SubBlocks;
+	newblock->Next = NULL;
 	newblock->Parent = gpCurBlock;
-	gpCurBlock->SubBlocks = newblock;
+	if( gpCurBlock->SubBlocks )
+		gpCurBlock->LastChild->Next = newblock;
+	else
+		gpCurBlock->SubBlocks = newblock;
+	gpCurBlock->LastChild = newblock;
 	
 	gpCurBlock = newblock;
 }

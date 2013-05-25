@@ -65,6 +65,7 @@ struct sBlock
 	tBlock	*Next;
 	tBlock	*Parent;
 	tBlock	*SubBlocks;
+	tBlock	*LastChild;
 	char	*Name;
 	tExecUnit	*Unit;
 	tElement	*Elements;
