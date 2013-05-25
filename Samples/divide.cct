@@ -8,43 +8,108 @@
 // Find pow2 of N relative to D
 // - ceil(log(N/D))
 
-#defunit int_DIVIDE_16_logratio
-#input $start, @num[16], @den[16]
-#output $done, @mul[16+1], @out[16+1]
+%macro defdivide 1
+#defunit int_DIVIDE_ %+ %1 %+ _logratio
+#input $start, @num[%1], @den[%1]
+#output $done, @mul[%1+1], @out[%1+1]
 
 $pulse = PULSE $start
 
-#array mul_set 16+1
-$NULL, @mul = LATCH{16+1} 1, $mul_clr, (AND{16+1} $mul_clr, @mul_set)
-#display $mul_clr "mul = 0x%17x" @mul_set[16:0]
-#array out_set 16+1
-$NULL, @out = LATCH{16+1} 1, $out_clr, (AND{16+1} $out_clr, @out_set)
-#display $out_clr "out = 0x%17x" @out_set[16:0]
+#array mul_set %1+1
+$NULL, @mul = LATCH{%1+1} 1, $mul_clr, (AND{%1+1} $mul_clr, @mul_set)
+;#display $mul_clr "mul = 0x%17x" @mul_set[16:0]
+#array out_set %1+1
+$NULL, @out = LATCH{%1+1} 1, $out_clr, (AND{%1+1} $out_clr, @out_set)
+;#display $out_clr "out = 0x%17x" @out_set[16:0]
 
 $mul_clr = DELAY $pulse
-@mul_set = AND{16+1} $pulse, 1[0:16]
+@mul_set = AND{%1+1} $pulse, 1[0:%1]
 $out_clr = DELAY $pulse
-@out_set = AND{16+1} $pulse, @den,0
+@out_set = AND{%1+1} $pulse, @den,0
 
 $sub_start = DELAY{4} $pulse
 
-#display $sub_start "logratio: %16x - %17x" @num[15:0],@out[16:0]
-#array sub_result 16
-$sub_done, @sub_result, $needs_borrow = SUBBER_16BIT $sub_start, @num, @out[0:15], 0
-#display $sub_done "Result %16x %1i" @sub_result[15:0], $needs_borrow
+;#display $sub_start "logratio: %16x - %17x" @num[15:0],@out[16:0]
+#array sub_result %1
+$sub_done, @sub_result, $needs_borrow = SUBBER_ %+ %1 %+ BIT $sub_start, @num, @out[0:%1-1], 0
+$NULL = OR @sub_result	// shut up
+;#display $sub_done "Result %16x %1i" @sub_result[15:0], $needs_borrow
 
 // Only continue if:
 // - No borrow was needed
 // - Top bit of multiplier was unset (not about to clear @mul
 // - Top bit of output was unset (which is an implicit borrow)
-$update = AND (DELAY $sub_done), (NOR @mul[16], @out[16], $needs_borrow)
-$done   = AND (DELAY $sub_done), (OR @mul[16], @out[16], $needs_borrow)
-//$update, $done*7 = DEMUX{3} $sub_done, @mul[16], @out[16], $needs_borrow
+$update = AND (DELAY $sub_done), (NOR @mul[%1], @out[%1], $needs_borrow)
+$done   = AND (DELAY $sub_done), ( OR @mul[%1], @out[%1], $needs_borrow)
+//$update, $done*7 = DEMUX{3} $sub_done, @mul[%1], @out[%1], $needs_borrow
 
-$mul_clr, @mul_set = SHIFT_LEFT_1_16 $update, @mul[0:15], 0
-$out_clr, @out_set = SHIFT_LEFT_1_16 $update, @out[0:15], 0
+$mul_clr, @mul_set = SHIFT_LEFT_1_ %+ %1 $update, @mul[0:%1-1], 0
+$out_clr, @out_set = SHIFT_LEFT_1_ %+ %1 $update, @out[0:%1-1], 0
 $sub_start = DELAY{3} $update
 #endunit
+
+#defunit DIVIDE_ %+ %1
+#input $start, @num[%1], @den[%1]
+#output $done, @out[%1]
+
+$pulse = PULSE $start
+$start_pulse = AND (OR @den), $pulse
+$done,@out = AND{%1+1} (NOT @den), $pulse, 1,1*%1
+
+
+#array out_set	%1
+;#display $out_clr "out := %16x" @out_set[15:0]
+$NULL,@out = LATCH{%1} 1, $out_clr, (AND{%1} $out_clr, @out_set)
+#array inum	%1
+#array inum_set	%1
+;#display $inum_clr "inum := %16x" @inum_set[15:0]
+$NULL,@inum = LATCH{%1} 1, $inum_clr, (AND{%1} $inum_clr, @inum_set)
+#array modden	%1+1
+#array modden_set	%1+1
+$NULL,@modden = LATCH{%1+1} 1, $modden_clr, (AND{%1+1} $modden_clr, @modden_set)
+#array stage %1+1
+#array stage_set %1+1
+;#display $stage_clr "stage := %17x" @stage_set[16:0]
+$NULL,@stage = LATCH{%1+1} 1, $stage_clr, (AND{%1+1} $stage_clr, @stage_set)
+
+#array stage_tmp	%1+1
+#array modden_tmp	%1+1
+$logratio_complete, @stage_tmp, @modden_tmp = int_DIVIDE_ %+ %1 %+ _logratio $start_pulse, @num, @den
+$stage_clr  = DELAY $logratio_complete
+@stage_set  = AND{%1+1} $logratio_complete, @stage_tmp
+$modden_clr = DELAY $logratio_complete
+@modden_set = AND{%1+1} $logratio_complete, @modden_tmp
+$inum_clr   = DELAY $logratio_complete
+@inum_set   = AND{%1} $logratio_complete, @num
+$round_complete = DELAY{4} $logratio_complete
+
+$begin_round = AND (NOT @stage[0]), (DELAY $round_complete)
+$done = AND (DELAY @stage[0]), (DELAY $round_complete)
+
+$modden_clr, @modden_set[0:%1-1], $NULL = SHIFT_RIGHT_1_ %+ %1 $begin_round, @modden
+$stage_clr, @stage_set[0:%1-1], $NULL = SHIFT_RIGHT_1_ %+ %1 $begin_round, @stage
+$sub_start = DELAY{4} $begin_round
+;#display $sub_start "%16x - %16x" @inum[15:0], @modden[15:0]
+#array sub_result	%1
+$sub_complete, @sub_result, $needs_borrow = SUBBER_ %+ %1 %+ BIT $sub_start, @inum, @modden[0:%1-1], 0
+;#display $sub_complete "SUB Result: %16x"  @sub_result[15:0]
+// TODO: Could share this subber with int_DIVIDE_16_logratio
+
+$round_complete = AND $sub_complete, $needs_borrow
+$add_stage_pulse = AND (DELAY $sub_complete), (NOT $needs_borrow)
+$inum_clr,@inum_set = AND{1+%1} $add_stage_pulse, (DELAY{2} 1,@sub_result)
+#array add_result	%1
+;#display $add_stage_pulse "%16x + %16x" @out[15:0],@stage[15:0]
+$add_complete,@add_result,$NULL = ADDER_ %+ %1 %+ BIT $add_stage_pulse, @out, @stage[0:%1-1], 0
+;#display $add_complete "ADD Reslult: %16x" @add_result[15:0]
+$out_clr,@out_set = AND{%1+1} $add_complete, 1,@add_result
+$round_complete = DELAY{4} $add_complete
+
+#endunit
+%endmacro
+
+defdivide 16
+defdivide 32
 
 #testcase 200 "Divide [16] RatioLog"
 #array mul 17
@@ -54,65 +119,6 @@ $done, @mul, @res = int_DIVIDE_16_logratio (DELAY 1), 1234[0:15], 12[0:15]
 #testassert $done @res[0:16] 1536[0:16]
 #testcomplete $done
 #endtestcase
-
-#defunit DIVIDE_16
-#input $start, @num[16], @den[16]
-#output $done, @out[16]
-
-$pulse = PULSE $start
-$start_pulse = AND (OR @den), $pulse
-$done,@out = AND{16+1} (NOT @den), $pulse, 1,1*16
-
-
-#array out_set	16
-#display $out_clr "out := %16x" @out_set[15:0]
-$NULL,@out = LATCH{16} 1, $out_clr, (AND{16} $out_clr, @out_set)
-#array inum	16
-#array inum_set	16
-#display $inum_clr "inum := %16x" @inum_set[15:0]
-$NULL,@inum = LATCH{16} 1, $inum_clr, (AND{16} $inum_clr, @inum_set)
-#array modden	17
-#array modden_set	17
-$NULL,@modden = LATCH{17} 1, $modden_clr, (AND{17} $modden_clr, @modden_set)
-#array stage 17
-#array stage_set 17
-#display $stage_clr "stage := %17x" @stage_set[16:0]
-$NULL,@stage = LATCH{17} 1, $stage_clr, (AND{17} $stage_clr, @stage_set)
-
-#array stage_tmp	17
-#array modden_tmp	17
-$logratio_complete, @stage_tmp, @modden_tmp = int_DIVIDE_16_logratio $start_pulse, @num, @den
-$stage_clr  = DELAY $logratio_complete
-@stage_set  = AND{17} $logratio_complete, @stage_tmp
-$modden_clr = DELAY $logratio_complete
-@modden_set = AND{17} $logratio_complete, @modden_tmp
-$inum_clr   = DELAY $logratio_complete
-@inum_set   = AND{16} $logratio_complete, @num
-$round_complete = DELAY{4} $logratio_complete
-
-$begin_round = AND (NOT @stage[0]), (DELAY $round_complete)
-$done = AND (DELAY @stage[0]), (DELAY $round_complete)
-
-$modden_clr, @modden_set[0:15], $NULL = SHIFT_RIGHT_1_16 $begin_round, @modden
-$stage_clr, @stage_set[0:15], $NULL = SHIFT_RIGHT_1_16 $begin_round, @stage
-$sub_start = DELAY{4} $begin_round
-#display $sub_start "%16x - %16x" @inum[15:0], @modden[15:0]
-#array sub_result	16
-$sub_complete, @sub_result, $needs_borrow = SUBBER_16BIT $sub_start, @inum, @modden[0:15], 0
-#display $sub_complete "SUB Result: %16x"  @sub_result[15:0]
-// TODO: Could share this subber with int_DIVIDE_16_logratio
-
-$round_complete = AND $sub_complete, $needs_borrow
-$add_stage_pulse = AND (DELAY $sub_complete), (NOT $needs_borrow)
-$inum_clr,@inum_set = AND{1+16} $add_stage_pulse, (DELAY{2} 1,@sub_result)
-#array add_result	16
-#display $add_stage_pulse "%16x + %16x" @out[15:0],@stage[15:0]
-$add_complete,@add_result,$NULL = ADDER_16BIT $add_stage_pulse, @out, @stage[0:15], 0
-#display $add_complete "ADD Reslult: %16x" @add_result[15:0]
-$out_clr,@out_set = AND{16+1} $add_complete, 1,@add_result
-$round_complete = DELAY{4} $add_complete
-
-#endunit
 
 #testcase 2000 "Divide - [16] 1000 / 0"
 #array output 16
@@ -149,6 +155,13 @@ $done,@output = DIVIDE_16 (PULSE 1), 32768[0:15], 10[0:15]
 #array output 16
 $done,@output = DIVIDE_16 (PULSE 1), 61440[0:15], 10[0:15]
 #testassert $done @output[0:15] 6144[0:15]
+#testcomplete $done
+#endtestcase
+
+#testcase 2000 "Divide - [32] 4,000,000,000 / 10"
+#array output 32
+$done,@output = DIVIDE_32 (PULSE 1), 4000000000[0:31], 10[0:31]
+#testassert $done @output 400000000[0:31]
 #testcomplete $done
 #endtestcase
 
