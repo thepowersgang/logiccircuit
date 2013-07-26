@@ -295,38 +295,41 @@ $comp = DELAY{10} $done
 #testcase 50 "Decode - R11, R10; reset"
 CPU32_ADDRESS_DECODE_BOILERPLATE 0, 1, 1, 0x0BAFFFF
 
-#array state	5
-$next = PULSE $done
-@state = SEQUENCER{5} 1, 0, $next
+$_rr = DELAY $_re
 
+#array state	6
+$next = PULSE $done
+@state = SEQUENCER{6} 1, 0, $next
+
+// 0: Run 1 execute
 $enable = DELAY @state[0]
 // $next set by completion
 
-// Clear and wait for it to happen
-$rdy_clr = PULSE @state[1]
-$next = DELAY{10} (PULSE @state[1])
-
-// Ensure clear worked
-$next = DELAY{4} @state[2]
-
-// Second decode
-$enable = DELAY @state[3]
-
-$_rr = DELAY $_re
-
+// 1: Run 1 results
 #testassert @state[1]	$imd 0
 #testassert @state[1]	@dest_addr[31:0] 11[31:0]
 #testassert @state[1]	@op1[31:0] 0[31:0]
 #testassert @state[1]	@op2[31:0] 0[31:0]
+$rdy_clr = PULSE @state[1]
+$next = PULSE @state[1]
 
-#testassert @state[2]	$done 0
+// 2: Clear in operation
+$next = DELAY{10} @state[2]
 
-#testassert @state[4]	$imd 0
-#testassert @state[4]	@dest_addr[31:0] 11[31:0]
-#testassert @state[4]	@op1[31:0] 0[31:0]
-#testassert @state[4]	@op2[31:0] 0[31:0]
+// 3: Clear complete
+#testassert @state[3]	$done 0
+$next = DELAY{10} @state[3]
 
-#testcomplete @state[4]
+// 4: Run 2 execute
+$enable = DELAY @state[4]
+
+// 5: Run 2 results
+#testassert @state[5]	$imd 0
+#testassert @state[5]	@dest_addr[31:0] 11[31:0]
+#testassert @state[5]	@op1[31:0] 0[31:0]
+#testassert @state[5]	@op2[31:0] 0[31:0]
+
+#testcomplete @state[5]
 
 #endtestcase
 

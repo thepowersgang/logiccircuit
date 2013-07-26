@@ -61,13 +61,13 @@ $ready = DELAY{2} $pulse
 
 #array count_enable 8
 
-@count_enable = DEMUX{3} 1, @count
+@count_enable = DEMUX{3} $pulse, @count, 1
 
 %assign i 0
 %rep 8
  %assign j i
  %rep 8-i
-@value_out[i] = AND (DELAY $pulse), @count_enable[j], (DELAY @value[j])
+@value_out[i] = AND @count_enable[j], (DELAY @value[j])
  %assign j j+1
  %endrep
 %assign i i+1
@@ -75,8 +75,8 @@ $ready = DELAY{2} $pulse
 
 %assign i 1
 %rep 7
-$carry_out = AND (DELAY $pulse), @count_enable[i], (DELAY @value[i-1])
-@value_out[8-i] = AND (DELAY $pulse), @count_enable[i], (DELAY $carry_in)
+$carry_out = AND @count_enable[i], (DELAY @value[i-1])
+@value_out[8-i] = AND @count_enable[i], (DELAY $carry_in)
 %assign i i+1
 %endrep
 
@@ -93,7 +93,7 @@ $ready = DELAY{2} $pulse
 #array count_enable %1
 
 $ready = DELAY{2} $pulse
-@count_enable = DEMUX{%2} $pulse, @count
+@count_enable = DEMUX{%2} $pulse, @count, 1
 
 #array dval %1
 @dval = DELAY @value
@@ -169,7 +169,7 @@ $ready = DELAY{1} $pulse
 @dval = DELAY @value
 
 $ready = DELAY{2} $pulse
-@count_enable = DEMUX{%2} $pulse, @count
+@count_enable = DEMUX{%2} $pulse, @count, 1
 @value_out = AND{%1} @count_enable[0], @dval
 %assign valmax %1 - 1
 %assign countmax countvals - 1

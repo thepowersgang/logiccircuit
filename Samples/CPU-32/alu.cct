@@ -8,21 +8,24 @@
 %include "../adder.cct"
 
 #defunit CPU32_ALU
-#input $enable, @op[3], @alu_in_dst[32], @alu_in_src[32], $flags_C
+#input $enable, $no_set_flags, @op[3], @alu_in_dst[32], @alu_in_src[32], $flags_C
 #output $_done, $alu_nosave, @_alu_out[32],\
-	$flags_C_clear, $flags_O_clear, $flags_Z_clear, $flags_S_clear, \
-	$flags_C_set, $flags_O_set, $flags_Z_set, $flags_S_set
+	@_flags_clear[4], \
+	@_flags_set[4]
 #array alu_out	32
 
 // --- ALU Operations ---
-$is_MOV, $is_AND, $is_OR, $is_XOR, $is_ADD, $is_SUB, $is_CMP, $is_TST = DEMUX{3} $enable, @op
+$is_MOV, $is_AND, $is_OR, $is_XOR, $is_ADD, $is_SUB, $is_CMP, $is_TST = DEMUX{3} $enable, @op, 1
 
 $flags_Z_clear = PULSE $enable
 $flags_Z_set   = AND (DELAY $done), (NOR @alu_out)
 $flags_S_clear = PULSE $enable
 $flags_S_set   = AND $done, @alu_out[31]
-$_done = DELAY{2} $done
-@_alu_out = DELAY{2} @alu_out
+$_done = DELAY{3} $done
+@_alu_out = DELAY{3} @alu_out
+
+@_flags_clear = AND{4} (NOT $no_set_flags), $flags_C_clear, $flags_O_clear, $flags_Z_clear, $flags_S_clear
+@_flags_set   = AND{4} (NOT $no_set_flags), $flags_C_set,   $flags_O_set,   $flags_Z_set,   $flags_S_set
 
 #display $enable "= 0x%32x (%32x)" @alu_out[31:0], @_alu_out[31:0]
 #display $enable "done=%1i,_done=%1i" $done, $_done
@@ -89,7 +92,7 @@ $alu_nosave = DELAY $is_CMP
 // --- TST --
 #block "TST"
 #display $is_TST "TST 0x%32x & 0x%32x" @alu_in_dst[31:0], @alu_in_src[31:0]
-@alu_out = AND{32} $is_TST, @_and_res
+@alu_out = AND{32} $is_TST, (AND{32,2} @alu_in_src, @alu_in_dst)
 $alu_nosave = DELAY $is_TST
 $done       = PULSE $is_TST
 #endblock
@@ -108,7 +111,7 @@ $NULL, @flags_clear = LATCH{4} 1, 0, @flags_clear
 $NULL, @flags_set = LATCH{4} 1, 0, @flags_set
 
 $done, $nowrite, @out, @flags_clear, @flags_set \
-	= CPU32_ALU 1, %1[0:2], %2[0:31], %3[0:31], %4
+	= CPU32_ALU 1, 0, %1[0:2], %2[0:31], %3[0:31], %4
 %endmacro
 
 #testcase 10 "ALU: MOV"

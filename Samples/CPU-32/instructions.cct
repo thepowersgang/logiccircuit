@@ -16,7 +16,7 @@
 #array _nwls_basereg	4
 #array _nwls_datareg	4
 #array _nwls_offset	32
-#array _nwls_regofs	4
+//#array _nwls_regofs	4
 #block "Decode"
 @_nwls_basereg = @instr[16:19]
 @_nwls_datareg = @instr[20:23]
@@ -34,14 +34,15 @@ $_nwls_byteop = AND $is_NONWLS, @instr[27]
 $_nwls_byteop = AND $is_NONWLS, $_nwls_LDRBx
 $_nwls_hwordop = AND $is_NONWLS, (XNOR{2,2} @instr[27:26], 0b00[1:0])
 $_nwls_hwordop = AND $is_NONWLS, $_nwls_LDRHx
-@_nwls_regofs = DEMUX{2} $is_NONWLS, @instr[25:26]
+//@_nwls_regofs = DEMUX{2} $is_NONWLS, @instr[25:26]
 #endblock
 // - Get Address (Stage 2)
 #block "Get Address"
 #array _nwls_baseaddr	32
 #array _nwls_addr	32
+#array _nwls_addr_set	32
 #display $is_NONWLS "NWLS Addr = 0x%32x" @_nwls_addr[31:0]
-$NULL, @_nwls_addr = LATCH{32} 1, $stage0, @_nwls_addr
+$NULL, @_nwls_addr = LATCH{32} 1, $stage0, @_nwls_addr_set
 $_nwls_getaddr = AND $is_NONWLS, @stage_state[0]
 $reg_enable = PULSE $_nwls_getaddr
 @reg_addr = AND{4} $_nwls_getaddr, @_nwls_basereg
@@ -49,31 +50,42 @@ $_nwls_startadd = AND $_nwls_getaddr, $reg_ready
 @_nwls_baseaddr = AND{32} $_nwls_getaddr, $reg_ready, @reg_data_in
 #display $_nwls_startadd "NWLS Base Address = 0x%32x" @_nwls_baseaddr[31:0]
 #display $_nwls_startadd "NWLS Offset = 0x%32x" @_nwls_offset[31:0]
-$_nwls_add_complete, @_nwls_addr, $NULL = ADDER_32BIT $_nwls_startadd, @_nwls_baseaddr, @_nwls_offset, 0
-#display $_nwls_add_complete "NWLS Address = 0x%32x" @_nwls_addr[31:0]
-next_stage NWLSGetAddr, "next_stage (NWLS Get Address)", PULSE $_nwls_add_complete
+$_nwls_add_complete, @_nwls_addr_set, $NULL = ADDER_32BIT $_nwls_startadd, @_nwls_baseaddr, @_nwls_offset, 0
+#display $_nwls_add_complete "NWLS Address = 0x%32x" @_nwls_addr_set[31:0]
+next_stage NWLSGetAddr, "next_stage (NWLS Get Address)", $_nwls_add_complete
 #endblock
 // - GP load section (Stage 3/4)
 #block "General Purpose Load"
-#array _nwls_rdbyte 4
-#array _nwls_rdword 2
-#array _nwls_data 32
-$NULL, @_nwls_data = LATCH{32} 1, $stage0, @_nwls_data	// (ab)use ALU destination latch
+#array _nwls_data 16
+#array _nwls_data_set 16
+$NULL, @_nwls_data = LATCH{16} 1, $stage0, @_nwls_data_set	// (ab)use ALU destination latch
 $mem_enable = PULSE $_nwls_doread
 @mem_addr = AND{32} $_nwls_doread, @_nwls_addr
-#display $_nwls_doread "RDWord: %2b, RDByte: %4b" @_nwls_rdword, @_nwls_rdbyte
-@_nwls_rdword = DEMUX{1} $_nwls_hwordop, @_nwls_addr[1]
-@_nwls_rdbyte = DEMUX{2} $_nwls_byteop, @_nwls_addr[0:1]
 @mem_size = AND{2} $_nwls_doread, $_nwls_byteop, 0b10[0:1]
-@_nwls_data[0:7] = AND{8} $_nwls_doread, @_nwls_rdbyte[0], $mem_ready, @mem_data_in[ 0: 7]
-@_nwls_data[0:7] = AND{8} $_nwls_doread, @_nwls_rdbyte[1], $mem_ready, @mem_data_in[ 8:15]
-@_nwls_data[0:7] = AND{8} $_nwls_doread, @_nwls_rdbyte[2], $mem_ready, @mem_data_in[16:23]
-@_nwls_data[0:7] = AND{8} $_nwls_doread, @_nwls_rdbyte[3], $mem_ready, @mem_data_in[24:31]
+%if 1
+$_nwls_byteop_rdy = AND $_nwls_doread, $_nwls_byteop, $mem_ready
+@_nwls_data_set[0:7] = MUX{2,8} $_nwls_byteop_rdy, @_nwls_addr[0:1], (DELAY @mem_data_in)
+%else
+#array _nwls_rdbyte 4
+@_nwls_rdbyte = DEMUX{2} $_nwls_byteop, @_nwls_addr[0:1], 1
+@_nwls_data_set[0:7] = AND{8} $_nwls_doread, @_nwls_rdbyte[0], $mem_ready, @mem_data_in[ 0: 7]
+@_nwls_data_set[0:7] = AND{8} $_nwls_doread, @_nwls_rdbyte[1], $mem_ready, @mem_data_in[ 8:15]
+@_nwls_data_set[0:7] = AND{8} $_nwls_doread, @_nwls_rdbyte[2], $mem_ready, @mem_data_in[16:23]
+@_nwls_data_set[0:7] = AND{8} $_nwls_doread, @_nwls_rdbyte[3], $mem_ready, @mem_data_in[24:31]
+%endif
 @mem_size = AND{2} $_nwls_doread, $_nwls_hwordop, 0b01[0:1]
-@_nwls_data[0:15] = AND{16} $_nwls_doread, @_nwls_rdword[0], $mem_ready, @mem_data_in[ 0:15]
-@_nwls_data[0:15] = AND{16} $_nwls_doread, @_nwls_rdword[1], $mem_ready, @mem_data_in[16:31]
+%if 1
+$_nwls_hwordop_rdy = AND $_nwls_doread, $_nwls_hwordop, $mem_ready
+@_nwls_data_set[0:15] = MUX{1,16} $_nwls_hwordop_rdy, @_nwls_addr[1], (DELAY @mem_data_in)
+%else
+#array _nwls_rdword 2
+#display $_nwls_doread "RDWord: %2b, RDByte: %4b" @_nwls_rdword, @_nwls_rdbyte
+@_nwls_rdword = DEMUX{1} $_nwls_hwordop, @_nwls_addr[1], 1
+@_nwls_data_set[0:15] = AND{16} $_nwls_doread, @_nwls_rdword[0], $mem_ready, @mem_data_in[ 0:15]
+@_nwls_data_set[0:15] = AND{16} $_nwls_doread, @_nwls_rdword[1], $mem_ready, @mem_data_in[16:31]
+%endif
 $_nwls_datardy = AND (OR @stage_state[1],@stage_state[2]), (OR $_nwls_hwordop, $_nwls_byteop), $mem_ready
-#display $_nwls_datardy "NWLS Data = %16x" @_nwls_data[15:0]
+#display $_nwls_datardy "NWLS Data = %16x" @_nwls_data_set[15:0]
 next_stage NWLSMemReady, "next_stage (NWLS Memory Ready)", $_nwls_datardy
 #endblock
 // - Handle Zero/Sign extend load
@@ -100,16 +112,19 @@ $reg_write = PULSE $_nwls_ldrbx_save
 next_instruction LDRBx, "next_instruction (NWLS Byte Extended)", DELAY{4} $_nwls_ldrbx_save
 #endblock
 // - Handle non-extended load
-#array _nwls_regval	32
 #block "Non-extended Load"
-$NULL, @_nwls_regval = LATCH{32} 1, $stage0, @_nwls_regval
 $_nwls_doread = AND $_nwls_LDRHB, @stage_state[1]
 // next_stage NWLSMemReady
+#block "Reg Read"
+#array _nwls_regval	32
+#array _nwls_regval_set	32
+$NULL, @_nwls_regval = LATCH{32} 1, $stage0, @_nwls_regval_set
 $_nwls_regread = AND $_nwls_LDRHB, @stage_state[2]
 $reg_enable = PULSE $_nwls_regread
 @reg_addr = AND{4} $_nwls_regread, @_nwls_datareg
-@_nwls_regval = AND{32} $_nwls_regread,$reg_ready, @reg_data_in
+@_nwls_regval_set = AND{32} $_nwls_regread,$reg_ready, @reg_data_in
 next_stage NWLSRegRead, "next_stage (NWLS Register Read)", AND $_nwls_regread,$reg_ready
+#endblock
 $_nwls_ldrhb_save = AND $_nwls_LDRHB, @stage_state[3]
 $reg_enable = PULSE $_nwls_ldrhb_save
 @reg_addr = AND{4} $_nwls_ldrhb_save, @_nwls_datareg
@@ -117,17 +132,32 @@ $reg_write = PULSE $_nwls_ldrhb_save
 //  > Half-word
 #block "16-bit"
 $_nwls_ldrh_save = AND $_nwls_LDRH, @stage_state[3]
+%if 1
+@reg_data_out = MUX{1,32} $_nwls_ldrh_save, @instr[25], \
+	(DELAY @_nwls_data[0:15],@_nwls_regval[16:31]), \
+	(DELAY @_nwls_regval[0:15],@_nwls_data[0:15]) 
+%else
 @reg_data_out = AND{32} $_nwls_ldrh_save,@_nwls_regofs[0], @_nwls_data[0:15],@_nwls_regval[16:31]
 @reg_data_out = AND{32} $_nwls_ldrh_save,@_nwls_regofs[1], @_nwls_regval[0:15],@_nwls_data[0:15]
+%endif
 next_instruction LDRH, "next_instruction (LDRH)", AND $_nwls_ldrh_save,$reg_ready
 #endblock
 //  > Byte
 #block "8-bit"
 $_nwls_ldrb_save = AND $_nwls_LDRB, @stage_state[3]
+%if 1
+@reg_data_out = MUX{2,32} $_nwls_ldrb_save, @instr[25:26], \
+	(DELAY @_nwls_data[0:7],@_nwls_regval[8:31]), \
+	(DELAY @_nwls_regval[0:7],@_nwls_data[0:7],@_nwls_regval[16:31]), \
+	(DELAY @_nwls_regval[0:15],@_nwls_data[0:7],@_nwls_regval[24:31]), \
+	(DELAY @_nwls_regval[0:23],@_nwls_data[0:7])
+
+%else
 @reg_data_out = AND{32} $_nwls_ldrb_save,@_nwls_regofs[0], @_nwls_data[0:7],@_nwls_regval[8:31]
 @reg_data_out = AND{32} $_nwls_ldrb_save,@_nwls_regofs[1], @_nwls_regval[0:7],@_nwls_data[0:7],@_nwls_regval[16:31]
 @reg_data_out = AND{32} $_nwls_ldrb_save,@_nwls_regofs[2], @_nwls_regval[0:15],@_nwls_data[0:7],@_nwls_regval[24:31]
 @reg_data_out = AND{32} $_nwls_ldrb_save,@_nwls_regofs[3], @_nwls_regval[0:23],@_nwls_data[0:7]
+%endif
 next_instruction LDRB, "next_instruction (LDRB)", AND $_nwls_ldrb_save,$reg_ready
 #endblock
 #endblock
@@ -142,8 +172,12 @@ $mem_enable = PULSE $_nwls_strhb_write
 $mem_write = PULSE $_nwls_strhb_write
 //  > Half-word
 $_nwls_strh_load = AND $_nwls_STRH, @stage_state[1]
-@_nwls_data[0:15] = AND{16} $_nwls_strh_load,$reg_ready,@_nwls_regofs[0], @reg_data_in[0:15]
-@_nwls_data[0:15] = AND{16} $_nwls_strh_load,$reg_ready,@_nwls_regofs[1], @reg_data_in[16:31]
+%if 1
+@_nwls_data_set[0:15] = MUX{1,16} (AND $_nwls_strh_load,$reg_ready), @instr[25], (DELAY @reg_data_in)
+%else
+@_nwls_data_set[0:15] = AND{16} $_nwls_strh_load,$reg_ready,@_nwls_regofs[0], @reg_data_in[0:15]
+@_nwls_data_set[0:15] = AND{16} $_nwls_strh_load,$reg_ready,@_nwls_regofs[1], @reg_data_in[16:31]
+%endif
 next_stage STRH, "next_stage (NWLS Halfword Ready)", AND $_nwls_strh_load,$reg_ready
 $_nwls_strh_write = AND $_nwls_STRH, @stage_state[2]
 @mem_size = AND{2} $_nwls_strh_write, 0b01[0:1]
@@ -151,10 +185,14 @@ $_nwls_strh_write = AND $_nwls_STRH, @stage_state[2]
 next_instruction STRW, "next_instruction (STRW)", AND $_nwls_strh_write,$mem_ready
 //  > Byte
 $_nwls_strb_load = AND $_nwls_STRB, @stage_state[1]
-@_nwls_data[0:7] = AND{8} $_nwls_strb_load,$reg_ready,@_nwls_regofs[0], @reg_data_in[0:7]
-@_nwls_data[0:7] = AND{8} $_nwls_strb_load,$reg_ready,@_nwls_regofs[1], @reg_data_in[8:15]
-@_nwls_data[0:7] = AND{8} $_nwls_strb_load,$reg_ready,@_nwls_regofs[2], @reg_data_in[16:23]
-@_nwls_data[0:7] = AND{8} $_nwls_strb_load,$reg_ready,@_nwls_regofs[3], @reg_data_in[24:31]
+%if 1
+@_nwls_data_set[0:7] = MUX{2,8} (AND $_nwls_strb_load,$reg_ready), @instr[25:26], (DELAY @reg_data_in)
+%else
+@_nwls_data_set[0:7] = AND{8} $_nwls_strb_load,$reg_ready,@_nwls_regofs[0], @reg_data_in[0:7]
+@_nwls_data_set[0:7] = AND{8} $_nwls_strb_load,$reg_ready,@_nwls_regofs[1], @reg_data_in[8:15]
+@_nwls_data_set[0:7] = AND{8} $_nwls_strb_load,$reg_ready,@_nwls_regofs[2], @reg_data_in[16:23]
+@_nwls_data_set[0:7] = AND{8} $_nwls_strb_load,$reg_ready,@_nwls_regofs[3], @reg_data_in[24:31]
+%endif
 next_stage STRB, "next_stage (NWLS Byte Ready)", AND $_nwls_strb_load,$reg_ready
 $_nwls_strb_write = AND $_nwls_STRB, @stage_state[2]
 @mem_size = AND{2} $_nwls_strb_write, 0b10[0:1]
@@ -171,13 +209,13 @@ next_instruction STRB, "next_instruction (STRB)", AND $_nwls_strb_write,$mem_rea
 #output $next_instruction, $next_stage, $reg_enable, @reg_addr[4], $reg_write,@reg_data_out[32], $flags_C_clear, $flags_C_set
 
 #array _shift_count 5
+#array _shift_count_set 5
 #array _shift_value 33
+#array _shift_value_set 33
 #array _shift_value_nc 32
+#array _shift_value_nc_set 32
 #array _shift_out 33
 #array _shift_out_nc 32
-$NULL, @_shift_count = LATCH{5} 1, $stage0, @_shift_count
-$NULL, @_shift_value = LATCH{33} 1, $stage0, @_shift_value
-$NULL, @_shift_value_nc = LATCH{32} 1, $stage0, @_shift_value_nc
 #display $is_SHIFT "_shift_count = 0x%5x" @_shift_count[4:0]
 $_shift_dir_left  = NOT   @instr[7]
 $_shift_dir_right = DELAY @instr[7]
@@ -188,25 +226,35 @@ $_shift_is_rotate = DELAY @instr[16]
 $_shift_reg_count = NOT   @instr[5]
 $_shift_imm_count = DELAY @instr[5]
 // Prepare arguments
+#block "Get Count"
+$NULL, @_shift_count = LATCH{5} 1, $stage0, @_shift_count_set
 // - Count imm5
-@_shift_count[0:4] = AND{5} $is_SHIFT, $_shift_imm_count, @instr[0:4]
-next_stage ShiftImm5, "next_stage (Shift Imm5)", AND $is_SHIFT, @stage_state[0], $_shift_imm_count
+$_shift_readImm5 = AND $is_SHIFT, @stage_state[0], $_shift_imm_count
+@_shift_count_set[0:4] = AND{5} $_shift_readImm5, @instr[0:4]
+next_stage ShiftImm5, "next_stage (Shift Imm5)", DELAY $_shift_readImm5
 // - Count r
 $_shift_readRv = AND $is_SHIFT, @stage_state[0], $_shift_reg_count
 $reg_enable = PULSE $_shift_readRv
 @reg_addr[0:3] = AND{4} $_shift_readRv, @instr[0:3]
-@_shift_count[0:4] = AND{5} $_shift_readRv, $reg_ready, @reg_data_in[0:4]
+@_shift_count_set[0:4] = AND{5} $_shift_readRv, $reg_ready, @reg_data_in[0:4]
 next_stage ShiftRv, "next_stage (Shift Rv)", AND $_shift_readRv, $reg_ready
+#endblock
 // - Value
+#block "Get Value"
+$NULL, @_shift_value = LATCH{33} 1, $stage0, @_shift_value_set
+$NULL, @_shift_value_nc = LATCH{32} 1, $stage0, @_shift_value_nc_set
 $_shift_value_reading = AND $is_SHIFT, @stage_state[1]
 $reg_enable = PULSE $_shift_value_reading
 @reg_addr[0:3] = AND{4} $_shift_value_reading, @instr[8:11]
 #display $_shift_value_reading,$reg_ready "Shift reg in: %32x" @reg_data_in[31:0]
-@_shift_value[0:32] = AND{33} $_shift_value_reading,$reg_ready,$_shift_dir_left,  $flags_C,@reg_data_in[0:31]
-@_shift_value[0:32] = AND{33} $_shift_value_reading,$reg_ready,$_shift_dir_right, @reg_data_in[31:0],$flags_C
-@_shift_value_nc[0:31] = AND{32} $_shift_value_reading,$reg_ready,$_shift_dir_left,  @reg_data_in[0:31]
-@_shift_value_nc[0:31] = AND{32} $_shift_value_reading,$reg_ready,$_shift_dir_right, @reg_data_in[31:0]
+$_shiftval_ready = AND $_shift_value_reading, $reg_ready
+@_shift_value_set[0:32] = MUX{1,33} $_shiftval_ready, $_shift_dir_right, \
+	(DELAY $flags_C,@reg_data_in[0:31]), (DELAY @reg_data_in[31:0],$flags_C)
+@_shift_value_nc_set[0:31] = MUX{1,32} $_shiftval_ready, $_shift_dir_right, \
+	 (DELAY @reg_data_in[0:31]), (DELAY @reg_data_in[31:0])
 next_stage ShiftVal, "next_stage (Shift Value)", AND $_shift_value_reading, $reg_ready
+#endblock
+#block "Perform Shift"
 // Clear CF if it is used
 $flags_C_clear = PULSE (AND $is_SHIFT, @stage_state[2], $_shift_use_cf)
 $_shl_enable = AND $is_SHIFT, @stage_state[2], $_shift_is_shift
@@ -228,17 +276,23 @@ next_stage ShiftDone, "next_stage (Shift Done)", $_shift_done
 #display $_shift_done,$_shift_dir_right "_shift_out CR = %32x,C=%1b" @_shift_out[0:31],@_shift_out[32]
 #display $_shift_done,$_shift_dir_left  "_shift_out -L = %32x" @_shift_out_nc[31:0]
 #display $_shift_done,$_shift_dir_right "_shift_out -R = %32x" @_shift_out_nc[0:31]
+#endblock
 // Write back shifted value
+#block "Writeback"
 $_shift_writeback = AND $is_SHIFT, @stage_state[3]
 $reg_write = PULSE $_shift_writeback
 @reg_addr[0:3] = AND{4} $_shift_writeback, @instr[12:15]
 $reg_enable = PULSE $_shift_writeback
-$flags_C_set,@reg_data_out[0:31] = AND{33} $_shift_writeback,$_shift_dir_left,  @_shift_out[0:32]
-@reg_data_out[31:0],$flags_C_set = AND{33} $_shift_writeback,$_shift_dir_right, @_shift_out[0:32]
-@reg_data_out[0:31] = AND{32} $_shift_writeback,$_shift_dir_left,  @_shift_out_nc[0:31]
-@reg_data_out[31:0] = AND{32} $_shift_writeback,$_shift_dir_right, @_shift_out_nc[0:31]
+;$flags_C_set,@reg_data_out[0:31] = AND{33} $_shift_writeback,$_shift_dir_left,  @_shift_out[0:32]
+;@reg_data_out[31:0],$flags_C_set = AND{33} $_shift_writeback,$_shift_dir_right, @_shift_out[0:32]
+@reg_data_out[31:0],$flags_C_set = MUX{1,33} $_shift_writeback,$_shift_dir_right, \
+	@_shift_out[32:0], @_shift_out[0:32]
+;@reg_data_out[0:31] = AND{32} $_shift_writeback,$_shift_dir_left,  @_shift_out_nc[0:31]
+;@reg_data_out[31:0] = AND{32} $_shift_writeback,$_shift_dir_right, @_shift_out_nc[0:31]
+@reg_data_out[31:0] = MUX{1,32} $_shift_writeback, $_shift_dir_right, @_shift_out_nc[31:0], @_shift_out_nc[0:31]
 // Operation complete
 next_instruction Shift, "next_instruction (Shift)", DELAY{5} $_shift_writeback
+#endblock
 
 #endunit
 

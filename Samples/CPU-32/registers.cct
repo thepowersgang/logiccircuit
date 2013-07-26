@@ -10,7 +10,7 @@
 @_data_in_delay = DELAY @reg_data_in
 $_wr_delay = DELAY $reg_write
 
-@reg_select = DEMUX{4} $enable, @reg_addr
+@reg_select = DEMUX{4} $enable, @reg_addr, 1
 
 %assign i 0
 %rep 16

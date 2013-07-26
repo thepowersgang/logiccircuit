@@ -6,7 +6,7 @@
 // Size: 128 bytes (32 words)
 #array ROM_select	32
 $_en = AND (DELAY $enable), (NOR @addr[5:11])
-@ROM_select = DEMUX{5} $_en, @addr[0:4]
+@ROM_select = DEMUX{5} $_en, @addr[0:4], 1
 $ready = DELAY{2} $_en
 
 // - Address is in 32-bit words
