@@ -13,6 +13,7 @@
 struct info
 {
 	 int	databits;
+	 int	bits;
 };
 
 // === CODE ===
@@ -26,8 +27,8 @@ static tElement *_Create(int NParams, int *Params, int NInputs)
 	if( NParams == 2 )
 		databits = Params[1]; 
 	
-	if( NInputs < databits + bits ) {
-		fprintf(stderr, "DEMUX: Input count %i < expected %i", NInputs, databits + bits);
+	if( NInputs != 1 + databits + bits ) {
+		fprintf(stderr, "DEMUX: Input count %i != expected %i\n", NInputs, 1 + databits + bits);
 		return NULL;
 	}
 	
@@ -35,6 +36,7 @@ static tElement *_Create(int NParams, int *Params, int NInputs)
 	if(!ret)	return NULL;
 	struct info	*info = ret->Info;
 	info->databits = databits;
+	info->bits = bits;
 	
 	return ret;
 }
@@ -45,17 +47,22 @@ static void _Update(tElement *Ele)
 	unsigned int	sel = 0;
 	
 	// Parse inputs as a binary stream
-	for( int i = info->databits; i < Ele->NInputs; i ++ )
+	for( int i = 1; i < 1+info->bits; i ++ )
 	{
 		if( GetLink(Ele->Inputs[i]) )
 			sel |= 1 << (i-info->databits);
 	}
 	
 	// If ENABLE, drive output
-	for( int i = 0; i < info->databits; i ++ )
+	if( GetLink(Ele->Inputs[0]) )
 	{
-		if( GetLink(Ele->Inputs[i]) )
-			RaiseLink(Ele->Outputs[sel*info->databits+i]);
+		const int in_ofs = 1+info->bits;
+		const int out_ofs = sel*info->databits;
+		for( int i = 0; i < info->databits; i ++ )
+		{
+			if( GetLink(Ele->Inputs[in_ofs + i]) )
+				RaiseLink(Ele->Outputs[out_ofs+i]);
+		}
 	}
 }
 
