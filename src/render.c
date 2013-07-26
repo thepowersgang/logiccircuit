@@ -1347,10 +1347,16 @@ void Render_int_DrawRect(void *Surface, int X, int Y, int W, int H, uint32_t Col
 	if( *(int*)Surface == 0 )
 	{
 		tRasterSurface	*srf = Surface;
-		assert(X+W <= srf->W);
+		if( !(X+W <= srf->W) ) {
+			fprintf(stderr, "Render_int_DrawRect: X(%i)+W(%i) > srf->W(%i) [%p]\n",
+				X, W, srf->W, __builtin_return_address(0));
+			exit(1);
+		}
 		assert(Y+H <= srf->H);
-		assert(W);
-		assert(H);
+		assert(W); assert(H);
+		
+		//if( X + W > srf->W )	W = srf->W - X;
+		//if( Y + H > srf->H )	H = srf->H - Y;
 		
 		uint32_t	*dst = srf->Data + Y*srf->W + X;
 		int_memsetc(dst, W, Colour);
