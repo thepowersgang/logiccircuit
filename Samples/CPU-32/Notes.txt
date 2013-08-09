@@ -112,7 +112,7 @@ ooooo111 RRRRxxxx iiiisssv vvvvvvvv	- R = R <op> [PC + Ri << s + imm9s]
     1000 00000001 001xxxxx	- ?
     1000 00000001 01xxxxxx	- ?
     1000 00000001 1xxxxxxx	- ?
-    1000 0000001s RRRRrrrr dcivvvvv	- <op> R, r, Rv/imm4	- Shift/Rotate {s} Left/Right {d} (Carry {c}) Rv/imm4 {i}
+    1000 0000001s RRRRrrrr dcivvvvv	- <op> R, r, Rv/imm4	- Shift/Rotate {s} Left/Right {d} (Carry {c}) Rv/imm5 {i}
     1000 000001xx - ?
     1000 00001xxx - ?
     1000 0001xxxx - ?
