@@ -24,6 +24,7 @@ extern tElementDef	*gpElementDefs;
 extern tBreakpoint	*gpBreakpoints;
 extern tDisplayItem	*gpDisplayItems;
 extern tTestCase	*gpTests;
+extern int	giNumThreads;
 
 extern int ParseFile(const char *Filename);
 extern void	Render_RenderBlockBMP(const char *DestFile, tBlock *Block, const char *Path);
@@ -122,6 +123,14 @@ int main(int argc, char *argv[])
 			else if( strcmp(argv[i], "-readascii") == 0 ) {
 				if(i + 1 == argc)	return -1;
 				ReadCompiledVersion(argv[++i], 0);
+			}
+			else if( strcmp(argv[i], "-threads") == 0 ) {
+				if(i + 1 == argc)	return -1;
+				giNumThreads = atoi(argv[++i]);
+				if(giNumThreads <= 0) {
+					fprintf(stderr, "Number of threads must be >= 1\n");
+					return -1;
+				}
 			}
 			else if( strcmp(argv[i], "-rom") == 0 ) {
 				if(i + 1 == argc)	return -1;

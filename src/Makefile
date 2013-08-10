@@ -4,7 +4,7 @@
 CPPFLAGS = -I ./include/
 CFLAGS = -Wall -g -std=gnu99
 CFLAGS += -O3
-LDFLAGS = -lm
+LDFLAGS = -lm -lpthread
 
 OBJ := main.o lex.o parse.o build.o compiled.o sim.o
 OBJ += render.o

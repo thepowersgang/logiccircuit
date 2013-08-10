@@ -85,7 +85,6 @@ struct sExecUnit
 
 	tLinkValue	*Values;
 
-	 int	nElements;
 	tExecUnitRef	*SubUnits;
 	struct	sElement	*Elements;
 	tDisplayItem	*DisplayItems;
@@ -94,6 +93,11 @@ struct sExecUnit
 	
 	tBlock	RootBlock;
 	tBlock	*Blocks;
+	
+	 int	nElements;
+	tElement	**ElementArray;
+	 int	nValues;
+	tLinkValue	**ValueArray;
 };
 
 typedef struct sTestCase

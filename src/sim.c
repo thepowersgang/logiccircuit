@@ -5,6 +5,8 @@
  * sim.c
  * - Simulation Code
  */
+#define USE_THREADS	 1
+#define NONTHREADED_VALUES	0
 #include <common.h>
 #include <assert.h>
 #include <stdio.h>
@@ -12,9 +14,26 @@
 #include <stdint.h>
 #include <ctype.h>
 #include <string.h>
+#if USE_THREADS
+# include <pthread.h>
+#endif
 
 // === PROTOTYPES ===
 void	PrintDisplayItem(tDisplayItem *dispItem);
+
+struct sStageCompletion {
+	pthread_mutex_t	Mutex;
+	 int	NumThreads;
+	 int	NumResumed;
+	pthread_cond_t	Cond;
+} gStagesComplete[4];	// 0: Ready to go, 1: Values cleared, 2: Elements updated, 3: All done
+#if USE_THREADS
+pthread_t	*gaThreadPool;	// malloc'd array of giNumThreads-1
+ int	giNumThreads = 2;
+#else
+const int	giNumThreads = 1;	// Must be at least 1
+#endif
+tExecUnit	*gpExecCurUnit;
 
 // === CODE ===
 void GetLists(tExecUnit *Root, tLink ***links, tElement ***elements, tDisplayItem ***dispitems)
@@ -471,35 +490,147 @@ void Sim_FreeMesh(tExecUnit *Unit)
 	free(Unit);
 }
 
-void Sim_RunStep(tExecUnit *Unit)
+// --------------------------------------------------------------------
+// Execution
+// --------------------------------------------------------------------
+void Sim_int_ThreadSync(struct sStageCompletion *Stage, int ID)
 {
-	gValue_One.Value = 1;
-	gValue_Zero.Value = 0;
-	for( tLinkValue *val = Unit->Values; val; val = val->Next )
+	#if USE_THREADS
+	if( giNumThreads > 1 )
 	{
-		assert(val != val->Next);
-		val->NDrivers = 0;
+		pthread_mutex_lock(&Stage->Mutex);
+		Stage->NumThreads ++;
+		pthread_cond_broadcast(&Stage->Cond);
+		assert(Stage->NumThreads <= giNumThreads);
+		while( Stage->NumThreads < giNumThreads )
+		{
+			pthread_cond_wait(&Stage->Cond, &Stage->Mutex);
+		}
+		Stage->NumResumed ++;
+		if( Stage->NumResumed == giNumThreads ) {
+			Stage->NumThreads = 0;
+			Stage->NumResumed = 0;
+		}
+		pthread_mutex_unlock(&Stage->Mutex);
 	}
-	
-	// === Update elements ===
-	// TODO: Threaded?
-	for( tElement *ele = Unit->Elements; ele; ele = ele->Next )
+	#endif
+}
+
+void Sim_int_RunStepPart(const tExecUnit *Unit, int Ofs)
+{
+	#if !NONTHREADED_VALUES
+	for( int i = Ofs; i < Unit->nValues; i += giNumThreads )
 	{
-		assert(ele != ele->Next);
+		Unit->ValueArray[i]->NDrivers = 0;
+	}
+	Sim_int_ThreadSync(&gStagesComplete[1], Ofs);
+	#endif
+
+	// === Update elements ===
+	for( int i = Ofs; i < Unit->nElements; i += giNumThreads )
+	{
+		tElement	*ele = Unit->ElementArray[i];
 		ele->Type->Update( ele );
 	}
+	Sim_int_ThreadSync(&gStagesComplete[2], Ofs);
 	
 	// Set values
+	#if !NONTHREADED_VALUES
+	for( int i = Ofs; i < Unit->nValues; i += giNumThreads )
+	{
+		tLinkValue	*val = Unit->ValueArray[i];
+		val->Value = (val->NDrivers != 0);
+	}
+	Sim_int_ThreadSync(&gStagesComplete[3], Ofs);
+	#endif
+}
+
+#if USE_THREADS
+void *Sim_int_ThreadMain(void *offset_ptrval)
+{
+	 int	ofs = (intptr_t)offset_ptrval;
+	for( ;; )
+	{
+		Sim_int_ThreadSync(&gStagesComplete[0], ofs);
+		Sim_int_RunStepPart(gpExecCurUnit, ofs);
+	}
+	return NULL;
+}
+
+void Sim_int_InitThreads(void)
+{
+	assert(giNumThreads >= 1);
+	if( giNumThreads > 1 )
+	{
+		gaThreadPool = calloc( (giNumThreads-1), sizeof(pthread_t) );
+		for( int i = 0; i < giNumThreads-1; i ++ )
+		{
+			pthread_create(&gaThreadPool[i], NULL, Sim_int_ThreadMain, (void*)(intptr_t)(i+1));
+		}
+	}
+}
+#endif
+
+void Sim_RunStep(tExecUnit *Unit)
+{
+	#if USE_THREADS
+	if( !gaThreadPool && giNumThreads > 1 )
+		Sim_int_InitThreads();
+	gpExecCurUnit = Unit;
+	#endif
+	if( !Unit->ValueArray )
+	{
+		 int	nVals = 0;
+		for( tLinkValue *val = Unit->Values; val; val = val->Next ) {
+			assert(val != val->Next);
+			nVals ++;
+		}
+		Unit->nValues = nVals;
+		Unit->ValueArray = malloc(nVals * sizeof(tLinkValue*));
+		 int	idx = 0;
+		for( tLinkValue *val = Unit->Values; val; val = val->Next )
+			Unit->ValueArray[idx++] = val;
+	}
+	if( !Unit->ElementArray )
+	{
+		 int	nEles = 0;
+		for( tElement *ele = Unit->Elements; ele; ele = ele->Next ) {
+			assert(ele != ele->Next);
+			nEles ++;
+		}
+		Unit->nElements = nEles;
+		Unit->ElementArray = malloc(nEles * sizeof(tElement*));
+		 int	idx = 0;
+		for( tElement *ele = Unit->Elements; ele; ele = ele->Next )
+			Unit->ElementArray[idx++] = ele;
+	}
+	
+	// Prepare
+	gValue_One.Value = 1;
+	gValue_Zero.Value = 0;
+	#if NONTHREADED_VALUES
+	for( int i = 0; i < Unit->nValues; i ++ )
+	{
+		Unit->ValueArray[i]->NDrivers = 0;
+	}
+	#endif
+
+	// Trigger workers and do our work
+	Sim_int_ThreadSync(&gStagesComplete[0], 0);
+	Sim_int_RunStepPart(Unit, 0);
+	
+	// Finalise
 	gValue_One.Value = 1;
 	gValue_One.NDrivers = 1;
 	gValue_Zero.Value = 0;
 	gValue_Zero.NDrivers = 0;
-	for( tLinkValue *val = Unit->Values; val; val = val->Next )
+	#if NONTHREADED_VALUES
+	for( int i = 0; i < Unit->nValues; i ++ )
 	{
-		assert(val != val->Next);
-		
+		tLinkValue	*val = Unit->ValueArray[i];
 		val->Value = (val->NDrivers != 0);
 	}
+	#endif
 }
 
 void Sim_ShowDisplayItems(tDisplayItem *First)
