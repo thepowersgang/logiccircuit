@@ -1,0 +1,2 @@
+Replace most bus AND gates with 'ENABLE' which takes 2+ lines
+- First is a selector, rest are passed through to output

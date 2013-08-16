@@ -1,0 +1,12 @@
+
+";; (X,Y) [W,H] {i1,i2,i3,...} {o1,o2,o3,...}"
+
+All blocks are optional, either by omission or an empty list (for input)
+- Position in "blocks" (not pixels)
+- Size in blocks
+- Offsets from top/left for input values (in units of 1/16 blocks)
+- Offsets from top/left for output values
+
+
+Note: Contiguous group links are indicated as a single input/output
+
