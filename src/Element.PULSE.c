@@ -21,7 +21,7 @@ static tElement *_Create(int NParams, int *Param, int NInputs)
 	if(!ret)	return NULL;
 	t_info *info = ret->Info;
 
-	if( NParams && *Param )
+	if( NParams >= 1 && Param[0] != 0 )
 		info->Dir = 1;
 	else
 		info->Dir = 0;

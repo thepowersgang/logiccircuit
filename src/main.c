@@ -81,6 +81,7 @@ int main(int argc, char *argv[])
 	ADD_ELEDEF(CLOCK);
 	
 	ADD_ELEDEF(DELAY);
+	ADD_ELEDEF(ENABLE);
 	ADD_ELEDEF(PULSE);
 	ADD_ELEDEF(HOLD);
 	ADD_ELEDEF(VALUESET);
@@ -151,8 +152,8 @@ int main(int argc, char *argv[])
 			}
 			else if( strcmp(argv[i], "-vis") == 0 ) {
 				if(i + 3 >= argc)	return -1;
-				const char	*file = argv[i+2];
 				const char	*unit = argv[i+1];
+				const char	*file = argv[i+2];
 				const char	*blockpath = argv[i+3];
 				tBlock	*block = NULL;
 				i += 3;
