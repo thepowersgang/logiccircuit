@@ -41,7 +41,7 @@ Exception Vectors:
 0x14	- Software Interrupt
  > CR0 = Next Instruction
  > CR1 = SWI Instruction
-0x18	- General Protection Fault
+0x18	- Permissions Violation
  > CR0 = Next Instruction
  > CR1 = Offending instruction
 0x1C	- RESERVED

@@ -313,6 +313,7 @@ __stage 3,3
 $mem_ready = DELAY $mem_enable
 $reg_ready = DELAY $reg_enable
 
+; LEA R8, [PC+0x1234]
 __memrd 0,0, 0x000, 0xBE801234
 __regwr 0,1, 8, 0x00001238
 __end 0,2
