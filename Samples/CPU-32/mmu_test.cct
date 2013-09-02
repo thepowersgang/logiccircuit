@@ -19,7 +19,7 @@ tlb_common 1
 $tlb_enable,@vpage = DELAY 1, 0[19:0]
 
 #testassert $tlb_done	$tlb_yes	0
-#testassert $tlb_done	@tlb_ppage	0[0:19],0
+#testassert $tlb_done	@tlb_ppage	0[0:19], 0,0,0
 #testcomplete $tlb_done
 
 #endtestcase
@@ -29,32 +29,32 @@ tlb_common 7
 $tlb_enable = PULSE @stage[0]
 @vpage      = ENABLE @stage[0], 0xF080D[0:19]
 $tlb_store = ENABLE @stage[0], 1
-@ppage_in  = ENABLE @stage[0], 0x11111[0:19],0
+@ppage_in  = ENABLE @stage[0], 0x11111[0:19], 0,0,0
 
 $tlb_enable = PULSE @stage[1]
 @vpage      = ENABLE @stage[1], 0x12345[0:19]
 #testassert @stage[1],$tlb_done	$tlb_yes 0
-#testassert @stage[1],$tlb_done	@tlb_ppage	0[0:19],0
+#testassert @stage[1],$tlb_done	@tlb_ppage	0[0:19], 0,0,0
 
 $tlb_enable = PULSE @stage[2]
 @vpage      = ENABLE @stage[2], 0xF080D[0:19]
 #testassert @stage[2],$tlb_done	$tlb_yes 1
-#testassert @stage[2],$tlb_done	@tlb_ppage	0x11111[0:19],0
+#testassert @stage[2],$tlb_done	@tlb_ppage	0x11111[0:19], 0,0,0
 
 $tlb_enable = PULSE @stage[3]
 @vpage      = ENABLE @stage[3], 0x12345[0:19]
 $tlb_store = ENABLE @stage[3], 1
-@ppage_in  = ENABLE @stage[3], 0x2131F[0:19],1
+@ppage_in  = ENABLE @stage[3], 0x2131F[0:19], 1,0,1
 
 $tlb_enable = PULSE @stage[4]
 @vpage      = ENABLE @stage[4], 0x12345[0:19]
 #testassert @stage[4],$tlb_done	$tlb_yes 1
-#testassert @stage[4],$tlb_done	@tlb_ppage	0x2131F[0:19],1
+#testassert @stage[4],$tlb_done	@tlb_ppage	0x2131F[0:19], 1,0,1
 
 $tlb_enable = PULSE @stage[5]
 @vpage      = ENABLE @stage[5], 0xF080D[0:19]
 #testassert @stage[5],$tlb_done	$tlb_yes 1
-#testassert @stage[5],$tlb_done	@tlb_ppage	0x11111[0:19],0
+#testassert @stage[5],$tlb_done	@tlb_ppage	0x11111[0:19], 0,0,0
 
 #testcomplete @stage[6]
 
@@ -64,14 +64,18 @@ $tlb_enable = PULSE @stage[5]
 // Tests for MMU Page-Walk subunit
 //
 
+%macro expect_pmem_rd 4
+#testassert @step[%1],@stage[%2],$pmem_enable	@pmem_addr	%3[0:31]
+$pmem_ready,@pmem_data = AND{1+32} @step[%1],@stage[%2],$pmem_enable, 1,%4[0:31]
+%endmacro
+
 %macro mmu_pagewalk_common 2
 #array virt_addr	20
 #array pmem_data	32
 #array pmem_addr	32
-#array fault_bits	12
 #array paddr_out	MMU_PHYSBITS
 #array perms_out	MMU_PERMBITS
-$ready,@paddr_out,@perms_out,$fault,@fault_bits,$pmem_enable,@pmem_addr = \
+$ready,@paddr_out,@perms_out,$fault,$pmem_enable,@pmem_addr = \
 	CPU32_MMU_PAGEWALK $enable,%1[0:31],@virt_addr,$pmem_ready,@pmem_data
 #array step	%2
 $next_step = PULSE $ready
@@ -91,17 +95,13 @@ $enable    = DELAY  @step[0]
 @virt_addr = ENABLE @step[0], 0x12345[0:19]
 #testassert @step[0]	$fault	0
 // - Top Level
-#testassert @step[0],@stage[0],$pmem_enable	@pmem_addr	0x1120[0:31]
-$pmem_ready = AND{1}  @step[0],@stage[0],$pmem_enable, 1
-@pmem_data  = AND{32} @step[0],@stage[0],$pmem_enable, 0x2001[0:31]	; Lvl2 at 0x2000, present
+expect_pmem_rd 0,0, 0x1120, 0x2001	; Lvl2 at 0x2000, present
 // - Next level
-#testassert @step[0],@stage[1],$pmem_enable	@pmem_addr	0x2D14[0:31]
-$pmem_ready = AND{1}  @step[0],@stage[1],$pmem_enable, 1
-@pmem_data  = AND{32} @step[0],@stage[1],$pmem_enable, 0x3001[0:31]	; Page at 0x3000, present
+expect_pmem_rd 0,1, 0x2D14, 0x3001	; Page at 0x3000, present
 // - Result
 #testassert @step[0],$ready	@stage[2]	1
 #testassert @step[0],$ready	@paddr_out	0x3[0:19]
-#testassert @step[0],$ready	@perms_out	0[0:0]
+#testassert @step[0],$ready	@perms_out	1[0:2]
 
 // [1] Check that reset works
 $step1delayed = DELAY{3} @step[1]
@@ -115,17 +115,13 @@ $enable    = DELAY  @step[2]
 @virt_addr = ENABLE @step[2], 0x0FEED[0:19]
 #testassert @step[2]	$fault	0
 // - Top level
-#testassert @step[2],@stage[0],$pmem_enable	@pmem_addr	0x10FC[0:31]
-$pmem_ready = AND{1}  @step[2],@stage[0],$pmem_enable, 1
-@pmem_data  = AND{32} @step[2],@stage[0],$pmem_enable, 0x1231001[0:31]
+expect_pmem_rd 2,0, 0x000010FC, 0x01231001
 // - Next level
-#testassert @step[2],@stage[1],$pmem_enable	@pmem_addr	0x1231BB4[0:31]
-$pmem_ready = AND{1}  @step[2],@stage[1],$pmem_enable, 1
-@pmem_data  = AND{32} @step[2],@stage[1],$pmem_enable, 0x5001[0:31]
+expect_pmem_rd 2,1, 0x01231BB4, 0x00005001
 // Result
 #testassert @step[2],$ready	@stage[2]	1
 #testassert @step[2],$ready	@paddr_out	0x5[0:19]
-#testassert @step[2],$ready	@perms_out	0[0:0]
+#testassert @step[2],$ready	@perms_out	1[0:2]
 
 #testcomplete @step[3]
 #endtestcase
@@ -136,39 +132,100 @@ mmu_pagewalk_common 0x1000, 4
 
 $enable    = DELAY @step[0]
 @virt_addr = ENABLE @step[0], 0x12345[0:19]
-
-#testassert @step[0],@stage[0],$pmem_enable     @pmem_addr      0x1120[0:31]
-$pmem_ready = AND{1}  @step[0],@stage[0],$pmem_enable, 1
-@pmem_data  = AND{32} @step[0],@stage[0],$pmem_enable, 0x0000[0:31]	; No PT
+expect_pmem_rd 0,0, 0x00001120, 0x00000000
 #testassert @step[0],$ready	@stage[1]	1
 #testassert @step[0],$ready	$fault	1
-#testassert @step[0],$ready	@fault_bits	0x001[0:11]
 
 // Check that reset works
 $step1delayed = DELAY{3} @step[1]
 #testassert $step1delayed @paddr_out	0[0:19]
 #testassert $step1delayed $ready	0
 #testassert $step1delayed $fault	0
-#testassert $step1delayed @fault_bits	0[0:11]
 $next_step = PULSE $step1delayed
 
 // Do a second lookup (thus checking that internal registers reset)
 // 0x0FEED -> NP via PT at 0x1231
 $enable    = DELAY  @step[2]
 @virt_addr = ENABLE @step[2], 0x0FEED[0:19]
-
-#testassert @step[2],@stage[0],$pmem_enable	@pmem_addr	0x10FC[0:31]
-$pmem_ready = AND{1}  @step[2],@stage[0],$pmem_enable, 1
-@pmem_data  = AND{32} @step[2],@stage[0],$pmem_enable, 0x1231001[0:31]
-#testassert @step[2],@stage[1],$pmem_enable	@pmem_addr	0x1231BB4[0:31]
-$pmem_ready = AND{1}  @step[2],@stage[1],$pmem_enable, 1
-@pmem_data  = AND{32} @step[2],@stage[1],$pmem_enable, 0x0[0:31]
+expect_pmem_rd 2,0, 0x00010FC, 0x1231001
+expect_pmem_rd 2,1, 0x1231BB4, 0x0000000
 #testassert @step[2],$ready	@stage[2]	1
 #testassert @step[2],$ready	$fault	1
-#testassert @step[2],$ready	@fault_bits	0x001[0:11]
 
 #testcomplete @step[3]
 
+#endtestcase
+//
+// Tests for MMU Translation subunit
+// - Contains TLB and PageWalk
+//
+
+%macro mmu_translate_common 2
+#array virt_addr	32
+#array pmem_data	32
+#array pmem_addr	32
+#array paddr_out	32
+#array fault_data	32
+$ready,@paddr_out,$fault,@fault_data,$pmem_enable,@pmem_addr = \
+	CPU32_MMU_TRANS %1[0:31],$enable,@virt_addr,$pmem_ready,@pmem_data
+#array step	%2
+$next_step = PULSE $ready
+@step  = SEQUENCER{%2} 1, 0, $next_step
+#array stage	4
+@stage = SEQUENCER{4} 1, (PULSE $ready), (PULSE{1} $pmem_enable)
+#testassert 1	@stage[3]	0	; Double-check that no overrun happens
+
+#display 1 "Int Stage: %4b, Step" @stage, @step
+%endmacro
+
+#testcase 100 "MMU Translate - Passthrough Succeed"
+mmu_translate_common 0x1000, 2
+
+// 1: Query 0x12345FED, expect no mem accesses and success
+$enable,@virt_addr = ENABLE @step[0], 1,0x12345FED[0:31]
+// 1.R: Result
+#testassert @step[0],$ready	@stage[0]	1
+#testassert @step[0],$ready	$fault	0
+#testassert @step[0],$ready	@fault_data	0[0:31]
+#testassert @step[0],$ready	@paddr_out	0x12345FED[0:31]
+#testcomplete @step[1]
+
+#endtestcase
+
+#testcase 200 "MMU Translate - Basic Succeed"
+mmu_translate_common 0x1001, 4
+
+// 0: Query 0x12345FED, expect two memory accesses and success
+$enable,@virt_addr = ENABLE @step[0], 1,0x12345FED[0:31]
+// 0.0: Top level PT
+expect_pmem_rd	0,0,	0x1120, 0x2001
+// 0.1: Second level PT
+expect_pmem_rd	0,1,	0x2D14, 0x3001
+// 0.R: Result
+#testassert @step[0],$ready	@stage[2]	1
+#testassert @step[0],$ready	$fault	0
+#testassert @step[0],$ready	@fault_data	0[0:31]
+#testassert @step[0],$ready	@paddr_out	0x3FED[0:31]
+
+// 1: Test reset
+$step2del = AND @step[1], (DELAY{8} @step[1])
+#testassert $step2del	$ready	0
+#testassert $step2del	$fault	0
+#testassert $step2del	$fault_data	0
+#testassert $step2del	@paddr_out	0[0:31]
+$next_step = PULSE $step2del
+
+// 2: Query 0x12345FED, expect no accesses and success (in TLB)
+$enable    = DELAY @step[2]
+@virt_addr = ENABLE @step[2], 0x12345FED[0:31]
+#testassert @step[2]	$pmem_enable	0
+// 2.R: Result
+#testassert @step[2],$ready	@stage[0]	1
+#testassert @step[2],$ready	$fault	0
+#testassert @step[2],$ready	@fault_data	0[0:31]
+#testassert @step[2],$ready	@paddr_out	0x3FED[0:31]
+
+#testcomplete @step[3]
 #endtestcase
 
 ; vim: ft=logiccircuit

@@ -6,7 +6,7 @@
 // mmu.cct
 // - Memory Management Unit (Paging)
 
-%define MMU_PERMBITS	1
+%define MMU_PERMBITS	3
 %define MMU_PHYSBITS	20
 
 //
@@ -29,6 +29,7 @@ $NULL, @tlbent_ %+ %1 = LATCH{TLBBITS} 1, @clr[%1], @tlbent_set_ %+ %1
 $hit_ %+ %1 = AND @tlbent_ %+ %1[TLBBITS-1], (XNOR{20,2} @vpage[0:19], @tlbent_ %+ %1[0:19])
 $enabled_hit_ %+ %1 = AND (DELAY{2} $enable),$hit_ %+ %1
 $hit,@ppage_out,@perms = ENABLE $enabled_hit_ %+ %1, 1,@tlbent_ %+ %1[20:20+MMU_PHYSBITS+MMU_PERMBITS-1]
+#display $enable "TLB[%5i] %1i %20x %20x (%1i)" %1[4:0],@tlbent_ %+ %1[40:0], $hit_ %+ %1
 %endmacro
 
 #array clr TLBSLOTS
@@ -37,11 +38,6 @@ $hit,@ppage_out,@perms = ENABLE $enabled_hit_ %+ %1, 1,@tlbent_ %+ %1[20:20+MMU_
 tlbslot i
 %assign i i+1
 %endrep
-
-#display 1 "TLB[0] = %1i %20x %20x (%1i)" @tlbent_0[40:0], $hit_0
-#display 1 "TLB[1] = %1i %20x %20x (%1i)" @tlbent_1[40:0], $hit_1
-#display 1 "TLB[2] = %1i %20x %20x (%1i)" @tlbent_2[40:0], $hit_2
-#display 1 "TLB[3] = %1i %20x %20x (%1i)" @tlbent_3[40:0], $hit_3
 
 $ready = DELAY{4} $enable
 
@@ -78,7 +74,7 @@ $done = PULSE $delay_enable
 #defunit CPU32_MMU_PAGEWALK
 #input $enable,@mmu_base[32], @addr[20], $pmem_ready,@pmem_data[32]
 #output $ready,@addr_out[MMU_PHYSBITS],@perms_out[MMU_PERMBITS],\
-	   $fault,@fault_reason[12], $pmem_enable,@pmem_addr[32]
+	   $no_translation, $pmem_enable,@pmem_addr[32]
 
 #display $enable "Base = %32x, VAddr=%20x" @mmu_base[31:0], @addr[19:0]
 
@@ -90,9 +86,7 @@ $reset = PULSE{1} $enable
 #array perms_set	MMU_PERMBITS
 $NULL, @addr_out,@perms_out = LATCH{MMU_PHYSBITS+MMU_PERMBITS} 1, $reset, @addr_set,@perms_set
 $NULL, $ready = LATCH{1} 1, $reset, $ready_set
-#array reason_set	12
-$NULL, @fault_reason = LATCH{12} 1, $reset, @reason_set
-$NULL, $fault = LATCH{1} 1, $reset, $fault_set
+$NULL, $no_translation = LATCH{1} 1, $reset, $fault_set
 
 // Internal latches
 // - TODO: Could kill one of these if needed
@@ -104,11 +98,11 @@ $NULL, @lvl1 = LATCH{32} 1, $reset, @lvl1_set
 $NULL, @lvl2 = LATCH{32} 1, $reset, @lvl2_set
 
 // Raise ready when a fault is asserted
-$ready_set = PULSE $fault
+$ready_set = PULSE $no_translation
 
 #array stage	8
 @stage = SEQUENCER{8} 1, $reset, $next_stage
-#display $enable "MMU Stage" @stage
+#display $enable "MMU Pagewalk Stage" @stage
 
 // [0]: Idle
 $next_stage = AND @stage[0], (PULSE $enable)
@@ -117,27 +111,68 @@ $pmem_enable,@pmem_addr[31:0] = ENABLE @stage[1], 1,@mmu_base[31:12],@addr[19:10
 $lvl1_ready,@lvl1_set         = ENABLE @stage[1], $pmem_ready,@pmem_data
 $next_stage = PULSE $lvl1_ready
 // [2]: Check permissions on Lvl1 entry
-#array lvl1_fail_rsn	12
-$lvl1_check_done,$lvl1_check_fail,@lvl1_fail_rsn = CPU32_MMU_CHECKBITS @stage[2], @lvl1[0:11]
-$next_stage   = PULSE (AND (DELAY $lvl1_check_done), (NOT $lvl1_check_fail))
-$fault_set  = ENABLE $lvl1_check_done, $lvl1_check_fail
-@reason_set = ENABLE $lvl1_check_done, @lvl1_fail_rsn
+$next_stage = PULSE (AND @stage[2], @lvl1[0])
+$fault_set  = PULSE (AND @stage[2], (NOT @lvl1[0]))
 // [3]: Request Lvl2
 $pmem_enable,@pmem_addr[31:0] = ENABLE @stage[3], 1,@lvl1[31:12],@addr[9:0],0,0
 $lvl2_ready,@lvl2_set         = ENABLE @stage[3], $pmem_ready,@pmem_data
 $next_stage = PULSE $lvl2_ready
 // [4]: Check permissions on lvl2 entry
-#array lvl2_fail_rsn	12
-$lvl2_check_done,$lvl2_check_fail,@lvl2_fail_rsn = CPU32_MMU_CHECKBITS @stage[4], @lvl2[0:11]
-$next_stage   = PULSE (AND (DELAY $lvl2_check_done), (NOT $lvl2_check_fail))
-$fault_set  = ENABLE $lvl2_check_done, $lvl2_check_fail
-@reason_set = ENABLE $lvl2_check_done, @lvl2_fail_rsn
-// [5]: Set address
+$next_stage = PULSE (AND @stage[4], @lvl2[0])
+$fault_set  = PULSE (AND @stage[4], (NOT @lvl2[0]))
+// [5]: Set address and permissions
 @addr_set[19:0] = ENABLE @stage[5], @lvl2[31:12]
-@perms_set[0]   = ENABLE @stage[5], @lvl2[1]
+@perms_set[0]   = ENABLE @stage[5], 1	// Present
+@perms_set[1]   = ENABLE @stage[5], (AND @lvl1[1], @lvl2[1])	// - Writable bit, both must be set
+@perms_set[2]   = ENABLE @stage[5], (XOR @lvl1[2], @lvl2[2])	// - System, XORd
 $next_stage = PULSE @stage[5]
 // [6]: Raise ready
 $ready_set = PULSE @stage[6]
+
+#endunit
+
+//
+// MMU Address Translation
+//
+#defunit CPU32_MMU_TRANS
+#input @mmu_base[32],$enable,@vaddr[32],$pmem_ready,@pmem_data[32]
+#output $ready,@paddr[32],$fault,@fault_data[32],$pmem_enable,@pmem_addr[32]
+
+#array perms	MMU_PERMBITS
+
+// Low bits always copied
+@paddr[0:11] = ENABLE $enable, @vaddr[0:11]
+// - Passthrough
+$ready,@paddr[12:31] = AND{1+20} (DELAY $enable), (NOT @mmu_base[0]), 1,@vaddr[12:31]
+// > TLB
+$tlb_done,$tlb_yes,@paddr[12:31],@perms = CPU32_MMU_TLB $tlb_enable,@vaddr[12:31], $tlb_store,@paddr[12:31],@perms
+// > Page Walker
+$pw_done,@paddr[12:31],@perms,$pw_fault,$pmem_enable,@pmem_addr \
+	= CPU32_MMU_PAGEWALK $pw_enable,@mmu_base,@vaddr[12:31],$pmem_ready,@pmem_data
+
+$reset = PULSE{1} $enable
+#array stage	3
+@stage = SEQUENCER{3} 1, $reset, $next_stage
+#display $enable "MMU Translate Stage" @stage
+
+// Any of these stage can 'stick' if they succeed (reset will return to 0)
+// [0]: Idle
+$next_stage = PULSE (AND $enable, @stage[0], @mmu_base[0])
+// [1]: TLB Check
+$tlb_enable = DELAY @stage[1]
+$next_stage = PULSE (AND @stage[1], (DELAY $tlb_done), (NOT $tlb_yes))
+$ready = AND @stage[1], $tlb_done, $tlb_yes
+// [2]: Page Walk
+$pw_enable = DELAY @stage[2]
+$_pw_bad =  AND @stage[2], (DELAY $pw_done), (DELAY $pw_fault)
+$fault,@fault_data = ENABLE $_pw_bad, 1, 1[0:31]
+$_pw_good = AND @stage[2], (DELAY $pw_done), (NOT $pw_fault)
+$ready = DELAY $_pw_good
+// - Save in TLB
+$tlb_store = PULSE $_pw_good
+$tlb_enable = PULSE $_pw_good
+
+// TODO: Permissions check
 
 #endunit
 
@@ -146,13 +181,18 @@ $ready_set = PULSE @stage[6]
 //
 
 #defunit CPU32_MMU
-;#input $enable_translation,@mmu_base[32], $mem_enable,@mem_addr[32],$mem_write,@mem_data_wr[32],\
-;	$pmem_ready,@pmem_data[32]
-;#output $mem_ready,@mem_data[32], $pmem_enable,@pmem_addr[32],$pmem_write,@pmem_data_wr[32], \
-;	$mmu_fault,@mmu_fault_data[32]
+//#input @mmu_base[32], $mem_enable,@mem_addr[32],$mem_write,@mem_data_wr[32],\
+//	$pmem_ready,@pmem_data[32]
+//#output $mem_ready,@mem_data[32], $pmem_enable,@pmem_addr[32],$pmem_write,@pmem_data_wr[32], \
+//	$mmu_fault,@mmu_fault_data[32]
+
+//#array trans_paddr	32
+
+//$trans_rdy,@trans_paddr,$mmu_fault,@mmu_fault_data, $pmem_enable,@pmem_addr \
+//	= CPU32_MMU_TRANS $mem_enable, @mmu_base, @mem_addr, $pmem_ready,@pmem_data
+
 
 ;$tlb_done,$tlb_yes,@addr_set[31:12] = CPU32_MMU_TLB $tlb_enable, @addr[31:12], $tlb_store,@addr_out[31:12]
-// [1]: TLB Check
 ;$tlb_enable = PULSE @stage[1]
 ;$_tlb_fail = AND @stage[1], (DELAY $tlb_done), (NOT $tlb_yes)
 ;$_tlb_succ = AND @stage[1], $tlb_done, $tlb_yes
