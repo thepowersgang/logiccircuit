@@ -275,12 +275,12 @@ tDisplayItem *Build_AddDisplayItem(const char *Name, const tList *Condition, con
 	
 	listHead = &Build_int_GetCurExecUnit()->DisplayItems;
 	
-	for( dispItem = *listHead; dispItem; prev = dispItem, dispItem = dispItem->Next )
-	{
-		if( strcmp(Name, dispItem->Label) == 0 ) {
-			return NULL;
-		}
-	}
+//	for( dispItem = *listHead; dispItem; prev = dispItem, dispItem = dispItem->Next )
+//	{
+//		if( strcmp(Name, dispItem->Label) == 0 ) {
+//			return NULL;
+//		}
+//	}
 
 	// Create new
 	namelen = strlen(Name)+1;
