@@ -6,7 +6,8 @@
 // mmu.cct
 // - Memory Management Unit (Paging)
 
-%define MMU_PERMBITS	3
+%define MMU_PERMBITS	4
+%define MMU_ACTIONBITS	3
 %define MMU_PHYSBITS	20
 
 //
@@ -124,7 +125,8 @@ $fault_set  = PULSE (AND @stage[4], (NOT @lvl2[0]))
 @addr_set[19:0] = ENABLE @stage[5], @lvl2[31:12]
 @perms_set[0]   = ENABLE @stage[5], 1	// Present
 @perms_set[1]   = ENABLE @stage[5], (AND @lvl1[1], @lvl2[1])	// - Writable bit, both must be set
-@perms_set[2]   = ENABLE @stage[5], (XOR @lvl1[2], @lvl2[2])	// - System, XORd
+@perms_set[2]   = ENABLE @stage[5], (XOR @lvl1[2], @lvl2[2])	// - User, XORd
+@perms_set[3]   = ENABLE @stage[5], (XOR @lvl1[3], @lvl2[3])	// - Execute, XORd
 $next_stage = PULSE @stage[5]
 // [6]: Raise ready
 $ready_set = PULSE @stage[6]
@@ -135,7 +137,7 @@ $ready_set = PULSE @stage[6]
 // MMU Address Translation
 //
 #defunit CPU32_MMU_TRANS
-#input @mmu_base[32],$enable,@vaddr[32],$pmem_ready,@pmem_data[32]
+#input @mmu_base[32],$enable,@vaddr[32],@action[MMU_ACTIONBITS],$pmem_ready,@pmem_data[32]
 #output $ready,@paddr[32],$fault,@fault_data[32],$pmem_enable,@pmem_addr[32]
 
 #array perms	MMU_PERMBITS
@@ -161,18 +163,24 @@ $next_stage = PULSE (AND $enable, @stage[0], @mmu_base[0])
 // [1]: TLB Check
 $tlb_enable = DELAY @stage[1]
 $next_stage = PULSE (AND @stage[1], (DELAY $tlb_done), (NOT $tlb_yes))
-$ready = AND @stage[1], $tlb_done, $tlb_yes
+$mapping_ready = AND @stage[1], $tlb_done, $tlb_yes
 // [2]: Page Walk
 $pw_enable = DELAY @stage[2]
 $_pw_bad =  AND @stage[2], (DELAY $pw_done), (DELAY $pw_fault)
-$fault,@fault_data = ENABLE $_pw_bad, 1, 1[0:31]
+$ready,$fault,@fault_data = ENABLE $_pw_bad, 1,1, 1[0:31]
 $_pw_good = AND @stage[2], (DELAY $pw_done), (NOT $pw_fault)
-$ready = DELAY $_pw_good
+$mapping_ready = DELAY $_pw_good
 // - Save in TLB
 $tlb_store = PULSE $_pw_good
 $tlb_enable = PULSE $_pw_good
 
 // TODO: Permissions check
+@fault_data[1] = AND @action[0], (NOT @perms[1])	// Write
+@fault_data[2] = AND @action[1], (NOT @perms[2])	// User
+@fault_data[3] = AND @action[2], (NOT @perms[3])	// Execute
+$fault = AND $mapping_ready, (OR @fault_data)
+
+$ready = DELAY $mapping_ready
 
 #endunit
 
