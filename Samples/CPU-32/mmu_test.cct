@@ -62,8 +62,19 @@ $tlb_enable = PULSE @stage[5]
 //
 
 %macro expect_pmem_rd 4
-#testassert @step[%1],@stage[%2],$pmem_enable	@pmem_addr	%3[0:31]
-$pmem_ready,@pmem_data = AND{1+32} @step[%1],@stage[%2],$pmem_enable, 1,%4[0:31]
+%define trigger	$_pmem_rd_ %+ %1 %+ _ %+ %2
+trigger = PULSE $pmem_enable
+#testassert @step[%1],@stage[%2],trigger	(DELAY @pmem_addr)	%3[0:31]
+#testassert @step[%1],@stage[%2],trigger	$pmem_write	0
+$pmem_ready,@pmem_data = AND{1+32} @step[%1],@stage[%2],trigger, 1,%4[0:31]
+%endmacro
+%macro expect_pmem_wr 4
+%define trigger	$_pmem_wr_ %+ %1 %+ _ %+ %2
+trigger = PULSE $pmem_enable
+#testassert @step[%1],@stage[%2],trigger	(DELAY @pmem_addr)	%3[0:31]
+#testassert @step[%1],@stage[%2],trigger	(DELAY $pmem_write)	1
+#testassert @step[%1],@stage[%2],trigger	(DELAY @pmem_data_wr)	%4[0:31]
+$pmem_ready = AND{1} @step[%1],@stage[%2],trigger, 1
 %endmacro
 
 %macro mmu_pagewalk_common 2
@@ -285,6 +296,50 @@ expect_pmem_rd 6,1, 0x12345FC0, 0x12345003	; Present, RW,Sys,NX
 #testassert @step[6],$ready	$fault	0
 
 #testcomplete @step[7]
+#endtestcase
+
+// ====================================================================
+// Tests for MMU Core
+// - Wraps MMU Translation unit and performs read/write
+// ====================================================================
+%macro mmu_core_common 2
+#array virt_addr	32
+#array data_rd	32
+#array data_wr	32
+#array pmem_data	32
+#array pmem_data_wr	32
+#array pmem_addr	32
+#array fault_data	32
+$ready,@data_rd,$pmem_enable,@pmem_addr,$pmem_write,@pmem_data_wr,$fault,@fault_data = \
+	CPU32_MMU %1[0:31],$enable,@virt_addr,$write,@data_wr,$pmem_ready,@pmem_data
+#array step	%2
+$next_step = PULSE $ready
+@step  = SEQUENCER{%2} 1, 0, $next_step
+#array stage	5
+@stage = SEQUENCER{5} 1, (PULSE $ready), (PULSE{1} $pmem_enable)
+#testassert 1	@stage[4]	0	; Double-check that no overrun happens
+#display 1 "Test: Stage: %5b, Step" @stage, @step
+%endmacro
+
+#testcase 100 "MMU Core - No Translation"
+mmu_core_common 0x00000000, 4
+
+$stage_0_pulse = PULSE @step[0]
+$enable,@virt_addr = ENABLE $stage_0_pulse, 1,0x12345FEC[0:31]
+expect_pmem_rd 0,0, 0x12345FEC, 0xFEEDFEED
+#testassert @step[0]	$fault	0
+#testassert @step[0],$ready	@stage	0b0010[0:4]
+#testassert @step[0],$ready	@data_rd	0xFEEDFEED[0:31]
+
+$next_step = ENABLE @step[1], (PULSE{1} $ready)
+
+$stage_2_pulse = PULSE @step[2]
+$enable,@virt_addr,$write,@data_wr = ENABLE $stage_2_pulse, 1,0x12345FEC[0:31], 1, 0xBADBEEF1[0:31]
+expect_pmem_wr 2,0, 0x12345FEC, 0xBADBEEF1
+#testassert @step[2]	$fault	0
+#testassert @step[2],$ready	@stage	0b0010[0:4]
+
+#testcomplete @step[3]
 #endtestcase
 
 ; vim: ft=logiccircuit

@@ -174,13 +174,13 @@ $mapping_ready = DELAY $_pw_good
 $tlb_store = PULSE $_pw_good
 $tlb_enable = PULSE $_pw_good
 
-// TODO: Permissions check
+// Permissions checks
 @fault_data[1] = AND @action[0], (NOT @perms[1])	// Write
 @fault_data[2] = AND @action[1], (NOT @perms[2])	// User
 @fault_data[3] = AND @action[2], (NOT @perms[3])	// Execute
-$fault = AND $mapping_ready, (OR @fault_data)
+$fault = AND (DELAY{2} $mapping_ready), (OR @fault_data)
 
-$ready = DELAY $mapping_ready
+$ready = DELAY{3} $mapping_ready
 
 #endunit
 
@@ -189,26 +189,31 @@ $ready = DELAY $mapping_ready
 //
 
 #defunit CPU32_MMU
-//#input @mmu_base[32], $mem_enable,@mem_addr[32],$mem_write,@mem_data_wr[32],\
-//	$pmem_ready,@pmem_data[32]
-//#output $mem_ready,@mem_data[32], $pmem_enable,@pmem_addr[32],$pmem_write,@pmem_data_wr[32], \
-//	$mmu_fault,@mmu_fault_data[32]
+#input @mmu_base[32], $mem_enable,@mem_addr[32],$mem_write,@mem_data_wr[32],\
+	$pmem_ready,@pmem_data[32]
+#output $mem_ready,@mem_data[32], $pmem_enable,@pmem_addr[32],$pmem_write,@pmem_data_wr[32], \
+	$mmu_fault,@mmu_fault_data[32]
 
-//#array trans_paddr	32
+#array action	MMU_ACTIONBITS
+#array vaddr	32
+#array wr_data	32
+$NULL,$int_enable = LATCH 1, (PULSE $mem_ready), $mem_enable
+$NULL,@vaddr = LATCH{32} 1, (PULSE $mem_ready), @mem_addr
+$NULL,@action = LATCH{MMU_ACTIONBITS} 1, (PULSE $mem_ready), $mem_write,0,0
+$NULL,@wr_data = LATCH{32} 1, (PULSE $mem_ready), @mem_data_wr
 
-//$trans_rdy,@trans_paddr,$mmu_fault,@mmu_fault_data, $pmem_enable,@pmem_addr \
-//	= CPU32_MMU_TRANS $mem_enable, @mmu_base, @mem_addr, $pmem_ready,@pmem_data
 
+#array trans_paddr	32
+#display $int_enable "Base:%32x, Addr:%32x, Action" @mmu_base[31:0], @vaddr[31:0], @action
+$trans_rdy,@trans_paddr,$mmu_fault,@mmu_fault_data, $pmem_enable,@pmem_addr \
+	= CPU32_MMU_TRANS @mmu_base, $int_enable, @vaddr,@action, $pmem_ready,@pmem_data
+#display $trans_rdy "Translated Addr:%32x, Fault %1i/%32x" @trans_paddr[31:0], $mmu_fault, @mmu_fault_data[31:0]
 
-;$tlb_done,$tlb_yes,@addr_set[31:12] = CPU32_MMU_TLB $tlb_enable, @addr[31:12], $tlb_store,@addr_out[31:12]
-;$tlb_enable = PULSE @stage[1]
-;$_tlb_fail = AND @stage[1], (DELAY $tlb_done), (NOT $tlb_yes)
-;$_tlb_succ = AND @stage[1], $tlb_done, $tlb_yes
-;$next_stage = PULSE $_tlb_fail
-;$ready_set = PULSE $_tlb_succ
+$pmem_pulse = AND (PULSE $trans_rdy), (NOT $mmu_fault)
+$pmem_enable,@pmem_addr   = ENABLE $pmem_pulse, 1,@trans_paddr
+$pmem_write,@pmem_data_wr = ENABLE $pmem_pulse, @action[0],@wr_data
 
-// Passthrough if $enable_translation is low
-
+$mem_ready,@mem_data = ENABLE $trans_rdy, $pmem_ready,@pmem_data
 
 #endunit
 
