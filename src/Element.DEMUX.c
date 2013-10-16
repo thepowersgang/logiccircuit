@@ -46,29 +46,28 @@ static void _Update(tElement *Ele)
 	struct info	*info = Ele->Info;
 	unsigned int	sel = 0;
 	
+	// If !ENABLE, don't drive anything
+	if( !GetEleLink(Ele, 0) )
+		return ;
+	
 	// Parse inputs as a binary stream
 	for( int i = 1; i < 1+info->bits; i ++ )
 	{
-		if( GetLink(Ele->Inputs[i]) )
+		if( GetEleLink(Ele, i) )
 			sel |= 1 << (i-info->databits);
 	}
 	
-	// If ENABLE, drive output
-	if( GetLink(Ele->Inputs[0]) )
+	const int in_ofs = 1+info->bits;
+	const int out_ofs = sel*info->databits;
+	for( int i = 0; i < info->databits; i ++ )
 	{
-		const int in_ofs = 1+info->bits;
-		const int out_ofs = sel*info->databits;
-		for( int i = 0; i < info->databits; i ++ )
-		{
-			if( GetLink(Ele->Inputs[in_ofs + i]) )
-				RaiseLink(Ele->Outputs[out_ofs+i]);
-		}
+		SetEleLink(Ele, out_ofs+i, GetEleLink(Ele, in_ofs+i));
 	}
 }
 
 tElementDef gElement_DEMUX = {
 	NULL, "DEMUX",
-	2, -1,
+	2, -1, 1,
 	_Create,
 	NULL,
 	_Update

@@ -84,7 +84,6 @@ int main(int argc, char *argv[])
 	ADD_ELEDEF(ENABLE);
 	ADD_ELEDEF(PULSE);
 	ADD_ELEDEF(HOLD);
-	ADD_ELEDEF(VALUESET);
 	ADD_ELEDEF(SEQUENCER);
 	ADD_ELEDEF(MEMORY_DRAM);
 	ADD_ELEDEF(FILEROM);
@@ -222,13 +221,14 @@ int main(int argc, char *argv[])
 			while( steps_elapsed != test->MaxLength && !bFailure )
 			{
 				Sim_RunStep(compiled_test);
-				if( gbTest_ShowDisplay )
-					Sim_ShowDisplayItems(compiled_test->DisplayItems);
+				if( gbTest_ShowDisplay ) {
+					Sim_ShowDisplayItems(steps_elapsed, compiled_test->DisplayItems);
+				}
 				steps_elapsed ++;
 			
 				bFailure = Sim_CheckAssertions(compiled_test->Assertions);
 				
-				if( cc && GetLink(cc) )
+				if( cc && GetLinkVal(cc) )
 					break;
 			}
 			if( bFailure == 1 ) {
@@ -327,8 +327,7 @@ int main(int argc, char *argv[])
 		}
 		if( !gbHideDebug )
 		{
-			printf("---- %6i ----\n", timestamp);
-			Sim_ShowDisplayItems(compiled_root->DisplayItems);
+			Sim_ShowDisplayItems(timestamp, compiled_root->DisplayItems);
 		}
 	
 		// Check breakpoints

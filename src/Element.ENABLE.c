@@ -22,23 +22,19 @@ static tElement *_Create(int NParams, int *Params, int NInputs)
 
 static void _Update(tElement *Ele)
 {
-	if( GetLink(Ele->Inputs[0]) )
+	if( !GetEleLink(Ele, 0) )
+		return ;
+
+	for( int i = 0; i < Ele->NInputs-1; i ++ )
 	{
-		for( int i = 0; i < Ele->NInputs-1; i ++ )
-		{
-			if( GetLink(Ele->Inputs[i+1]) )
-				RaiseLink(Ele->Outputs[i]);
-		}
-	}
-	else
-	{
-		// No raise
+		SetEleLink(Ele, i, GetEleLink(Ele, 1+i));
 	}
 }
 
 tElementDef gElement_ENABLE = {
 	NULL, "ENABLE",
 	2, -1,
+	1,
 	_Create,
 	NULL,
 	_Update

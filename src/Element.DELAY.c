@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+#include <assert.h>
 
 typedef struct
 {
@@ -12,6 +13,11 @@ typedef struct
 	 int	Pos;
 	int8_t	*Cache;
 }	t_info;
+
+tElementDef	gElement_DELAY_1_n;
+tElementDef	gElement_DELAY_1_1;
+tElementDef	gElement_DELAY_2_n;
+tElementDef	gElement_DELAY_2_1;
 
 // === CODE ===
 static tElement *_Create(int NParams, int *Params, int NInputs)
@@ -28,11 +34,22 @@ static tElement *_Create(int NParams, int *Params, int NInputs)
 	tElement *ret = EleHelp_CreateElement( NInputs, NInputs, sizeof(t_info) + cache_size);
 	if(!ret)	return NULL;
 	t_info	*info = ret->Info;
-	
+
 	info->Pos = 0;
 	info->Delay = delay_time - 1;
 	info->Cache = (void*)(info + 1);
 	memset(info->Cache, 0, cache_size);
+
+	if( delay_time == 1 ) {
+		ret->Type = (NInputs == 1 ? &gElement_DELAY_1_1 : &gElement_DELAY_1_n);
+	}
+	else if( delay_time == 2 ) {
+		ret->Type = (NInputs == 1 ? &gElement_DELAY_2_1 : &gElement_DELAY_2_n);
+	}
+	else {
+		// ret->Type = NULL;
+		// default
+	}
 	
 	return ret;
 }
@@ -57,37 +74,77 @@ static int _Duplicate(const tElement *Source, tElement *New)
 static void _Update(tElement *Ele)
 {
 	t_info	*this = Ele->Info;
-	 int	i;
 	
 	// Single cycle delay
-	if( this->Delay == 0 )
-	{
-		for( i = 0; i < Ele->NInputs; i ++ )
-		{
-			if( GetLink(Ele->Inputs[i]) )
-				RaiseLink(Ele->Outputs[i]);
-		}
-	}
-	else
-	{
-		 int	ofs = this->Pos * Ele->NInputs;
-		
-		for( i = 0; i < Ele->NInputs; i ++ )
-		{
-			if( this->Cache[ ofs + i ] )
-				RaiseLink(Ele->Outputs[i]);
+	assert(this->Delay);
+	 int	ofs = this->Pos * Ele->NInputs;
 	
-			this->Cache[ ofs + i ] = GetLink(Ele->Inputs[i]);
-		}
-		this->Pos ++;
-		if(this->Pos == this->Delay)	this->Pos = 0;
+	for( int i = 0; i < Ele->NInputs; i ++ ) {
+		SetEleLink(Ele, i, this->Cache[ ofs + i ]);
+		this->Cache[ ofs + i ] = GetEleLink(Ele, i);
+	}
+	this->Pos ++;
+	if(this->Pos == this->Delay)	this->Pos = 0;
+}
+
+static void _Update_1_1(tElement *Ele)
+{
+	SetEleLink(Ele, 0, GetEleLink(Ele, 0));
+}
+static void _Update_1_n(tElement *Ele)
+{
+	for( int i = 0; i < Ele->NInputs; i ++ )
+		SetEleLink(Ele, i, GetEleLink(Ele, i));
+}
+static void _Update_2_1(tElement *Ele)
+{
+	t_info	*this = Ele->Info;
+	SetEleLink(Ele, 0, this->Cache[0]);
+	this->Cache[0] = GetEleLink(Ele, 0);
+}
+static void _Update_2_n(tElement *Ele)
+{
+	t_info	*this = Ele->Info;
+	for( int i = 0; i < Ele->NInputs; i ++ ) {
+		SetEleLink(Ele, i, this->Cache[i]);
+		this->Cache[i] = GetEleLink(Ele, i);
 	}
 }
 
 tElementDef gElement_DELAY = {
 	NULL, "DELAY",
 	1, -1,
+	0,	// Settle disabled (time is runtime-determined)
 	_Create,
 	_Duplicate,
 	_Update
+};
+
+tElementDef gElement_DELAY_2_n = {
+	NULL, "DELAY{1,n}",
+	1, -1,
+	2,
+	_Create, _Duplicate,
+	_Update_2_n
+};
+tElementDef gElement_DELAY_2_1 = {
+	NULL, "DELAY{1,1}",
+	1, 1,
+	2,
+	_Create, _Duplicate,
+	_Update_2_1
+};
+tElementDef gElement_DELAY_1_n = {
+	NULL, "DELAY{1,n}",
+	1, -1,
+	1,
+	_Create, _Duplicate,
+	_Update_1_n
+};
+tElementDef gElement_DELAY_1_1 = {
+	NULL, "DELAY{1,1}",
+	1, 1,
+	1,
+	_Create, _Duplicate,
+	_Update_1_1
 };

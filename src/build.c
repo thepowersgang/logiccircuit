@@ -587,7 +587,9 @@ tList *Build_AppendElement(tElementDef *def, int NParams, const int *Params, con
 		fprintf(stderr, "Error in creating '%s'\n", def->Name);
 		return NULL;
 	}
-	ele->Type = def;	// Force type to be set
+	if( ele->Type == NULL ) {	// NULL check allows a type to select a more efficient impl for edge cases
+		ele->Type = def;	// Force type to be set
+	}
 	ele->Block = gpCurBlock;
 	
 	if( Inputs->NItems != ele->NInputs ) {
@@ -882,29 +884,48 @@ int List_EquateLinks(tList *Dest, const tList *Src)
 
 tElement *EleHelp_CreateElement(size_t NInputs, size_t NOutputs, size_t ExtraData)
 {
-	tElement *ret = malloc(sizeof(tElement) + (NInputs + NOutputs)*sizeof(tLink*) + ExtraData);
+	size_t	size = sizeof(tElement) + (NInputs + NOutputs)*sizeof(tLink*)
+		+ (NInputs + NOutputs)*sizeof(tLinkValue*)
+		+ ExtraData
+		+ NOutputs * sizeof(bool);
+	tElement *ret = malloc(size);
 	assert(ret);
+	ret->Type = NULL;
 
 	ret->NInputs = NInputs;
 	ret->Inputs = (void*)(ret + 1);
 
 	ret->NOutputs = NOutputs;
 	ret->Outputs = ret->Inputs + NInputs;
-	
+
+	ret->InVals  = (void*)(ret->Outputs + NOutputs);
+	ret->OutVals = ret->InVals + NInputs;
+
 	ret->InfoSize = ExtraData;
-	ret->Info = ret->Outputs + NOutputs;
+	ret->Info = ret->OutVals + NOutputs;
+
+	ret->SettledOutput = ret->Info + ExtraData;
+	memset(ret->SettledOutput, 0, NOutputs*sizeof(bool));
+//	printf("ret=%p{Inputs:%p,Outputs:%p,SettledOutput:%p,Info:%p}\n",
+//		ret, ret->Inputs, ret->Outputs, ret->SettledOutput, ret->Info);
 	return ret;
 }
 
 tElement *Build_DuplicateElement(const tElement *Ele)
 {
-	size_t	size = sizeof(tElement) + (Ele->NInputs + Ele->NOutputs)*sizeof(tLink*) + Ele->InfoSize;
+	size_t	size = sizeof(tElement)
+		+ (Ele->NInputs + Ele->NOutputs)*sizeof(tLink*)
+		+ (Ele->NInputs + Ele->NOutputs)*sizeof(tLinkValue*)
+		+ Ele->InfoSize + Ele->NOutputs*sizeof(bool);
 	tElement *ret = malloc(size);
 	assert(ret);
 	memcpy(ret, Ele, size);
 	ret->Inputs = (void*)(ret + 1);
 	ret->Outputs = ret->Inputs + ret->NInputs;
-	ret->Info = ret->Outputs + ret->NOutputs;
+	ret->InVals = (void*)(ret->Outputs + ret->NOutputs);
+	ret->OutVals = ret->InVals + ret->NInputs;
+	ret->Info = ret->OutVals + ret->NOutputs;
+	ret->SettledOutput = ret->Info + ret->InfoSize;
 	
 	if( Ele->Type && Ele->Type->Duplicate )
 		Ele->Type->Duplicate(Ele, ret);

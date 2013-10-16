@@ -34,11 +34,11 @@ static void _Update(tElement *Ele)
 	t_info	*this = Ele->Info;
 	
 	// Reset
-	if( GetLink(Ele->Inputs[0]) )
+	if( GetEleLink(Ele, 0) )
 		this->Pos = 0;
 	
 	// Increment
-	if( GetLink(Ele->Inputs[1]) )
+	if( GetEleLink(Ele, 1) )
 		this->Pos ++;
 	
 	// Wrap
@@ -47,14 +47,13 @@ static void _Update(tElement *Ele)
 	
 	// Output
 	for( int i = 0; i < this->Size; i ++ ) {
-		if( this->Pos & (1 << i) )
-			RaiseLink(Ele->Outputs[i]);
+		SetEleLink(Ele, i, !!(this->Pos & (1<<i)));
 	}
 }
 
 tElementDef gElement_COUNTER = {
 	NULL, "COUNTER",
-	2, 2,
+	2, 2, 1,
 	_Create,
 	NULL,
 	_Update

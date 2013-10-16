@@ -30,14 +30,14 @@ static tElement *_Create(int NParams, int *Params, int NInputs)
 static void _Update(tElement *Ele)
 {
 	t_info	*this = Ele->Info;
-	if(this->Pos == 0)	RaiseLink(Ele->Outputs[0]);
+	SetEleLink(Ele, 0, (this->Pos == 0));
 	this->Pos ++;
 	if(this->Pos == this->Period)	this->Pos = 0;
 }
 
 tElementDef gElement_CLOCK = {
 	NULL, "CLOCK",
-	0, 0,
+	0, 0, 0,
 	_Create,
 	NULL,
 	_Update

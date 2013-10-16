@@ -34,27 +34,24 @@ static tElement *_Create(int NParams, int *Param, int NInputs)
 static void _Update(tElement *Ele)
 {
 	t_info	*this = Ele->Info;
-	bool	nextval = GetLink(Ele->Inputs[0]);
+	bool	nextval = GetEleLink(Ele, 0);
 	
 	if( this->Dir )
 	{
 		// Single pulse on trailing edge
-		if( this->CurVal & !nextval )
-			RaiseLink(Ele->Outputs[0]);
+		SetEleLink( Ele, 0, (this->CurVal && !nextval) );
 	}
 	else
 	{
 		// Single pulse on rising edge
-		if( !this->CurVal && nextval ) {
-			RaiseLink(Ele->Outputs[0]);
-		}
+		SetEleLink( Ele, 0, (!this->CurVal && nextval) );
 	}
 	this->CurVal = nextval;
 }
 
 tElementDef gElement_PULSE = {
 	NULL, "PULSE",
-	1, 1,
+	1, 1, 2,	// settles in two ticks (Raise, lower)
 	_Create,
 	NULL,
 	_Update

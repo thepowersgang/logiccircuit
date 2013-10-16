@@ -1,11 +1,12 @@
 /*
  * LogicCircuit
- * - By John HOdge (thePowersGang)
+ * - By John Hodge (thePowersGang)
  *
  * sim.c
  * - Simulation Code
  */
-#define USE_THREADS	 1
+#define USE_THREADS	1
+#define USE_SETTLE	0
 #define NONTHREADED_VALUES	0
 #include <common.h>
 #include <assert.h>
@@ -450,6 +451,15 @@ tExecUnit *Sim_CreateMesh(tTestCase *Template, tLink **CompletionCond)
 		else
 			*CompletionCond = NULL;
 	}
+
+	// Resolve element values
+	for( tElement *ele = ret->Elements; ele; ele = ele->Next )
+	{
+		for( int i = 0; i < ele->NInputs; i ++ )
+			ele->InVals[i] = ele->Inputs[i]->Value;
+		for( int i = 0; i < ele->NOutputs; i ++ )
+			ele->OutVals[i] = ele->Outputs[i]->Value;
+	}
 	
 	return ret;
 }
@@ -516,6 +526,41 @@ void Sim_int_ThreadSync(struct sStageCompletion *Stage, int ID)
 	#endif
 }
 
+static inline void Sim_int_UpdateElement(tElement *Ele)
+{
+#if USE_SETTLE
+	 int	st = Ele->Type->SettleTime;
+	bool needs_update = (st == 0);
+	for( int i = 0; i < Ele->NInputs; i ++ ) {
+		needs_update |= (Ele->InVals[i]->IdleTime <= st);
+	}
+	
+	if( needs_update ) {
+		memset(Ele->SettledOutput, 0, Ele->NOutputs*sizeof(bool));
+#endif
+		Ele->Type->Update(Ele);
+#if USE_SETTLE
+	}
+	else {
+		for( int i = 0; i < Ele->NOutputs; i ++ ) {
+			if( Ele->SettledOutput[i] )
+				Ele->OutVals[i]->NDrivers ++;
+		}
+	}
+#endif
+}
+
+static inline void Sim_int_UpdateValue(tLinkValue *Val)
+{
+	bool	newvalue = (Val->NDrivers != 0);
+	Val->HasChanged = (newvalue != Val->Value);
+	if( Val->HasChanged )
+		Val->IdleTime = 0;
+	else
+		Val->IdleTime ++;
+	Val->Value = newvalue;
+}
+
 void Sim_int_RunStepPart(const tExecUnit *Unit, int Ofs)
 {
 	#if !NONTHREADED_VALUES
@@ -529,8 +574,7 @@ void Sim_int_RunStepPart(const tExecUnit *Unit, int Ofs)
 	// === Update elements ===
 	for( int i = Ofs; i < Unit->nElements; i += giNumThreads )
 	{
-		tElement	*ele = Unit->ElementArray[i];
-		ele->Type->Update( ele );
+		Sim_int_UpdateElement( Unit->ElementArray[i] );
 	}
 	Sim_int_ThreadSync(&gStagesComplete[2], Ofs);
 	
@@ -538,8 +582,7 @@ void Sim_int_RunStepPart(const tExecUnit *Unit, int Ofs)
 	#if !NONTHREADED_VALUES
 	for( int i = Ofs; i < Unit->nValues; i += giNumThreads )
 	{
-		tLinkValue	*val = Unit->ValueArray[i];
-		val->Value = (val->NDrivers != 0);
+		Sim_int_UpdateValue(Unit->ValueArray[i]);
 	}
 	Sim_int_ThreadSync(&gStagesComplete[3], Ofs);
 	#endif
@@ -625,15 +668,13 @@ void Sim_RunStep(tExecUnit *Unit)
 	gValue_Zero.Value = 0;
 	gValue_Zero.NDrivers = 0;
 	#if NONTHREADED_VALUES
-	for( int i = 0; i < Unit->nValues; i ++ )
-	{
-		tLinkValue	*val = Unit->ValueArray[i];
-		val->Value = (val->NDrivers != 0);
+	for( int i = 0; i < Unit->nValues; i ++ ) {
+		Sim_int_UpdateValue(Unit->ValueArray[i]);
 	}
 	#endif
 }
 
-void Sim_ShowDisplayItems(tDisplayItem *First)
+void Sim_ShowDisplayItems(size_t StepNum, tDisplayItem *First)
 {
 	 int	i;
 	 int	bHasDisplayed = 0;
@@ -646,14 +687,14 @@ void Sim_ShowDisplayItems(tDisplayItem *First)
 //			printf("%s(%p %i)\n", dispItem->Condition.Items[i]->Name,
 //				dispItem->Condition.Items[i]->Value,
 //				dispItem->Condition.Items[i]->Value->Value);
-			if( !GetLink(dispItem->Condition.Items[i]) ) {
+			if( !GetLinkVal(dispItem->Condition.Items[i]) ) {
 				break;
 			}
 		}
 		if( i != dispItem->Condition.NItems )	continue;
 
 		if( !bHasDisplayed ) {
-			printf("-----\n");
+			printf("----- %6zi -----\n", StepNum);
 			bHasDisplayed = 1;
 		}
 
@@ -671,7 +712,7 @@ int Sim_CheckBreakpoints(tExecUnit *Unit)
 		// Check condition (if one condition line is high, the item is displayed)
 		for( i = 0; i < bp->Condition.NItems; i ++ )
 		{
-			if( GetLink(bp->Condition.Items[i]) ) {
+			if( GetLinkVal(bp->Condition.Items[i]) ) {
 				break;
 			}
 		}
@@ -709,7 +750,7 @@ int Sim_CheckAssertions(tAssertion *First)
 	
 		for( i = 0; i < a->Condition.NItems; i ++ )
 		{
-			if( !GetLink(a->Condition.Items[i]) )
+			if( !GetLinkVal(a->Condition.Items[i]) )
 				break ;
 		}
 		// If one condition failed, don't check
@@ -719,7 +760,7 @@ int Sim_CheckAssertions(tAssertion *First)
 		// Check that Expected == Actual
 		for( i = 0; i < a->Expected.NItems; i ++ )
 		{
-			if( GetLink(a->Expected.Items[i]) != GetLink(a->Values.Items[i]) )
+			if( GetLinkVal(a->Expected.Items[i]) != GetLinkVal(a->Values.Items[i]) )
 				break;
 		}
 		// Assertion passed

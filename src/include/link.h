@@ -3,6 +3,8 @@
 #ifndef _LINK_H_
 #define _LINK_H_
 
+#include <stdbool.h>
+
 typedef struct sLink	tLink;
 typedef struct sLinkValue	tLinkValue;
 
@@ -22,35 +24,24 @@ struct sLink
 struct sLinkValue
 {
 	tLinkValue	*Next;	//!< Next link in unit
-	 int	Value;	//!< Current value of the link
+	bool	HasChanged;
+	bool	Value;	//!< Current value of the link
+	unsigned long	IdleTime;
 	 int	NDrivers;	//!< Number of elements raising the line
 	 int	ReferenceCount;	//!< Number of references to this value
 	tLink	*FirstLink;
 	void	*Info;
 };
 
-#if 0
-#include "element.h"
-
-static inline int GetLink(tElement *Ele, int InputNum)
-{
-	return !!Ele->Inputs[InputNum]->Value->Value;
-}
-
-static inline void RaiseLink(tElement *Ele, int OutputNum)
-{
-	Ele->Outputs[OutputNum]->Value->NDrivers ++;
-}
-#else
-static inline int GetLink(tLink *Link)
+static inline int GetLinkVal(tLink *Link)
 {
 	return !!Link->Value->Value;
 }
 
-static inline void RaiseLink(tLink *Link)
+static inline void SetLinkVal(tLink *Link, bool Value)
 {
-	Link->Value->NDrivers ++;
+	if( Value ) {
+		Link->Value->NDrivers ++;
+	}
 }
-#endif
-
 #endif

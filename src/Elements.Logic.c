@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 
 typedef struct
 {
@@ -50,17 +51,16 @@ static tElement *_Create(int NParams, int *Params, int NInputs)
 	t_info *info = Ele->Info; \
 	const int	base = Ele->NInputs - Ele->NOutputs*info->BusCount; \
 	for( int i = base; i-- ; ) {\
-		out = out __operation GetLink(Ele->Inputs[i]); \
+		out = out __operation GetEleLink(Ele, i); \
 	} \
 	for( int j = Ele->NOutputs; j --;  ) { \
 		 int	outTmp = out; \
 		 int	ofs = base + j; \
 		for( int i = info->BusCount; i --; ) { \
-			outTmp = outTmp __operation GetLink(Ele->Inputs[ofs]); \
+			outTmp = outTmp __operation GetEleLink(Ele, ofs); \
 			ofs += Ele->NOutputs; \
 		} \
-		if( outTmp == !(__invert) ) \
-			RaiseLink(Ele->Outputs[j]); \
+		SetEleLink(Ele, j, (outTmp == !(__invert))); \
 	} \
 }
 
@@ -85,16 +85,36 @@ static void _Update_AND(tElement *Ele) {
 }
 #endif
 
+#if 1
+static void _Update_XOR(tElement *Ele) {
+	 int	out = 0;
+	t_info *info = Ele->Info;
+	const int	base = Ele->NInputs - Ele->NOutputs*info->BusCount;
+	for( int i = base; i-- ; ) {
+		out = out ^ GetEleLink(Ele, i);
+	}
+	for( int j = Ele->NOutputs; j --;  ) {
+		 int	outTmp = out;
+		 int	ofs = base + j;
+		for( int i = info->BusCount; i --; ) {
+			outTmp = outTmp ^ GetEleLink(Ele, ofs);
+			ofs += Ele->NOutputs;
+		}
+		SetEleLink(Ele, j, (outTmp == !(0)));
+	}
+}
+#endif
+
 MAKE_ELE_UPDATE(AND, 1, &&, 0);
 MAKE_ELE_UPDATE(OR,  0, ||, 0);
-MAKE_ELE_UPDATE(XOR, 0, ^, 0);
+//MAKE_ELE_UPDATE(XOR, 0, ^, 0);
 MAKE_ELE_UPDATE(NAND, 1, &&, 1);
 MAKE_ELE_UPDATE(NOR, 0, ||, 1);
 MAKE_ELE_UPDATE(NXOR, 0, ^, 1);
 MAKE_ELE_UPDATE(XNOR, 0, ^, 1);
 
 #define CREATE_ELE(__name) tElementDef gElement_##__name = {\
-	NULL, #__name, 1, -1, _Create, NULL, _Update_##__name \
+	NULL, #__name, 1, -1, 1, _Create, NULL, _Update_##__name \
 } \
 
 CREATE_ELE(AND);

@@ -64,16 +64,16 @@ static void _Update(tElement *Ele)
 	const int	iWriteValFirst = iWriteMaskFirst + this->DataLines;
 
 	// Check enable line
-	if( !GetLink(Ele->Inputs[0]) )
+	if( !GetEleLink(Ele, 0) )
 		return ;
 
 	for( int i = 0; i < this->AddressLines; i ++ )
-		addr |= GetLink(Ele->Inputs[1 + i]) ? (1 << i) : 0;
+		addr |= GetEleLink(Ele, 1 + i) ? (1 << i) : 0;
 
-	 int	bWrite = GetLink(Ele->Inputs[iWriteEnable]);
+	 int	bWrite = GetEleLink(Ele, iWriteEnable);
 	for( int i = 0; i < this->DataLines; i ++ ) {
-		val |= GetLink(Ele->Inputs[iWriteMaskFirst + i]) ? (1 << i) : 0;
-		mask |= GetLink(Ele->Inputs[iWriteValFirst + i]) ? (1 << i) : 0;
+		val  |= GetEleLink(Ele, iWriteMaskFirst + i) ? (1 << i) : 0;
+		mask |= GetEleLink(Ele, iWriteValFirst + i)  ? (1 << i) : 0;
 	}
 
 	switch( this->DataLines )
@@ -90,16 +90,16 @@ static void _Update(tElement *Ele)
 		break;
 	}
 
+	SetEleLink(Ele, 0, true);
 	for( int i = 0; i < this->DataLines; i ++ ) {
-		if( rv & (1 << i) )
-			RaiseLink(Ele->Outputs[1 + i]);
+		SetEleLink(Ele, 1+i, !!(rv & (1 << i)));
 	}
-	RaiseLink(Ele->Outputs[0]);
 }
 
 tElementDef gElement_MEMORY_DRAM = {
 	NULL, "MEMORY_DRAM",
 	0, -1,
+	1,
 	_Create,
 	_Duplicate,
 	_Update

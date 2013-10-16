@@ -17,14 +17,13 @@ static void _Update(tElement *Ele)
 {
 	for( int i = 0; i < Ele->NInputs; i ++ )
 	{
-		if( !GetLink(Ele->Inputs[i]) )
-			RaiseLink(Ele->Outputs[i]);
+		SetEleLink(Ele, i, !GetEleLink(Ele, i));
 	}
 }
 
 tElementDef gElement_NOT = {
 	NULL, "NOT",
-	1, -1,
+	1, -1, 1,
 	_Create,
 	NULL,
 	_Update

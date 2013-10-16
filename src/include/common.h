@@ -138,7 +138,7 @@ extern void	Sim_UsageCheck(tExecUnit *Root);
 extern tExecUnit	*Sim_CreateMesh(tTestCase *Template, tLink **CompletionCond);
 extern void	Sim_FreeMesh(tExecUnit *Unit);
 extern void	Sim_RunStep(tExecUnit *Root);
-extern void	Sim_ShowDisplayItems(tDisplayItem *First);
+extern void	Sim_ShowDisplayItems(size_t StepNum, tDisplayItem *First);
 extern int	Sim_CheckBreakpoints(tExecUnit *Unit);
 extern int	Sim_CheckAssertions(tAssertion *First);
 

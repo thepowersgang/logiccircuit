@@ -37,12 +37,10 @@ static tElement *_Create(int NParams, int *Params, int NInputs)
 static uint64_t _ReadValue(tElement *Ele, int First, int Size)
 {
 	assert(Size <= 64);
-	uint64_t	ret = 0;
-	 int	ofs = 0;
-	while( Size -- ) {
-		if( GetLink(Ele->Inputs[First+ofs]) )
-			ret |= (1ULL << ofs);
-		ofs ++;
+	uint64_t ret = 0;
+	for( int i = 0; i < Size; i ++ ) {
+		if( GetEleLink(Ele, First+i) )
+			ret |= (1ULL << i);
 	}
 	return ret;
 }
@@ -50,11 +48,8 @@ static uint64_t _ReadValue(tElement *Ele, int First, int Size)
 static void _WriteValue(tElement *Ele, int First, int Size, uint64_t Value)
 {
 	assert(Size <= 64);
-	 int	ofs = 0;
-	while( Size -- ) {
-		if( Value & (1ULL << ofs) )
-			RaiseLink(Ele->Outputs[First+ofs]);
-		ofs ++;
+	for( int i = 0; i < Size; i ++ ) {
+		SetEleLink(Ele, First + i, !!(Value & (1ULL << i)));
 	}
 }
 
@@ -62,7 +57,7 @@ static void _Update(tElement *Ele)
 {
 	t_info	*this = Ele->Info;
 	
-	if( !GetLink(Ele->Inputs[0]) )
+	if( !GetEleLink(Ele, 0) )
 		return ;
 
 	if( this->Bits <= 64 )
@@ -89,12 +84,13 @@ static void _Update(tElement *Ele)
 		assert(this->Bits <= 64);
 	}
 	
-	RaiseLink(Ele->Outputs[0]);
+	SetEleLink(Ele, 0, true);
 }
 
 tElementDef gElement_ADDER = {
 	NULL, "ADDER",
 	4, -1,
+	1,
 	_Create,
 	NULL,
 	_Update

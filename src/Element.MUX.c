@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdio.h>	// Errors
 
 typedef struct
 {
@@ -29,7 +30,7 @@ static tElement *_Create(int NParams, int *Params, int NInputs)
 	
 	 int	exp_inputs = 1 + bits + (1 << bits)*busSize;
 	if( NInputs != exp_inputs ) {
-		printf("Input count invalid (%i != %i)\n", NInputs, exp_inputs);
+		fprintf(stderr, "Input count invalid (%i != %i)\n", NInputs, exp_inputs);
 		return NULL;
 	}
 	
@@ -48,13 +49,13 @@ static void _Update(tElement *Ele)
 	const int	first_sel_bit = 1;
 	const int	first_data_bit = first_sel_bit + info->Bits;
 
-	if( !GetLink(Ele->Inputs[0]) )
+	if( !GetEleLink(Ele, 0) )
 		return ;
 
 	// Parse inputs as a binary stream
 	for( int i = 0; i < info->Bits; i ++ )
 	{
-		if( GetLink(Ele->Inputs[first_sel_bit+i]) )
+		if( GetEleLink(Ele, first_sel_bit+i) )
 			val |= 1 << i;
 	}
 	
@@ -63,14 +64,13 @@ static void _Update(tElement *Ele)
 	// If ENABLE, drive output
 	for( int i = 0; i < Ele->NOutputs; i ++)
 	{
-		if( GetLink(Ele->Inputs[data_start + i]) )
-			RaiseLink(Ele->Outputs[i]);
+		SetEleLink( Ele, i, GetEleLink(Ele, data_start+i) );
 	}
 }
 
 tElementDef gElement_MUX = {
 	NULL, "MUX",
-	3, -1,
+	3, -1, 1,
 	_Create,
 	NULL,
 	_Update

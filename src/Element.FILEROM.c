@@ -70,12 +70,12 @@ static void _Update(tElement *Ele)
 	uint64_t	rv;
 
 	// Check enable line
-	if( !GetLink(Ele->Inputs[0]) )
+	if( !GetEleLink(Ele, 0) )
 		return ;
 
 	// Get address
 	for( int i = 0; i < this->AddressLines; i ++ )
-		addr |= GetLink(Ele->Inputs[1 + i]) ? (1 << i) : 0;
+		addr |= GetEleLink(Ele, 1 + i) ? (1 << i) : 0;
 
 	switch( this->DataLines )
 	{
@@ -90,16 +90,16 @@ static void _Update(tElement *Ele)
 		break;
 	}
 
+	SetEleLink(Ele, 0, true);
 	for( int i = 0; i < this->DataLines; i ++ ) {
-		if( rv & (1 << i) )
-			RaiseLink(Ele->Outputs[1 + i]);
+		SetEleLink(Ele, 1+i, !!(rv & (1 << i)));
 	}
-	RaiseLink(Ele->Outputs[0]);
 }
 
 tElementDef gElement_FILEROM = {
 	NULL, "FILEROM",
 	0, -1,
+	1,
 	_Create,
 	NULL,
 	_Update

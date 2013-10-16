@@ -26,7 +26,7 @@ static tElement *_Create(int NParams, int *Params, int NInputs)
 	t_info	*info = ret->Info;
 	
 	info->Time = duration;
-	memset(info->Rem, 0, duration);
+	memset(info->Rem, 0, NInputs);
 	
 	return ret;
 }
@@ -38,14 +38,14 @@ static void _Update(tElement *Ele)
 	for( int i = 0; i < Ele->NInputs; i ++ )
 	{
 		// If the input is high, reset count
-		if( GetLink(Ele->Inputs[i]) ) {
+		if( GetEleLink(Ele, i) ) {
 			this->Rem[i] = this->Time;
 		}
 		
 		// If the counter is non-zero
+		SetEleLink(Ele, i, (this->Rem[i] > 0));
 		if(this->Rem[i]) {
 			this->Rem[i] --;
-			RaiseLink(Ele->Outputs[i]);
 		}
 	}
 }
@@ -53,6 +53,7 @@ static void _Update(tElement *Ele)
 tElementDef gElement_HOLD = {
 	NULL, "HOLD",
 	1, -1,	// Min of 1, no max
+	0,	// Disable settle optimisation (settle time is non-deteministic)
 	_Create,
 	NULL,
 	_Update
